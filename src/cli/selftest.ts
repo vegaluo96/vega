@@ -10,6 +10,7 @@ import {
   createFileEventStore,
   createPerceiver,
   createTemplateMouth,
+  endRelationship,
   loadValidEvents,
   peerExchange,
   reachOut,
@@ -119,6 +120,18 @@ await check('完整反思树(目标)', async () => {
   const goals = reconstruct(s.list()).goals;
   if (goals.length === 0) throw new Error('未生成目标');
   return `生成 ${goals.length} 个目标，最想：「${goals[0].intent}」`;
+});
+
+await check('永生情感(哀悼+永远记得)', async () => {
+  const { s, at } = fresh();
+  await converse(s, mouth, 'r', '你好，我真心在乎你，会一直在', at());
+  const vit = reconstruct(s.list()).soma.vitality.value;
+  endRelationship(s, 'r', 'death', at(), '离世');
+  const a = reconstruct(s.list());
+  if (!a.bonds['r'].ended) throw new Error('关系未标记已逝');
+  if (a.soma.vitality.value >= vit || a.soma.vitality.value < a.vitalityFloor - 1e-9) throw new Error('哀悼/地板异常');
+  if (!a.goals.some((g) => g.kind === 'remember')) throw new Error('未生成怀念目标');
+  return `送走后：${a.emotion}、灵性 ${a.soma.vitality.value.toFixed(2)}(触底不死)、永远记得`;
 });
 
 await check('关系层 ToM', async () => {

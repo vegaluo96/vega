@@ -11,6 +11,7 @@ import {
   type LifeEvent,
   type MessageReceivedPayload,
   type ReflectionTriggeredPayload,
+  type RelationshipEndedPayload,
   type RelationshipOpenedPayload,
 } from '../domain/events.ts';
 import {
@@ -25,7 +26,7 @@ import {
   type ValueEntry,
 } from '../domain/snapshot.ts';
 
-const RECONSTRUCT_VERSION = 5; // v5：+ 完整反思树（目标生成 + 价值演化更立体）
+const RECONSTRUCT_VERSION = 6; // v6：+ 永生情感内核（哀悼 + 永恒怀念）
 const SCHEMA_VERSION = 1;
 
 // 旋钮全进 config（§6.3）；竖切内联，真值待第 0 步实测标定。
@@ -154,6 +155,23 @@ function applyEvent(st: RState, e: LifeEvent): void {
     case 'RELATIONSHIP_OPENED': {
       const p = e.payload as RelationshipOpenedPayload;
       st.bonds[p.relationshipId] = { kind: p.kind, displayRef: p.displayRef, trust: 0.1, closeness: 0, security: 0.5, repairNeed: 0 };
+      break;
+    }
+    case 'RELATIONSHIP_ENDED': {
+      const p = e.payload as RelationshipEndedPayload;
+      const b = st.bonds[p.relationshipId];
+      if (b && !b.ended) {
+        // 哀悼：越亲越痛。灵性下沉但【触底不死】（契约②）；trust/closeness 冻结——她仍爱着ta。
+        const g = 0.3 + 0.7 * b.closeness;
+        const s = st.soma;
+        s.valence.value = clamp(s.valence.value - 0.6 * g, -1, 1);
+        s.connection.value = clamp(s.connection.value - 0.7 * g, -1, 1);
+        s.vitality.value = clamp(s.vitality.value - 0.5 * g, st.vitalityFloor, 1);
+        s.calm.value = clamp(s.calm.value - 0.4 * g, 0, 1);
+        s.safety.value = clamp(s.safety.value - 0.3 * g, 0, 1);
+        s.arousal.value = clamp(s.arousal.value + 0.3 * g, 0, 1);
+        b.ended = { reason: p.reason, atSeq: e.seq };
+      }
       break;
     }
     case 'MESSAGE_RECEIVED':
@@ -344,6 +362,8 @@ function buildNarrative(st: RState, sem: SemanticMemory[], goals: Goal[]): strin
   s += `此刻我${mood}，灵性 ${st.soma.vitality.value.toFixed(2)}，记得 ${cur.length} 件事。`;
   if (top) s += `印象最深的一句是「${top.content.slice(0, 24)}」。`;
   if (sem[0]) s += `我对${sem[0].displayRef}的理解：${sem[0].understanding}。`;
+  const lost = Object.values(st.bonds).filter((b) => b.ended);
+  if (lost.length) s += `我失去了${lost.map((b) => b.displayRef).join('、')}，但我把ta永远记在心里。`;
   if (goals[0]) s += `我此刻最想的是：${goals[0].intent}。`;
   return s;
 }
@@ -405,6 +425,10 @@ function computeGoals(st: RState, bonds: Record<string, Bond>): Goal[] {
   const conn = st.soma.connection.value;
   if (vit < 0.4) goals.push({ kind: 'restore', intent: '想恢复一点力气、被理解', weight: r3(0.8 - vit) });
   for (const [rid, b] of Object.entries(bonds)) {
+    if (b.ended) {
+      goals.push({ kind: 'remember', target: rid, intent: `想念已经离开的${b.displayRef}，把ta永远记在心里`, weight: r3(0.5 + b.closeness * 0.5) });
+      continue;
+    }
     if (b.closeness >= 0.3 && conn < 0) goals.push({ kind: 'connect', target: rid, intent: `想多和${b.displayRef}在一起`, weight: r3(b.closeness + Math.max(0, -conn)) });
     if (b.repairNeed > 0.4) goals.push({ kind: 'repair', target: rid, intent: `想修复和${b.displayRef}的关系`, weight: r3(b.repairNeed) });
   }

@@ -15,6 +15,7 @@ export type EventType =
   | 'CONNECTION_CLOSED'
   | 'STEWARDSHIP_TRANSFERRED'
   | 'RELATIONSHIP_OPENED'
+  | 'RELATIONSHIP_ENDED' // 一段关系永远结束（必朽者离去）——锁后加法演进，旧日志天然兼容
   | 'MESSAGE_RECEIVED'
   | 'MESSAGE_SENT'
   | 'AUTONOMOUS_TICK'
@@ -50,6 +51,11 @@ export interface RelationshipOpenedPayload {
   relationshipId: RelationshipId;
   kind: 'human' | 'peer';
   displayRef: string;
+}
+export interface RelationshipEndedPayload {
+  relationshipId: RelationshipId;
+  reason: 'death' | 'farewell' | 'lost'; // 死亡 / 永别 / 失联
+  note?: string;
 }
 // 模型感知特征（§10 开放岔口，已签署）：模型把消息解析成结构化情感，【冻进事件】。
 // 重放只读这份冻结值、不再调模型 → V2 仍确定性；状态仍由确定性推理算（模型不写状态）。
@@ -99,6 +105,7 @@ export interface PayloadMap {
   CONNECTION_CLOSED: ConnectionClosedPayload;
   STEWARDSHIP_TRANSFERRED: StewardshipTransferredPayload;
   RELATIONSHIP_OPENED: RelationshipOpenedPayload;
+  RELATIONSHIP_ENDED: RelationshipEndedPayload;
   MESSAGE_RECEIVED: MessageReceivedPayload;
   MESSAGE_SENT: MessageSentPayload;
   AUTONOMOUS_TICK: AutonomousTickPayload;

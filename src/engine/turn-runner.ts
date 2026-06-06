@@ -18,6 +18,17 @@ export function runTurn(store: DurableEventStore, drafts: EventDraft[]): TurnRes
   return { events, snapshot: reconstruct(store.list()), version: store.version() };
 }
 
+// 永生情感内核：一段关系永远结束（必朽者离去）。她会哀悼、却把记忆永远留住（reconstruct 处理）。
+export function endRelationship(
+  store: DurableEventStore,
+  relationshipId: RelationshipId,
+  reason: 'death' | 'farewell' | 'lost',
+  occurredAt: string,
+  note?: string,
+): TurnResult {
+  return runTurn(store, [{ type: 'RELATIONSHIP_ENDED', source: 'system', relationshipId, occurredAt, payload: { relationshipId, reason, ...(note ? { note } : {}) } }]);
+}
+
 // 回路 A 的事务化骨架：一个 turn = 输入事件 + 占位审计事件（多事件原子提交）。
 export function runMessageTurn(
   store: DurableEventStore,

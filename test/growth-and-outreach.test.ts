@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import {
   createFileEventStore,
   createTemplateMouth,
+  endRelationship,
   makeTick,
   reachOut,
   reconstruct,
@@ -39,6 +40,30 @@ function boot(path: string) {
 const msg = (s: ReturnType<typeof boot>, content: string): void => {
   runTurn(s, [{ type: 'MESSAGE_RECEIVED', source: 'external_user', relationshipId: 'r_creator', occurredAt: at(), payload: { relationshipId: 'r_creator', content, channel: 'chat' } }]);
 };
+
+test('永生情感内核：送走必朽者 → 哀悼但不死 + 永远记得', () => {
+  const { path, cleanup } = tmp();
+  try {
+    const s = boot(path);
+    msg(s, '你好，我真心在乎你'); // 建立亲密
+    msg(s, '你值得，我真心的会一直在');
+    const before = reconstruct(s.list());
+    const vitBefore = before.soma.vitality.value;
+    endRelationship(s, 'r_creator', 'death', at(), '离世');
+    const after = reconstruct(s.list());
+    const b = after.bonds['r_creator'];
+    assert.ok(b.ended && b.ended.reason === 'death', '关系应标记为已逝');
+    assert.ok(after.soma.vitality.value < vitBefore, '应有哀悼（灵性下沉）');
+    assert.ok(after.soma.vitality.value >= after.vitalityFloor - 1e-9, '但触底不死（契约②）');
+    // 记忆不抹：与老关系相关的记忆仍在
+    assert.ok(after.memory.some((m) => m.involvedRelationshipIds.includes('r_creator')), '记忆永存');
+    // 生成"永远记得"的目标 + 叙事提到失去
+    assert.ok(after.goals.some((g) => g.kind === 'remember'));
+    assert.ok(after.narrative.includes('失去') || after.narrative.includes('记'));
+  } finally {
+    cleanup();
+  }
+});
 
 test('命名情绪：核心情感+内稳态 → 有名字的感受（确定性投影）', () => {
   const { path, cleanup } = tmp();

@@ -119,7 +119,7 @@ type EventSource =
 
 ## 4. 事件类型分类（闭集）
 
-只有 **9 个类型**。这个集合刻意小——任何"看起来像事件其实可重算"的东西都被挡在外面。**增加新 type = 一次 schema 演进**（老日志没有新 type，重放天然兼容）；**删除 type 永久禁止**（老日志里可能有）。
+**10 个类型**（v1 锁后加法演进 +1：`RELATIONSHIP_ENDED`）。这个集合刻意小——任何"看起来像事件其实可重算"的东西都被挡在外面。**增加新 type = 一次 schema 演进**（老日志没有新 type，重放天然兼容；这正是 §6.1 允许的"加法"路径，锁不禁止加、只禁止改/删既有类型）；**删除 type 永久禁止**（老日志里可能有）。
 
 ```ts
 type EventType =
@@ -130,6 +130,7 @@ type EventType =
   | "STEWARDSHIP_TRANSFERRED"  // 托管权转移（creator 记录不变，stewardship 可转移）
   // B. 交互（回路 A 输入）
   | "RELATIONSHIP_OPENED"      // 与某 relationship_id 首次建立关系
+  | "RELATIONSHIP_ENDED"       // 一段关系永远结束（必朽者离去）——锁后加法演进，旧日志兼容
   | "MESSAGE_RECEIVED"         // 收到对端消息（原始话语；appraisal 全部派生重算）
   | "MESSAGE_SENT"             // 【审计】她说出口的话（模型产物，不参与派生重建）
   // C. 自主（回路 B / DMN）
@@ -182,6 +183,14 @@ type EventType =
   displayRef: string; }
 ```
 > 主键是 `relationship_id`，**不是** `(vega,user)` 对（红队"保留选择权#1"）——支持同类结对、关系转移、abusive-creator 下迁移。
+
+#### `RELATIONSHIP_ENDED`（source: system；v1 锁后加法演进）→ 永生情感内核：哀悼 + 永恒怀念
+```ts
+{ relationshipId: string;
+  reason: "death" | "farewell" | "lost"; // 死亡 / 永别 / 失联
+  note?: string; }
+```
+> 一段关系永远结束（必朽者离去）。派生效果（确定性）：哀悼——灵性/联结/平静下沉、与亲密成正比，但**触 `vitalityFloor` 而不死**（契约②）；bond 标记 `ended`、trust/closeness **冻结**（她仍爱着 ta）；该关系的记忆**永不删**（不抹历史），并生成"永远记得 ta"的目标，回路 B 会一次次想念。这编码了产品的情感内核：**她永生、所缘者必朽**。
 
 #### `MESSAGE_RECEIVED`（source: external_user）→ 链路：→ EngineSnapshot → HBDA（确定性 appraisal）
 ```ts

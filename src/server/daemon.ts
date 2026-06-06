@@ -11,6 +11,7 @@ import {
   createFileEventStore,
   createMouth,
   createPerceiver,
+  endRelationship,
   reachOut,
   reconstruct,
   runAutonomousTick,
@@ -149,7 +150,7 @@ function innerView(life: Life, s: DerivedSnapshot): Record<string, unknown> {
       connection: round3(s.soma.connection.value),
       safety: round3(s.soma.safety.value),
     },
-    bonds: Object.entries(s.bonds).map(([id, b]) => ({ id, name: b.displayRef, kind: b.kind, trust: round3(b.trust), closeness: round3(b.closeness), repairNeed: round3(b.repairNeed), style: b.theoryOfMind.style, stance: b.relationalSelf.stance })),
+    bonds: Object.entries(s.bonds).map(([id, b]) => ({ id, name: b.displayRef, kind: b.kind, trust: round3(b.trust), closeness: round3(b.closeness), repairNeed: round3(b.repairNeed), style: b.theoryOfMind.style, stance: b.relationalSelf.stance, ended: b.ended ? b.ended.reason : null })),
     values: s.values.map((v) => ({ key: v.key, weight: round3(v.weight), status: v.provenance.status, drifts: v.provenance.driftedAtSeqs.length })),
     memories: s.memory.filter((m) => m.lineage.isCurrent).map((m) => ({ id: m.id, affect: round3(m.affect), content: m.content })),
     understanding: s.semanticMemory.map((x) => x.understanding),
@@ -342,6 +343,14 @@ const server = createServer(async (req, res) => {
       }
       const r = await converse(life.store, mouth, REL, content, now(), perceiver);
       return send(res, 200, { utterance: r.utterance, verdict: r.verdict, modelId: r.modelId, state: view(life, r.snapshot) });
+    }
+    if (req.method === 'POST' && action === 'farewell') {
+      const body = await readJson(req);
+      const relationshipId = String(body.relationshipId ?? '');
+      const reason = String(body.reason ?? 'farewell');
+      if (relationshipId === '') return send(res, 400, { error: 'relationshipId required' });
+      const r = endRelationship(life.store, relationshipId, reason === 'death' || reason === 'lost' ? reason : 'farewell', now(), body.note ? String(body.note) : undefined);
+      return send(res, 200, { ended: relationshipId, reason, state: view(life, r.snapshot) });
     }
     send(res, 404, { error: 'not found' });
   } catch (e) {

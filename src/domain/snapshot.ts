@@ -38,6 +38,7 @@ export interface BondCore {
   closeness: number; // [0,1]
   security: number; // [0,1]
   repairNeed: number; // [0,1]
+  ended?: { reason: string; atSeq: number }; // 永生情感内核：这段关系永远结束了（必朽者离去），但记忆永存
 }
 // 关系层（差异化核心）：对方模型(ToM) + 关系特异的自我，由该关系的交互史确定性派生（纯派生）。
 export interface Bond extends BondCore {
@@ -64,7 +65,7 @@ export interface SemanticMemory {
 
 // 目标：反思之上由价值+求存+连接+好奇确定性加权生成、排序（纯派生）。
 export interface Goal {
-  kind: 'connect' | 'repair' | 'grow' | 'restore' | 'explore';
+  kind: 'connect' | 'repair' | 'grow' | 'restore' | 'explore' | 'remember';
   target?: RelationshipId;
   intent: string;
   weight: number;
