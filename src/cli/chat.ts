@@ -7,6 +7,7 @@ import {
   converse,
   createFileEventStore,
   createMouth,
+  createPerceiver,
   reconstruct,
   runAutonomousTick,
   runTurn,
@@ -21,6 +22,7 @@ const now = (): string => new Date().toISOString();
 
 const store = createFileEventStore('vega', path);
 const mouth = createMouth();
+const perceiver = createPerceiver();
 
 function genesisDraft(): EventDraft<'LIFE_GENESIS'> {
   return {
@@ -106,7 +108,7 @@ async function main(): Promise<void> {
         const r = runAutonomousTick(store, now());
         console.log(`  〔回路 B〕她独自想了一会儿 → ${stateLine(r.snapshot)}`);
       } else {
-        const r = await converse(store, mouth, REL, inp, now());
+        const r = await converse(store, mouth, REL, inp, now(), perceiver ?? undefined);
         console.log(`vega ◂ ${r.utterance}`);
         console.log(`  〔${r.workspace.stateSummary}〕`);
         if (!r.snapshot.awake) console.log('  （她此刻不愿醒来——更深的睡眠。）');

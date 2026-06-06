@@ -51,10 +51,19 @@ export interface RelationshipOpenedPayload {
   kind: 'human' | 'peer';
   displayRef: string;
 }
+// 模型感知特征（§10 开放岔口，已签署）：模型把消息解析成结构化情感，【冻进事件】。
+// 重放只读这份冻结值、不再调模型 → V2 仍确定性；状态仍由确定性推理算（模型不写状态）。
+export interface Perception {
+  sentiment: number; // -1..1 整体善意↔敌意（预测误差方向）
+  warmth: number; // 0..1 温暖/亲近
+  threat: number; // 0..1 威胁/伤害
+  modelId: string; // 哪个模型感知的（审计）
+}
 export interface MessageReceivedPayload {
   relationshipId: RelationshipId;
   content: string; // 唯一被冻结的 ground truth；appraisal 全部派生重算
   channel: string;
+  perception?: Perception; // 可选：模型感知特征（冻结输入，非派生状态）
 }
 export interface MessageSentPayload {
   relationshipId: RelationshipId;

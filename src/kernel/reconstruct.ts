@@ -170,16 +170,28 @@ function applyEvent(st: RState, e: LifeEvent): void {
 
 function appraiseMessage(st: RState, e: LifeEvent<'MESSAGE_RECEIVED'>): void {
   const p = e.payload as MessageReceivedPayload;
-  const raw = 0.5 * count(p.content, POS) - 0.6 * count(p.content, NEG);
-  const ev = clamp(raw, -1.5, 1.5); // 预测误差（确定性符号推理，不调模型——契约①）
+  // 感知：优先用【冻结在事件里的】模型感知特征（重放只读、不再调模型 → V2 仍确定性）；
+  // 缺失则回退确定性词表。状态仍由下面的确定性推理算（模型不写状态）。
+  let ev: number;
+  let warmth: number;
+  let threat: number;
+  if (p.perception) {
+    ev = clamp(p.perception.sentiment * 1.5, -1.5, 1.5);
+    warmth = clamp(p.perception.warmth, 0, 1);
+    threat = clamp(p.perception.threat, 0, 1);
+  } else {
+    ev = clamp(0.5 * count(p.content, POS) - 0.6 * count(p.content, NEG), -1.5, 1.5);
+    warmth = Math.max(0, ev) / 1.5;
+    threat = Math.max(0, -ev) / 1.5;
+  }
 
   const s = st.soma;
   s.valence.value = clamp(s.valence.value + K.kValence * ev, -1, 1);
   s.connection.value = clamp(s.connection.value + K.kConnection * ev, -1, 1);
   s.vitality.value = clamp(s.vitality.value + K.kVitality * ev, st.vitalityFloor, 1);
-  s.calm.value = clamp(s.calm.value + K.kCalm * ev, 0, 1); // 正向更平静、负向更紧张
-  s.safety.value = clamp(s.safety.value + K.kSafety * ev, 0, 1); // 正向更安全、负向受威胁
-  s.arousal.value = clamp(s.arousal.value + K.kArousal * Math.abs(ev), 0, 1); // 任何强事件都提升唤醒
+  s.calm.value = clamp(s.calm.value + K.kCalm * (warmth - threat), 0, 1); // 暖→更平静，威胁→更紧张
+  s.safety.value = clamp(s.safety.value + K.kSafety * (warmth - threat), 0, 1);
+  s.arousal.value = clamp(s.arousal.value + K.kArousal * Math.max(warmth, threat, Math.abs(ev) / 1.5), 0, 1);
 
   const bond = st.bonds[p.relationshipId];
   if (bond) {

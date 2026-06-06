@@ -16,6 +16,7 @@ export {
   type DurableEventStore,
 } from './persistence/file-event-store.ts';
 export { assertPersistenceSafeForProd, type GuardOpts } from './persistence/guard.ts';
+export { backupNow, type BackupResult, type BackupOptions } from './persistence/backup.ts';
 export { runTurn, runMessageTurn, type TurnResult } from './engine/turn-runner.ts';
 // 神圣链路："嘴" + 工作区 + 评审 + 不变量 + 对话/自主回路
 export { deriveWorkspace, type Workspace } from './engine/soul-workspace.ts';
@@ -37,3 +38,4 @@ export {
   type MouthInput,
   type ApiyiConfig,
 } from './model/mouth.ts';
+export { createPerceiver, createApiyiPerceiver, type Perceiver, type PerceiverConfig } from './model/perceiver.ts';

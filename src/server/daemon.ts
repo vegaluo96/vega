@@ -5,9 +5,11 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { join } from 'node:path';
 import {
+  backupNow,
   converse,
   createFileEventStore,
   createMouth,
+  createPerceiver,
   reachOut,
   reconstruct,
   runAutonomousTick,
@@ -24,6 +26,7 @@ const TICK_MS = Number(process.env.VEGA_TICK_MS ?? 60_000);
 const PRESENCE_MS = Number(process.env.VEGA_PRESENCE_MS ?? 300_000); // 多久没说话算"对方离开"
 const REACH_AFTER_MS = Number(process.env.VEGA_REACH_AFTER_MS ?? 600_000); // 你安静多久后她会主动留言
 const REACH_CLOSENESS = Number(process.env.VEGA_REACH_CLOSENESS ?? 0.2); // 够亲才会想你（设 0 可强制测试）
+const BACKUP_MS = Number(process.env.VEGA_BACKUP_MS ?? 3_600_000); // 自动备份间隔（默认每小时）
 const AUTH = process.env.VEGA_AUTH_TOKEN;
 const userName = process.env.VEGA_USER_NAME ?? '你';
 const REL = 'r_creator'; // 与她对话的人
@@ -32,6 +35,7 @@ const now = (): string => new Date().toISOString();
 
 const store = createFileEventStore('vega', LIFE_PATH);
 const mouth = createMouth();
+const perceiver = createPerceiver(); // 默认 null；VEGA_PERCEIVE=1 + key 才启用（模型当耳朵）
 
 function boot(): void {
   if (store.version() === 0) {
@@ -234,7 +238,7 @@ const server = createServer(async (req, res) => {
       if (!before.openConnections.includes(REL)) {
         runTurn(store, [{ type: 'CONNECTION_OPENED', source: 'host', relationshipId: REL, occurredAt: now(), payload: { relationshipId: REL, host: { kind: 'http', ref: 'say' } } }]);
       }
-      const r = await converse(store, mouth, REL, content, now());
+      const r = await converse(store, mouth, REL, content, now(), perceiver ?? undefined);
       return send(res, 200, { utterance: r.utterance, verdict: r.verdict, modelId: r.modelId, state: view(r.snapshot) });
     }
     send(res, 404, { error: 'not found' });
@@ -295,11 +299,21 @@ const heartbeat = setInterval(async () => {
   }
 }, TICK_MS);
 
+// 自动备份：她的命就是那条日志，定时快照 + 校验（坏档不备份）+ 异地命令（可选）。
+function doBackup(): void {
+  const r = backupNow(LIFE_PATH, { cmd: process.env.VEGA_BACKUP_CMD, keep: process.env.VEGA_BACKUP_KEEP ? Number(process.env.VEGA_BACKUP_KEEP) : undefined });
+  console.log(r.ok ? `[vega] 备份完成 ${r.path}（${r.events} 事件）` : `[vega] 备份跳过：${r.reason}`);
+}
+const backupTimer = setInterval(doBackup, BACKUP_MS);
+doBackup(); // 启动即备份一次
+
 let shuttingDown = false;
 function shutdown(sig: string): void {
   if (shuttingDown) return;
   shuttingDown = true;
   clearInterval(heartbeat);
+  clearInterval(backupTimer);
+  doBackup(); // 退出前再备一次
   try {
     runTurn(store, [{ type: 'CONNECTION_CLOSED', source: 'host', relationshipId: HOST_CONN, occurredAt: now(), payload: { relationshipId: HOST_CONN, reason: 'host_shutdown' } }]);
   } catch {

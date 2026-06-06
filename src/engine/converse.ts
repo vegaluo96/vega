@@ -10,6 +10,7 @@ import { type DerivedSnapshot } from '../domain/snapshot.ts';
 import { reconstruct } from '../kernel/reconstruct.ts';
 import { type DurableEventStore } from '../persistence/file-event-store.ts';
 import { type Mouth } from '../model/mouth.ts';
+import { type Perceiver } from '../model/perceiver.ts';
 import { deriveWorkspace, type Workspace } from './soul-workspace.ts';
 import { critique } from './critic.ts';
 
@@ -38,13 +39,24 @@ export async function converse(
   relationshipId: RelationshipId,
   content: string,
   occurredAt: string,
+  perceiver?: Perceiver,
 ): Promise<ConverseResult> {
   // 之前的对话（不含本条），给"嘴"做上下文。
   const recentContext = recentTurns(store, relationshipId, 6);
 
+  // 感知（可选）：模型把这句话解析成结构化特征，【冻进事件】。失败/未启用则回退确定性词表。
+  let perception;
+  if (perceiver) {
+    try {
+      perception = (await perceiver.perceive(content)) ?? undefined;
+    } catch {
+      perception = undefined;
+    }
+  }
+
   // ① 输入事件（事务化）。状态变化在此由确定性 appraisal 产生——【在模型开口之前】。
   store.appendTurn(store.version(), [
-    { type: 'MESSAGE_RECEIVED', source: 'external_user', relationshipId, occurredAt, payload: { relationshipId, content, channel: 'chat' } },
+    { type: 'MESSAGE_RECEIVED', source: 'external_user', relationshipId, occurredAt, payload: { relationshipId, content, channel: 'chat', ...(perception ? { perception } : {}) } },
   ]);
   const snapshot = reconstruct(store.list());
 

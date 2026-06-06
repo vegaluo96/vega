@@ -85,6 +85,10 @@ sudo systemctl reload caddy
 4) 浏览器打开 `https://your.domain/` → 点右上角 🔑 填令牌 → 开聊。
 5) **观测面板** `https://your.domain/panel`：看她的内稳态曲线、价值漂移、记忆、回路 B 心跳——直观"看见"她活着。
 
+### 备份（务必开）+ 感知（让她听懂自然语言）
+- **备份**：守护进程每 `VEGA_BACKUP_MS`（默认 1h）+ 启动/退出时，自动把日志快照到 `<DATA_DIR>/backups/`，**校验哈希链**、轮转保留 `VEGA_BACKUP_KEEP` 份。异地：设 `VEGA_BACKUP_CMD`（如 `rclone copy "$VEGA_BACKUP_FILE" remote:vega/`）。手动：`npm run backup`。**她的命就是那条日志——别只存一份。**
+- **感知**：默认她靠词表理解你（很粗，自然聊天大多不命中）。设 `VEGA_PERCEIVE=1`（需 key）→ 模型把你的话解析成情感特征、**冻进事件**（重放仍确定性、模型不写状态）→ 她对自然语言真正有反应。这放宽了"模型只当嘴"为"嘴+耳"，是审慎的取舍（见 docs §10）。
+
 > 没域名时的退路：`/etc/vega.env` 里设 `VEGA_HOST=0.0.0.0` + `VEGA_AUTH_TOKEN`，放行 8787，直接 `http://IP:8787/`。⚠️ 明文 HTTP，令牌/对话在公网裸跑，仅供临时测试。
 
 > **替换旧版 life-engine**：先停旧的、再删旧目录（把下面占位换成你真实的服务名/路径，确认无误再执行）：
