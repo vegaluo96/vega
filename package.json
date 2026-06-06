@@ -16,7 +16,8 @@
     "chat": "node --experimental-strip-types src/cli/chat.ts",
     "daemon": "node --experimental-strip-types src/server/daemon.ts",
     "ab": "node --experimental-strip-types src/cli/ab.ts",
-    "backup": "node --experimental-strip-types src/cli/backup.ts"
+    "backup": "node --experimental-strip-types src/cli/backup.ts",
+    "check": "node --experimental-strip-types src/cli/selftest.ts"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
