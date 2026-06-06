@@ -1,4 +1,8 @@
 node_modules/
 dist/
+.vega/
+.env
+.env.local
+*.key
 *.log
 .DS_Store

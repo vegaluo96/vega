@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "demo": "node --experimental-strip-types demo/live.ts",
     "demo:restart": "node --experimental-strip-types demo/restart.ts",
-    "demo:talk": "node --experimental-strip-types demo/talk.ts"
+    "demo:talk": "node --experimental-strip-types demo/talk.ts",
+    "chat": "node --experimental-strip-types src/cli/chat.ts"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
