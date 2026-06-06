@@ -45,6 +45,17 @@ export interface ValueEntry {
   provenance: { driftedAtSeqs: number[]; vitalityAtGen: number; status: 'volatile' | 'confirmed' };
 }
 
+// 遗忘即抽象：把一段关系里的大量情景经历，确定性地压缩成"理解"（语义记忆，纯派生）。
+export interface SemanticMemory {
+  relationshipId: RelationshipId;
+  displayRef: string;
+  episodes: number;
+  warm: number;
+  conflict: number;
+  avgAffect: number;
+  understanding: string;
+}
+
 export interface DerivedSnapshot {
   lifeId: string;
   uptoSeq: number;
@@ -61,6 +72,7 @@ export interface DerivedSnapshot {
   narrative: string; // 自传叙事：确定性投影、只读，绝不回写身份（契约③）
   soma: Soma;
   memory: MemoryEntry[];
+  semanticMemory: SemanticMemory[]; // 经历压缩成的"理解"（遗忘即抽象，纯派生）
   bonds: Record<RelationshipId, Bond>;
   values: ValueEntry[];
 }

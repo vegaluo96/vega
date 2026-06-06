@@ -2,7 +2,7 @@
 
 > **路线图位置：第 -1 步产物（纯设计/文档，不写核心代码）。**
 > 本文是 `docs/architecture-redteam.md` 里 **C2 / C6 / C5** 与 `docs/vega-product.md` §7 "工程地基"的兑现：定稿 `LifeEvent` 的 append-only 事件 schema + 版本演进协议，写定三条 immutable 契约，并用 5 条真实故事弧做"可重建性证明"。
-> **状态：锁前草案（DRAFT）。§10 的六个开放岔口 + 苏醒模型已由产品负责人拍板锁定（2026-06，见 §10）；整体 schema 仍在第 1 步随 V1/V2/V3 三验证通过后定锁。** 真正落表/写重放函数是第 0 步。
+> **状态：v1 已锁定（V1/V2/V3 全过，产品负责人 2026-06 拍板）。** 事件 schema、三契约、持久化契约**定稿、不再变动**；派生层（`reconstruct`）仍可经 `reconstructVersion` 演进（当前 v3，事件不变）。§10 记录已锁决策。
 > 上游单一真相源：`docs/vega-product.md`；架构：`docs/vega-architecture-v1.md`；研究依据：`docs/human-architecture-research.md`；红队不可逆清单：`docs/architecture-redteam.md`。
 
 ---

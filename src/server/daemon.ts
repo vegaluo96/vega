@@ -108,6 +108,7 @@ function innerView(s: DerivedSnapshot): Record<string, unknown> {
     bonds: Object.entries(s.bonds).map(([id, b]) => ({ id, name: b.displayRef, kind: b.kind, trust: round3(b.trust), closeness: round3(b.closeness), repairNeed: round3(b.repairNeed) })),
     values: s.values.map((v) => ({ key: v.key, weight: round3(v.weight), status: v.provenance.status, drifts: v.provenance.driftedAtSeqs.length })),
     memories: s.memory.filter((m) => m.lineage.isCurrent).map((m) => ({ id: m.id, affect: round3(m.affect), salience: round3(m.salience), content: m.content })),
+    understanding: s.semanticMemory.map((x) => x.understanding),
     recentEvents: store.list().slice(-16).map((e) => ({ seq: e.seq, type: e.type, at: e.occurredAt })),
     events: store.version(),
   };
@@ -203,6 +204,7 @@ const PANEL = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
  <div class="card"><h2>内稳态 SOMA</h2><div id="soma"></div></div>
  <div class="card"><h2>价值（因你而变）</h2><div id="vals"></div></div>
  <div class="card"><h2>记忆（当前态）</h2><div id="mems"></div></div>
+ <div class="card"><h2>理解（经历→理解 / 遗忘即抽象）</h2><div id="sem"></div></div>
  <div class="card"><h2>最近事件（含回路 B 心跳）</h2><div id="evs"></div></div>
 <script>
  var token=localStorage.getItem('vega_token')||'';
@@ -216,6 +218,7 @@ const PANEL = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
    document.getElementById('soma').innerHTML=bar('效价',m.valence,-1,1)+bar('唤醒',m.arousal,0,1)+bar('灵性',m.vitality,0,1)+bar('精力',m.energy,0,1)+bar('平静',m.calm,0,1)+bar('联结',m.connection,-1,1)+bar('安全',m.safety,0,1);
    document.getElementById('vals').innerHTML=s.values.map(function(v){return '<div class="row"><span class="lbl">'+esc(v.key)+'</span><span class="bar"><span class="fill" style="width:'+Math.round(v.weight*100)+'%"></span></span><span class="num">'+v.weight.toFixed(2)+'</span><span class="dim">　'+v.status+(v.drifts?' ·漂移'+v.drifts+'次':'')+'</span></div>';}).join('')||'<span class=dim>暂无</span>';
    document.getElementById('mems').innerHTML=s.memories.slice().reverse().map(function(x){return '<div class="mem"><span class="'+(x.affect<0?'dim':'tag')+'">['+x.affect.toFixed(2)+']</span> '+esc(x.content)+'</div>';}).join('')||'<span class=dim>还没有记忆</span>';
+   document.getElementById('sem').innerHTML=(s.understanding||[]).map(function(u){return '<div class="mem">'+esc(u)+'</div>';}).join('')||'<span class=dim>还在形成…</span>';
    document.getElementById('evs').innerHTML=s.recentEvents.slice().reverse().map(function(e){return '<div class="ev"><span class="tag">'+e.type+'</span> <span class="dim">#'+e.seq+' · '+e.at.slice(11,19)+'</span></div>';}).join('');
   }catch(e){document.getElementById('nar').textContent='离线';}
  }

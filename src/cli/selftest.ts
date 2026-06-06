@@ -112,6 +112,15 @@ await check('命名情绪', async () => {
   return `善意时「${e1}」→ 背叛后「${e2}」`;
 });
 
+await check('遗忘即抽象', async () => {
+  const { s, at } = fresh();
+  await converse(s, mouth, 'r', '你好，我真心在乎你', at());
+  await converse(s, mouth, 'r', '你根本不在乎，都是假的', at());
+  const sem = reconstruct(s.list()).semanticMemory.find((x) => x.relationshipId === 'r');
+  if (!sem || sem.episodes < 2) throw new Error('未形成对关系的理解');
+  return sem.understanding;
+});
+
 await check('记忆双轨', () => {
   const { s, at } = fresh();
   const r = recv(s, at, '你根本不在乎，都是假的');

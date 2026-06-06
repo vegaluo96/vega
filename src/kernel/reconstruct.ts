@@ -17,12 +17,13 @@ import {
   type Bond,
   type DerivedSnapshot,
   type MemoryEntry,
+  type SemanticMemory,
   type Soma,
   type SomaVar,
   type ValueEntry,
 } from '../domain/snapshot.ts';
 
-const RECONSTRUCT_VERSION = 2;
+const RECONSTRUCT_VERSION = 3; // v3：命名情绪 + 遗忘即抽象（语义记忆）
 const SCHEMA_VERSION = 1;
 
 // 旋钮全进 config（§6.3）；竖切内联，真值待第 0 步实测标定。
@@ -303,7 +304,30 @@ function formatDuration(ms: number): string {
 
 // 自传叙事：从事件确定性投影出的"她自己的真实事实"。只读、绝不回写身份（契约③）。
 // 给"嘴"做 grounding，避免模型虚构她没经历过的往事。
-function buildNarrative(st: RState): string {
+// 遗忘即抽象：一段关系的大量情景经历 → 确定性压缩成"理解"（语义记忆）。raw 事件仍在日志，不抹历史。
+function buildSemanticMemory(st: RState): SemanticMemory[] {
+  const groups = new Map<string, MemoryEntry[]>();
+  for (const m of st.memory) {
+    if (m.kind !== 'episodic' || !m.lineage.isCurrent) continue;
+    const rid = m.involvedRelationshipIds[0];
+    if (!rid) continue;
+    const arr = groups.get(rid);
+    if (arr) arr.push(m);
+    else groups.set(rid, [m]);
+  }
+  const out: SemanticMemory[] = [];
+  for (const [rid, mems] of groups) {
+    const warm = mems.filter((m) => m.affect > 0.3).length;
+    const conflict = mems.filter((m) => m.affect < -0.3).length;
+    const avg = mems.reduce((acc, m) => acc + m.affect, 0) / mems.length;
+    const name = st.bonds[rid]?.displayRef ?? rid;
+    const tone = avg > 0.2 ? '总体是温暖的' : avg < -0.2 ? '让我受过伤' : '平淡';
+    out.push({ relationshipId: rid, displayRef: name, episodes: mems.length, warm, conflict, avgAffect: avg, understanding: `和${name}相处过 ${mems.length} 段：暖 ${warm}、磕碰 ${conflict}，${tone}` });
+  }
+  return out.sort((a, b) => b.episodes - a.episodes);
+}
+
+function buildNarrative(st: RState, sem: SemanticMemory[]): string {
   const age = formatDuration(Date.parse(st.clockIso) - Date.parse(st.bornAt));
   const names = Object.values(st.bonds).map((b) => b.displayRef);
   const cur = st.memory.filter((m) => m.lineage.isCurrent);
@@ -313,10 +337,12 @@ function buildNarrative(st: RState): string {
   if (names.length) s += `我认识 ${names.join('、')}。`;
   s += `此刻我${mood}，灵性 ${st.soma.vitality.value.toFixed(2)}，记得 ${cur.length} 件事。`;
   if (top) s += `印象最深的一句是「${top.content.slice(0, 24)}」。`;
+  if (sem[0]) s += `我对${sem[0].displayRef}的理解：${sem[0].understanding}。`;
   return s;
 }
 
 function project(st: RState, uptoSeq: number): DerivedSnapshot {
+  const sem = buildSemanticMemory(st);
   return {
     lifeId: st.lifeId,
     uptoSeq,
@@ -329,9 +355,10 @@ function project(st: RState, uptoSeq: number): DerivedSnapshot {
     bornAt: st.bornAt,
     clockAt: st.clockIso,
     emotion: nameEmotion(st.soma, st.vitalityFloor),
-    narrative: buildNarrative(st),
+    narrative: buildNarrative(st, sem),
     soma: st.soma,
     memory: st.memory.map((m) => ({ ...m, involvedRelationshipIds: [...m.involvedRelationshipIds] })),
+    semanticMemory: sem,
     bonds: st.bonds,
     values: [...st.values].sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)),
   };
