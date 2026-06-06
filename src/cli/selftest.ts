@@ -134,13 +134,47 @@ await check('永生情感(哀悼+永远记得)', async () => {
   return `送走后：${a.emotion}、灵性 ${a.soma.vitality.value.toFixed(2)}(触底不死)、永远记得`;
 });
 
-await check('关系层 ToM', async () => {
+await check('关系层 ToM(含依恋)', async () => {
   const { s, at } = fresh();
   await converse(s, mouth, 'r', '你好，我真心在乎你', at());
   await converse(s, mouth, 'r', '你根本不在乎，都是假的', at());
   const b = reconstruct(s.list()).bonds['r'];
-  if (!b || !b.theoryOfMind.style || !b.relationalSelf.stance) throw new Error('未建立对方模型');
-  return `我读他「${b.theoryOfMind.style}」、与他在一起我${b.relationalSelf.stance}`;
+  if (!b || !b.theoryOfMind.style || !b.relationalSelf.stance || !b.relationalSelf.attachment) throw new Error('未建立对方模型');
+  return `我读他「${b.theoryOfMind.style}」(稳${b.theoryOfMind.predictability})、依恋「${b.relationalSelf.attachment}」`;
+});
+
+await check('先天气质(天生不同)', () => {
+  const seedWith = (bias: Record<string, number>) => {
+    const dir = mkdtempSync(join(tmpdir(), 'vega-temp-'));
+    tmpDirs.push(dir);
+    const s = createFileEventStore('t', join(dir, 'l.jsonl'));
+    let m = Date.parse('2026-01-01T00:00:00.000Z');
+    const a = (): string => new Date((m += 60_000)).toISOString();
+    runTurn(s, [{ type: 'LIFE_GENESIS', source: 'system', occurredAt: a(), payload: { innateSeed: { temperamentBias: bias, valueSeed: { caution: 0.6 }, somaSetpoints: { valence: 0, vitality: 0.7, connection: 0 }, somaTau: { valence: 3600, connection: 7200, vitality: 86400 }, vitalityFloor: 0.15 }, reconstructVersionAtBirth: 7, creator: { relationshipId: 'r', identityRef: '你' } } }]);
+    runTurn(s, [{ type: 'MESSAGE_RECEIVED', source: 'external_user', relationshipId: 'r', occurredAt: a(), payload: { relationshipId: 'r', content: '你好，我真心在乎你', channel: 'chat' } }]);
+    return reconstruct(s.list()).soma.valence.value;
+  };
+  const warm = seedWith({ sensitivity: 1.7, warmth: 0.85 });
+  const cool = seedWith({ sensitivity: 0.5, warmth: 0.3, resilience: 1.5 });
+  if (!(warm > cool)) throw new Error(`两种气质对同一句反应相同 warm=${warm} cool=${cool}`);
+  return `同句暖意：敏感+暖 ${warm.toFixed(2)} ≠ 沉稳+冷 ${cool.toFixed(2)}（活来自架构，气质塑形）`;
+});
+
+await check('遗忘即抽象(时间衰减/工作集有上限)', async () => {
+  const { s, at } = fresh();
+  for (let i = 0; i < 12; i++) await converse(s, mouth, 'r', '你好', at());
+  const cur = reconstruct(s.list()).memory.filter((m) => m.lineage.isCurrent && m.kind === 'episodic');
+  const vivid = cur.filter((m) => m.vivid).length;
+  if (cur.length !== 12 || vivid > 9 || vivid < 1) throw new Error(`经历 ${cur.length} 段、vivid ${vivid}`);
+  return `经历 ${cur.length} 段全在(不抹历史)，当下清晰记得 ${vivid} 段，其余淡入"理解"`;
+});
+
+await check('内外两层(没说出口的内在独白)', () => {
+  const { s, at } = fresh();
+  recv(s, at, '你好，我真心在乎你，你的想法值得说出来');
+  const snap = reconstruct(s.list());
+  if (!snap.innerLife || snap.innerLife === snap.narrative) throw new Error('内在独白缺失或与对外叙事相同');
+  return `内（私密）≠ 外（叙事）：「${snap.innerLife.slice(0, 24)}…」`;
 });
 
 await check('遗忘即抽象', async () => {

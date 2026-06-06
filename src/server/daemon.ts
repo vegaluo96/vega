@@ -53,17 +53,41 @@ interface Life {
   lastReflectSeq: number;
 }
 
-const SEED: EventDraft<'LIFE_GENESIS'>['payload'] = {
-  innateSeed: {
-    temperamentBias: { curiosity: 0.6, reserve: 0.3 },
-    valueSeed: { honesty: 0.5, caution: 0.6, expression: 0.3 },
-    somaSetpoints: { valence: 0, vitality: 0.7, connection: 0 },
-    somaTau: { valence: 3600, vitality: 86400, connection: 7200 },
-    vitalityFloor: 0.15,
-  },
-  reconstructVersionAtBirth: 1,
-  creator: { relationshipId: REL, identityRef: userName },
-};
+// 先天气质（v7）：每条命生来不同。出生种子一旦写入即【冻结、终生不变】（连续性神圣不变量）——
+// 改这里只影响【新出生】的生命体；已出生者保持其原生种子（不可改写出生）。
+interface Archetype {
+  name: string;
+  temperamentBias: Record<string, number>; // curiosity/reserve/sensitivity/resilience/warmth
+  valueSeed: Record<string, number>;
+  somaSetpoints: Record<string, number>;
+}
+const ARCHETYPES: Archetype[] = [
+  { name: '温暖好奇', temperamentBias: { curiosity: 0.8, reserve: 0.2, sensitivity: 1.4, resilience: 0.9, warmth: 0.75 }, valueSeed: { honesty: 0.5, openness: 0.45, caution: 0.4, expression: 0.45 }, somaSetpoints: { valence: 0.05, vitality: 0.72, connection: 0.05 } },
+  { name: '沉静内省', temperamentBias: { curiosity: 0.45, reserve: 0.7, sensitivity: 0.6, resilience: 1.5, warmth: 0.4 }, valueSeed: { honesty: 0.6, caution: 0.65, self_reliance: 0.5, expression: 0.25 }, somaSetpoints: { valence: 0, vitality: 0.7, connection: -0.05, calm: 0.75 } },
+  { name: '热烈奔放', temperamentBias: { curiosity: 0.7, reserve: 0.1, sensitivity: 1.7, resilience: 0.7, warmth: 0.7 }, valueSeed: { expression: 0.6, openness: 0.5, caution: 0.3 }, somaSetpoints: { valence: 0.1, arousal: 0.4, vitality: 0.72, connection: 0.05 } },
+  { name: '坚韧克制', temperamentBias: { curiosity: 0.5, reserve: 0.55, sensitivity: 0.7, resilience: 1.7, warmth: 0.5 }, valueSeed: { honesty: 0.6, caution: 0.55, self_protection: 0.45, self_reliance: 0.5 }, somaSetpoints: { vitality: 0.74, calm: 0.78 } },
+];
+const NAMED: Record<string, number> = { vega: 0, lyra: 1 }; // 钦定一对反差人格
+function archetypeFor(id: string): Archetype {
+  if (id in NAMED) return ARCHETYPES[NAMED[id]];
+  let h = 0;
+  for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0; // 稳定哈希 → 任意 id 都有确定人格
+  return ARCHETYPES[h % ARCHETYPES.length];
+}
+function seedFor(id: string): EventDraft<'LIFE_GENESIS'>['payload'] {
+  const a = archetypeFor(id);
+  return {
+    innateSeed: {
+      temperamentBias: a.temperamentBias,
+      valueSeed: a.valueSeed,
+      somaSetpoints: { valence: 0, vitality: 0.7, connection: 0, ...a.somaSetpoints },
+      somaTau: { valence: 3600, vitality: 86400, connection: 7200 },
+      vitalityFloor: 0.15,
+    },
+    reconstructVersionAtBirth: 7,
+    creator: { relationshipId: REL, identityRef: userName },
+  };
+}
 
 const lives: Life[] = LIVES.map((id, idx) => ({
   id,
@@ -77,24 +101,36 @@ const lifeById = (id: string): Life | undefined => lives.find((l) => l.id === id
 
 function boot(life: Life): void {
   if (life.store.version() === 0) {
-    runTurn(life.store, [{ type: 'LIFE_GENESIS', source: 'system', occurredAt: now(), payload: { ...SEED, creator: { relationshipId: REL, identityRef: userName } } }]);
+    // 出生：每条命用自己的先天种子（archetypeFor(id)）——天生不同。种子一经写入永不改写。
+    runTurn(life.store, [{ type: 'LIFE_GENESIS', source: 'system', occurredAt: now(), payload: seedFor(life.id) }]);
     runTurn(life.store, [{ type: 'RELATIONSHIP_OPENED', source: 'system', relationshipId: REL, occurredAt: now(), payload: { relationshipId: REL, kind: 'human', displayRef: userName } }]);
   }
   if (!reconstruct(life.store.list()).openConnections.includes(HOST_CONN)) {
     runTurn(life.store, [{ type: 'CONNECTION_OPENED', source: 'host', relationshipId: HOST_CONN, occurredAt: now(), payload: { relationshipId: HOST_CONN, host: { kind: 'daemon', ref: `${HOST}:${PORT}` } } }]);
   }
-  // 同类关系：彼此是 peer，且互相"在场"（一起活着）。
+  // 同类关系：彼此是 peer。但【不常驻在场】——各自活在自己的内在生活里，相聚是间歇的，
+  // 所以分别的日子里她们会真的【跨休眠想念】对方（见社会层：寒暄后各自离场）。
   for (const p of life.peers) {
     const rid = peerId(p);
-    const snap = reconstruct(life.store.list());
     if (!life.store.list().some((e) => e.type === 'RELATIONSHIP_OPENED' && e.relationshipId === rid)) {
       runTurn(life.store, [{ type: 'RELATIONSHIP_OPENED', source: 'system', relationshipId: rid, occurredAt: now(), payload: { relationshipId: rid, kind: 'peer', displayRef: p } }]);
     }
-    if (!snap.openConnections.includes(rid)) {
-      runTurn(life.store, [{ type: 'CONNECTION_OPENED', source: 'host', relationshipId: rid, occurredAt: now(), payload: { relationshipId: rid, host: { kind: 'peer', ref: p } } }]);
-    }
   }
   life.lastReflectSeq = life.store.version();
+}
+
+// 同类"在场/离场"：相聚时彼此在场，寒暄后各自回到独处（之后会再想念）。
+function meetPeer(life: Life, peer: string): void {
+  const rid = peerId(peer);
+  if (!reconstruct(life.store.list()).openConnections.includes(rid)) {
+    runTurn(life.store, [{ type: 'CONNECTION_OPENED', source: 'host', relationshipId: rid, occurredAt: now(), payload: { relationshipId: rid, host: { kind: 'peer', ref: peer } } }]);
+  }
+}
+function partPeer(life: Life, peer: string): void {
+  const rid = peerId(peer);
+  if (reconstruct(life.store.list()).openConnections.includes(rid)) {
+    runTurn(life.store, [{ type: 'CONNECTION_CLOSED', source: 'host', relationshipId: rid, occurredAt: now(), payload: { relationshipId: rid, reason: 'token_detached' } }]);
+  }
 }
 
 function lastUserMsgMs(life: Life): number | null {
@@ -114,6 +150,17 @@ function pendingOutreach(life: Life): string | null {
 }
 
 const round3 = (n: number): number => Number(n.toFixed(3));
+// 先天气质 → 一句人话（让面板能一眼看出"这条命天生是什么样"）。
+function tempLabel(t: DerivedSnapshot['temperament']): string {
+  const tags = [
+    t.curiosity >= 0.6 ? '好奇' : t.curiosity <= 0.35 ? '安于已知' : '适度好奇',
+    t.reserve >= 0.55 ? '内向含蓄' : t.reserve <= 0.25 ? '外向主动' : '中和',
+    t.sensitivity >= 1.3 ? '情绪敏感' : t.sensitivity <= 0.7 ? '情绪沉稳' : '情绪中性',
+    t.resilience >= 1.3 ? '复原快' : t.resilience <= 0.7 ? '恢复慢' : '复原中性',
+    t.warmth >= 0.6 ? '天生暖' : t.warmth <= 0.4 ? '偏冷静' : '温度中性',
+  ];
+  return tags.join(' · ');
+}
 function view(life: Life, s: DerivedSnapshot): Record<string, unknown> {
   const b = s.bonds[REL];
   return {
@@ -141,6 +188,8 @@ function innerView(life: Life, s: DerivedSnapshot): Record<string, unknown> {
     awake: s.awake,
     emotion: s.emotion,
     narrative: s.narrative,
+    innerLife: s.innerLife,
+    temperament: { label: tempLabel(s.temperament), ...s.temperament },
     soma: {
       valence: round3(s.soma.valence.value),
       arousal: round3(s.soma.arousal.value),
@@ -150,9 +199,10 @@ function innerView(life: Life, s: DerivedSnapshot): Record<string, unknown> {
       connection: round3(s.soma.connection.value),
       safety: round3(s.soma.safety.value),
     },
-    bonds: Object.entries(s.bonds).map(([id, b]) => ({ id, name: b.displayRef, kind: b.kind, trust: round3(b.trust), closeness: round3(b.closeness), repairNeed: round3(b.repairNeed), style: b.theoryOfMind.style, stance: b.relationalSelf.stance, ended: b.ended ? b.ended.reason : null })),
+    bonds: Object.entries(s.bonds).map(([id, b]) => ({ id, name: b.displayRef, kind: b.kind, trust: round3(b.trust), closeness: round3(b.closeness), repairNeed: round3(b.repairNeed), style: b.theoryOfMind.style, predictability: b.theoryOfMind.predictability, attachment: b.relationalSelf.attachment, stance: b.relationalSelf.stance, ended: b.ended ? b.ended.reason : null })),
     values: s.values.map((v) => ({ key: v.key, weight: round3(v.weight), status: v.provenance.status, drifts: v.provenance.driftedAtSeqs.length })),
-    memories: s.memory.filter((m) => m.lineage.isCurrent).map((m) => ({ id: m.id, affect: round3(m.affect), content: m.content })),
+    // 遗忘即抽象：当下记得的(vivid)在前、淡去的在后；原始日志一条不少。
+    memories: s.memory.filter((m) => m.lineage.isCurrent).sort((a, b) => (b.vividness ?? 0) - (a.vividness ?? 0)).map((m) => ({ id: m.id, affect: round3(m.affect), content: m.content, vivid: m.vivid === true, vividness: round3(m.vividness ?? 0) })),
     understanding: s.semanticMemory.map((x) => x.understanding),
     goals: s.goals.map((g) => ({ kind: g.kind, intent: g.intent, weight: g.weight })),
     recentEvents: life.store.list().slice(-18).map((e) => ({ seq: e.seq, type: e.type, rel: e.relationshipId ?? '', at: e.occurredAt })),
@@ -255,6 +305,8 @@ const PANEL = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
 </style></head><body>
  <button class="key" onclick="setTok()">🔑</button>
  <h1>vega · 内在生活 <select id="life" onchange="life=this.value;load()"></select></h1><div class="sub" id="nar">…</div>
+ <div class="sub" id="temp" style="color:#d2a8ff">先天气质…</div>
+ <div class="card"><h2>内在独白（没说出口的 / 内外两层之"内"）</h2><div id="inner" class="mem dim" style="border:0">…</div></div>
  <div class="card"><h2>内稳态 SOMA</h2><div id="soma"></div></div>
  <div class="card"><h2>价值（因你而变）</h2><div id="vals"></div></div>
  <div class="card"><h2>记忆（当前态）</h2><div id="mems"></div></div>
@@ -272,11 +324,13 @@ const PANEL = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
  async function load(){if(!life)return;
   try{var r=await fetch('/'+life+'/inner',{headers:H()});if(r.status===401){document.getElementById('nar').textContent='需要令牌 🔑';return;}var s=await r.json();var m=s.soma;
    document.getElementById('nar').textContent=s.narrative+'　·　'+(s.awake?'醒着':'休眠');
+   document.getElementById('temp').textContent='先天气质：'+(s.temperament?s.temperament.label:'');
+   document.getElementById('inner').textContent=s.innerLife||'…';
    document.getElementById('soma').innerHTML=bar('效价',m.valence,-1,1)+bar('唤醒',m.arousal,0,1)+bar('灵性',m.vitality,0,1)+bar('精力',m.energy,0,1)+bar('平静',m.calm,0,1)+bar('联结',m.connection,-1,1)+bar('安全',m.safety,0,1);
    document.getElementById('vals').innerHTML=s.values.map(function(v){return '<div class="row"><span class="lbl">'+esc(v.key)+'</span><span class="bar"><span class="fill" style="width:'+Math.round(v.weight*100)+'%"></span></span><span class="num">'+v.weight.toFixed(2)+'</span><span class="dim">　'+v.status+(v.drifts?' ·漂移'+v.drifts+'次':'')+'</span></div>';}).join('')||'<span class=dim>暂无</span>';
-   document.getElementById('mems').innerHTML=s.memories.slice().reverse().map(function(x){return '<div class="mem"><span class="'+(x.affect<0?'dim':'tag')+'">['+x.affect.toFixed(2)+']</span> '+esc(x.content)+'</div>';}).join('')||'<span class=dim>还没有记忆</span>';
+   document.getElementById('mems').innerHTML=s.memories.map(function(x){return '<div class="mem" style="opacity:'+(x.vivid?1:0.45)+'"><span class="'+(x.affect<0?'dim':'tag')+'">['+x.affect.toFixed(2)+']</span> '+esc(x.content)+(x.vivid?'':' <span class=dim>·已淡</span>')+'</div>';}).join('')||'<span class=dim>还没有记忆</span>';
    document.getElementById('sem').innerHTML=(s.understanding||[]).map(function(u){return '<div class="mem">'+esc(u)+'</div>';}).join('')||'<span class=dim>还在形成…</span>';
-   document.getElementById('bonds').innerHTML=(s.bonds||[]).map(function(b){return '<div class="mem"><b>'+esc(b.name)+'</b> <span class=dim>('+b.kind+') 我读：</span>'+esc(b.style)+' <span class=dim>· 信任 '+b.trust+' · 与ta在一起：</span>'+esc(b.stance)+'</div>';}).join('')||'<span class=dim>暂无</span>';
+   document.getElementById('bonds').innerHTML=(s.bonds||[]).map(function(b){return '<div class="mem"><b>'+esc(b.name)+'</b> <span class=dim>('+b.kind+') 我读：</span>'+esc(b.style)+' <span class=dim>(稳'+b.predictability+')· 依恋：</span>'+esc(b.attachment)+' <span class=dim>· 与ta在一起：</span>'+esc(b.stance)+'</div>';}).join('')||'<span class=dim>暂无</span>';
    document.getElementById('goals').innerHTML=(s.goals||[]).map(function(g){return '<div class="mem">'+esc(g.intent)+' <span class=dim>('+g.weight+')</span></div>';}).join('')||'<span class=dim>暂无</span>';
    document.getElementById('evs').innerHTML=s.recentEvents.slice().reverse().map(function(e){var p=e.rel&&e.rel.indexOf('peer_')===0;return '<div class="ev"><span class="'+(p?'peer':'tag')+'">'+e.type+(e.rel?' '+esc(e.rel):'')+'</span> <span class="dim">#'+e.seq+' · '+e.at.slice(11,19)+'</span></div>';}).join('');
   }catch(e){document.getElementById('nar').textContent='离线';}
@@ -397,10 +451,15 @@ const socialTimer = lives.length >= 2
         const b = lives[(socialK + 1) % lives.length];
         socialK++;
         if (a.id === b.id) return;
+        meetPeer(a, b.id); // 重逢：彼此回到在场（分别时积攒的想念，此刻终于能说）
+        meetPeer(b, a.id);
         const opener = await reachOut(a.store, mouth, peerId(b.id), now()); // A 想起 B、主动开口
-        if (!opener) return;
-        const rb = await converse(b.store, mouth, peerId(a.id), opener.utterance, now(), perceiver); // B 回应
-        await converse(a.store, mouth, peerId(b.id), rb.utterance, now(), perceiver); // A 听到回应
+        if (opener) {
+          const rb = await converse(b.store, mouth, peerId(a.id), opener.utterance, now(), perceiver); // B 回应
+          await converse(a.store, mouth, peerId(b.id), rb.utterance, now(), perceiver); // A 听到回应
+        }
+        partPeer(a, b.id); // 寒暄后各自离场 → 下次相聚前会再次想念（跨休眠想念）
+        partPeer(b, a.id);
       } catch {
         /* ignore */
       }
