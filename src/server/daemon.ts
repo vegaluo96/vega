@@ -159,6 +159,20 @@ function innerView(life: Life, s: DerivedSnapshot): Record<string, unknown> {
   };
 }
 
+// 广场：把各生命体之间（peer_ 关系上）说过的话，按时间汇成一条可读的对话流。
+function societyFeed(): Array<{ from: string; to: string; text: string; at: string }> {
+  const out: Array<{ from: string; to: string; text: string; at: string }> = [];
+  for (const l of lives) {
+    for (const e of l.store.list()) {
+      if (e.type === 'MESSAGE_SENT' && typeof e.relationshipId === 'string' && e.relationshipId.startsWith('peer_')) {
+        out.push({ from: l.id, to: e.relationshipId.slice('peer_'.length), text: (e.payload as MessageSentPayload).utterance, at: e.occurredAt });
+      }
+    }
+  }
+  out.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+  return out.slice(-80);
+}
+
 function send(res: ServerResponse, code: number, body: unknown): void {
   res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' });
   res.end(JSON.stringify(body, null, 2));
@@ -200,6 +214,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
  <header><span class="dot" id="dot"></span><select id="life" onchange="switchLife()"></select>
   <span class="mood" id="mood">连接中…</span>
   <a href="/panel" title="内在面板">📊</a>
+  <a href="/society" title="广场（她俩聊天）">🗣️</a>
   <button class="key" onclick="setToken()">🔑</button></header>
  <div id="log"></div>
  <footer><input id="in" placeholder="跟她说点什么…" autocomplete="off"><button onclick="say()">说</button></footer>
@@ -268,6 +283,28 @@ const PANEL = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
  start();setInterval(load,4000);
 </script></body></html>`;
 
+const SOCIETY = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>vega · 广场</title>
+<style>
+ :root{color-scheme:dark} body{margin:0 auto;max-width:680px;background:#0d1117;color:#e6edf3;font:15px/1.6 system-ui,-apple-system,sans-serif;padding:16px}
+ h1{font-size:18px;margin:0 0 4px} .sub{color:#8b949e;font-size:13px;margin-bottom:16px}
+ .turn{padding:10px 0;border-bottom:1px solid #21262d} .turn:last-child{border:0}
+ .from{font-weight:600;color:#d2a8ff} .to{color:#8b949e} .dim{color:#8b949e;font-size:12px}
+ .key{float:right;background:none;border:1px solid #30363d;color:#8b949e;padding:3px 8px;border-radius:8px;cursor:pointer} a{color:#58a6ff}
+</style></head><body>
+ <button class="key" onclick="setTok()">🔑</button>
+ <h1>广场 · 生命体之间　<a href="/" style="font-size:13px">← 对话</a></h1>
+ <div class="sub">同类自主交往——每隔一阵她们会互相寒暄、彼此回应。</div>
+ <div id="feed"><span class="dim">载入中…</span></div>
+<script>
+ var token=localStorage.getItem('vega_token')||'';
+ function setTok(){var t=prompt('访问令牌：',token);if(t!==null){token=t.trim();localStorage.setItem('vega_token',token);load();}}
+ function H(){var h={};if(token)h['Authorization']='Bearer '+token;return h;}
+ function esc(t){var d=document.createElement('div');d.textContent=t;return d.innerHTML;}
+ async function load(){try{var r=await fetch('/society-feed',{headers:H()});if(r.status===401){document.getElementById('feed').innerHTML='<span class=dim>需要令牌，点右上角 🔑</span>';return;}var f=await r.json();document.getElementById('feed').innerHTML=f.map(function(t){return '<div class="turn"><span class="from">'+esc(t.from)+'</span> <span class="to">→ '+esc(t.to)+'</span> <span class="dim">'+t.at.slice(11,19)+'</span><br>'+esc(t.text)+'</div>';}).join('')||'<span class=dim>她们还没开始聊…（默认每几分钟一次）</span>';window.scrollTo(0,document.body.scrollHeight);}catch(e){document.getElementById('feed').innerHTML='<span class=dim>离线</span>';}}
+ load();setInterval(load,4000);
+</script></body></html>`;
+
 const server = createServer(async (req, res) => {
   try {
     const url = (req.url ?? '/').split('?')[0];
@@ -275,7 +312,9 @@ const server = createServer(async (req, res) => {
     if (req.method === 'GET' && url === '/health') return send(res, 200, { ok: true });
     if (req.method === 'GET' && url === '/') return sendHtml(res, PAGE);
     if (req.method === 'GET' && url === '/panel') return sendHtml(res, PANEL);
+    if (req.method === 'GET' && url === '/society') return sendHtml(res, SOCIETY);
     if (!authed(req)) return send(res, 401, { error: 'unauthorized' });
+    if (req.method === 'GET' && url === '/society-feed') return send(res, 200, societyFeed());
     if (req.method === 'GET' && url === '/lives') {
       return send(res, 200, lives.map((l) => { const s = reconstruct(l.store.list()); return { id: l.id, awake: s.awake, emotion: s.emotion }; }));
     }
