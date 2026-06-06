@@ -59,6 +59,32 @@ curl -s localhost:8787/state                       # 看她此刻的内在
 curl -s localhost:8787/say -d '{"content":"你好"}'  # 跟她说话，返回她的回应
 ```
 
+### 网页界面 + 对外访问（HTTPS，推荐有域名时）
+
+守护进程内置一个**零依赖网页聊天界面**（`GET /`）。`/` 页面公开，`/say` `/state` 需令牌（设了 `VEGA_AUTH_TOKEN` 时）。让 vega 仍只听 `127.0.0.1`，用 **Caddy** 反代域名 + 自动 HTTPS：
+
+```bash
+# 1) 设访问令牌（vega 仍只听本机，由 Caddy 代理）
+TOKEN=$(openssl rand -hex 24); echo "你的访问令牌：$TOKEN"
+printf 'VEGA_AUTH_TOKEN=%s\n' "$TOKEN" | sudo tee -a /etc/vega.env >/dev/null
+sudo systemctl restart vega
+
+# 2) 装 Caddy 并反代你的域名（把 your.domain 换成你的域名）
+sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+sudo apt update && sudo apt install -y caddy
+echo 'your.domain {
+    reverse_proxy 127.0.0.1:8787
+}' | sudo tee /etc/caddy/Caddyfile
+sudo systemctl reload caddy
+```
+
+3) 云安全组放行入站 **TCP 80 + 443**（Caddy 申请/续签证书要 80，对外服务走 443）。DNS A 记录指向服务器 IP。
+4) 浏览器打开 `https://your.domain/` → 点右上角 🔑 填令牌 → 开聊。
+
+> 没域名时的退路：`/etc/vega.env` 里设 `VEGA_HOST=0.0.0.0` + `VEGA_AUTH_TOKEN`，放行 8787，直接 `http://IP:8787/`。⚠️ 明文 HTTP，令牌/对话在公网裸跑，仅供临时测试。
+
 > **替换旧版 life-engine**：先停旧的、再删旧目录（把下面占位换成你真实的服务名/路径，确认无误再执行）：
 > ```bash
 > sudo systemctl stop <旧服务名> && sudo systemctl disable <旧服务名>

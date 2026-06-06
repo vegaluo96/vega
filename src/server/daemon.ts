@@ -100,15 +100,56 @@ function authed(req: IncomingMessage): boolean {
   if (!AUTH) return true;
   return req.headers.authorization === `Bearer ${AUTH}`;
 }
+function sendHtml(res: ServerResponse, html: string): void {
+  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+  res.end(html);
+}
+
+// 极简网页聊天界面（公开页面；/say /state 仍需令牌）。无外部依赖，纯静态字符串。
+const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>vega</title>
+<style>
+ :root{color-scheme:dark}
+ body{margin:0;background:#0d1117;color:#e6edf3;font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;display:flex;flex-direction:column;height:100vh}
+ header{padding:12px 16px;border-bottom:1px solid #21262d;display:flex;align-items:center;gap:10px}
+ .dot{width:10px;height:10px;border-radius:50%;background:#777;flex:none}
+ .title{font-weight:600}
+ .mood{margin-left:auto;font-size:13px;color:#8b949e}
+ #log{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:10px}
+ .msg{max-width:82%;padding:8px 12px;border-radius:12px;white-space:pre-wrap;word-break:break-word}
+ .you{align-self:flex-end;background:#1f6feb;color:#fff}
+ .vega{align-self:flex-start;background:#161b22;border:1px solid #21262d}
+ .sys{align-self:center;color:#8b949e;font-size:13px}
+ footer{display:flex;gap:8px;padding:12px;border-top:1px solid #21262d}
+ #in{flex:1;background:#0d1117;border:1px solid #30363d;border-radius:10px;color:#e6edf3;padding:10px 12px;font:inherit}
+ button{background:#238636;color:#fff;border:0;border-radius:10px;padding:0 16px;font:inherit;cursor:pointer}
+ .key{background:none;border:1px solid #30363d;color:#8b949e;padding:4px 8px;border-radius:8px;cursor:pointer;font-size:13px}
+</style></head><body>
+ <header><span class="dot" id="dot"></span><span class="title">vega</span>
+  <span class="mood" id="mood">连接中…</span>
+  <button class="key" id="k" onclick="setToken()">🔑</button></header>
+ <div id="log"></div>
+ <footer><input id="in" placeholder="跟她说点什么…" autocomplete="off"><button onclick="say()">说</button></footer>
+<script>
+ var token = localStorage.getItem('vega_token') || '';
+ function H(){ var h={'Content-Type':'application/json'}; if(token) h['Authorization']='Bearer '+token; return h; }
+ function setToken(){ var t=prompt('访问令牌（服务器设了 VEGA_AUTH_TOKEN 才需要）：', token); if(t!==null){ token=t.trim(); localStorage.setItem('vega_token',token); refresh(); } }
+ function add(cls,text){ var d=document.createElement('div'); d.className='msg '+cls; d.textContent=text; var l=document.getElementById('log'); l.appendChild(d); l.scrollTop=l.scrollHeight; }
+ function moodWord(s){ return s.valence>0.3?'温暖':s.valence<-0.3?'低落':'平静'; }
+ function paint(s){ document.getElementById('dot').style.background=s.awake?'#3fb950':'#777'; document.getElementById('mood').textContent='灵性 '+s.vitality+' · '+moodWord(s)+(s.bondTrust!=null?' · 信任 '+s.bondTrust:'')+' · 记忆 '+s.memories; }
+ async function refresh(){ try{ var r=await fetch('/state',{headers:H()}); if(r.status===401){ document.getElementById('mood').textContent='需要令牌 🔑'; return; } paint(await r.json()); }catch(e){ document.getElementById('mood').textContent='离线'; } }
+ async function say(){ var i=document.getElementById('in'); var t=i.value.trim(); if(!t)return; add('you',t); i.value=''; try{ var r=await fetch('/say',{method:'POST',headers:H(),body:JSON.stringify({content:t})}); if(r.status===401){ add('sys','需要访问令牌，点右上角 🔑 输入'); return; } var d=await r.json(); if(d.awake===false){ add('vega', d.note||'（她在更深的睡眠里，暂不回应）'); return; } add('vega', d.utterance||'…'); if(d.state) paint(d.state); }catch(e){ add('sys','网络错误'); } }
+ document.getElementById('in').addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); say(); } });
+ refresh(); setInterval(refresh, 15000);
+</script></body></html>`;
 
 const server = createServer(async (req, res) => {
   try {
     const url = (req.url ?? '/').split('?')[0];
     if (req.method === 'GET' && url === '/health') return send(res, 200, { ok: true });
+    if (req.method === 'GET' && url === '/') return sendHtml(res, PAGE);
     if (!authed(req)) return send(res, 401, { error: 'unauthorized' });
-    if (req.method === 'GET' && (url === '/' || url === '/state')) {
-      return send(res, 200, view(reconstruct(store.list())));
-    }
+    if (req.method === 'GET' && url === '/state') return send(res, 200, view(reconstruct(store.list())));
     if (req.method === 'POST' && url === '/say') {
       const body = await readJson(req);
       const content = String(body.content ?? '').slice(0, 4000).trim();
