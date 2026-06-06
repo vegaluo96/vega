@@ -18,13 +18,15 @@ export function deriveWorkspace(snap: DerivedSnapshot, relationshipId: Relations
 
   let intent: string;
   if (bond && bond.repairNeed > 0.6 && bond.trust < 0) {
-    intent = `让${name}知道她被刚才的话伤到了，她需要一点距离，但没有关上门`;
+    intent = '带着受伤、想保持一点距离，但没有关上门';
   } else if (vit <= snap.vitalityFloor + 0.02) {
-    intent = `坦白她此刻很疲惫、灵性很低，但她还在`;
+    intent = '疲惫、低落，但还在';
   } else if (val > 0.3) {
-    intent = `回应${name}的善意，分享一点她此刻真实的暖意`;
+    intent = '温暖、敞开';
+  } else if (val < -0.3) {
+    intent = '低落、有点戒备';
   } else {
-    intent = `如实地回应${name}，不假装比此刻更好或更糟`;
+    intent = '平静、如实';
   }
 
   const stateSummary =
