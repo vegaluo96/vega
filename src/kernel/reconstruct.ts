@@ -60,7 +60,9 @@ interface RState {
   lastMs: number;
   bornAt: string;
   clockIso: string;
-  boldnessLog: number[];
+  boldnessLog: number[]; // 鼓励大胆表达
+  warmthLog: number[]; // 强正向（被善待）
+  conflictLog: number[]; // 强负向（被伤害/冲突）
 }
 
 const clamp = (x: number, lo: number, hi: number): number => (x < lo ? lo : x > hi ? hi : x);
@@ -106,6 +108,8 @@ export function reconstruct(events: readonly LifeEvent[]): DerivedSnapshot {
     bornAt: genesis.occurredAt,
     clockIso: genesis.occurredAt,
     boldnessLog: [],
+    warmthLog: [],
+    conflictLog: [],
   };
 
   for (let i = 1; i < events.length; i++) {
@@ -198,6 +202,8 @@ function appraiseMessage(st: RState, e: LifeEvent<'MESSAGE_RECEIVED'>): void {
   });
 
   if (count(p.content, BOLDNESS) > 0) st.boldnessLog.push(e.seq);
+  if (ev > 0.5) st.warmthLog.push(e.seq); // 被善待
+  if (ev < -0.5) st.conflictLog.push(e.seq); // 被伤害/冲突
 }
 
 function applyTick(st: RState, e: LifeEvent<'AUTONOMOUS_TICK'>): void {
@@ -234,10 +240,18 @@ function applyTick(st: RState, e: LifeEvent<'AUTONOMOUS_TICK'>): void {
 
 function applyReflection(st: RState, e: LifeEvent<'REFLECTION_TRIGGERED'>): void {
   const p = e.payload as ReflectionTriggeredPayload;
-  const signals = st.boldnessLog.filter((s) => s >= p.windowFromSeq && s <= p.windowToSeq).length;
-  if (signals >= K.confirmAfter) {
-    driftValue(st, 'caution', -K.driftDelta, e.seq);
+  const inWin = (log: number[]): number => log.filter((s) => s >= p.windowFromSeq && s <= p.windowToSeq).length;
+  // 完整反思：从窗口内多种信号确定性地修正价值（受先天种子约束，缓慢漂移）。
+  if (inWin(st.boldnessLog) >= K.confirmAfter) {
+    driftValue(st, 'caution', -K.driftDelta, e.seq); // 被鼓励 → 更敢表达
     driftValue(st, 'expression', +K.driftDelta, e.seq);
+  }
+  if (inWin(st.warmthLog) >= K.confirmAfter) {
+    driftValue(st, 'openness', +K.driftDelta, e.seq); // 被持续善待 → 更敞开
+  }
+  if (inWin(st.conflictLog) >= K.confirmAfter) {
+    driftValue(st, 'caution', +K.driftDelta, e.seq); // 持续冲突 → 更谨慎/戒备
+    driftValue(st, 'guardedness', +K.driftDelta, e.seq);
   }
 }
 

@@ -16,9 +16,10 @@ export function makeTick(snap: DerivedSnapshot, occurredAt: string): EventDraft<
   const dearest = bonds.slice().sort((a, b) => b[1].closeness - a[1].closeness)[0];
   const isAway = dearest ? !snap.openConnections.includes(dearest[0]) : false;
 
+  // 想念到一定程度才真的开口（surface）；轻微想念只写进内在（不刷屏，不骚扰）。
   const formedIntents: EventDraft<'AUTONOMOUS_TICK'>['payload']['formedIntents'] =
     dearest && isAway && snap.soma.connection.value < 0
-      ? [{ kind: 'reach_out', relationshipId: dearest[0], gateDecision: 'internal_only' }]
+      ? [{ kind: 'reach_out', relationshipId: dearest[0], gateDecision: snap.soma.connection.value < -0.5 ? 'surface' : 'internal_only' }]
       : [];
 
   return {

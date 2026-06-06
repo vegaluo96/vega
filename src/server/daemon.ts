@@ -8,11 +8,14 @@ import {
   converse,
   createFileEventStore,
   createMouth,
+  reachOut,
   reconstruct,
   runAutonomousTick,
   runTurn,
+  type AutonomousTickPayload,
   type DerivedSnapshot,
   type EventDraft,
+  type MessageSentPayload,
 } from '../index.ts';
 
 const LIFE_PATH = process.env.VEGA_LIFE_PATH ?? join(process.cwd(), '.vega', 'life.jsonl');
@@ -70,6 +73,7 @@ function view(s: DerivedSnapshot): Record<string, unknown> {
     memories: s.memory.filter((m) => m.lineage.isCurrent).length,
     values: s.values.map((v) => ({ key: v.key, weight: Number(v.weight.toFixed(3)) })),
     narrative: s.narrative,
+    pendingOutreach: pendingOutreach(),
     events: store.version(),
     mouth: mouth.id,
   };
@@ -164,7 +168,8 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
  function add(cls,text){ var d=document.createElement('div'); d.className='msg '+cls; d.textContent=text; var l=document.getElementById('log'); l.appendChild(d); l.scrollTop=l.scrollHeight; }
  function moodWord(s){ return s.valence>0.3?'温暖':s.valence<-0.3?'低落':'平静'; }
  function paint(s){ document.getElementById('dot').style.background=s.awake?'#3fb950':'#777'; document.getElementById('mood').textContent='灵性 '+s.vitality+' · '+moodWord(s)+(s.bondTrust!=null?' · 信任 '+s.bondTrust:'')+' · 记忆 '+s.memories; }
- async function refresh(){ try{ var r=await fetch('/state',{headers:H()}); if(r.status===401){ document.getElementById('mood').textContent='需要令牌 🔑'; return; } paint(await r.json()); }catch(e){ document.getElementById('mood').textContent='离线'; } }
+ var lastOutreach='';
+ async function refresh(){ try{ var r=await fetch('/state',{headers:H()}); if(r.status===401){ document.getElementById('mood').textContent='需要令牌 🔑'; return; } var s=await r.json(); paint(s); if(s.pendingOutreach && s.pendingOutreach!==lastOutreach){ lastOutreach=s.pendingOutreach; add('vega','（你不在时，她想对你说）'+s.pendingOutreach); } }catch(e){ document.getElementById('mood').textContent='离线'; } }
  async function say(){ var i=document.getElementById('in'); var t=i.value.trim(); if(!t)return; add('you',t); i.value=''; try{ var r=await fetch('/say',{method:'POST',headers:H(),body:JSON.stringify({content:t})}); if(r.status===401){ add('sys','需要访问令牌，点右上角 🔑 输入'); return; } var d=await r.json(); if(d.awake===false){ add('vega', d.note||'（她在更深的睡眠里，暂不回应）'); return; } add('vega', d.utterance||'…'); if(d.state) paint(d.state); }catch(e){ add('sys','网络错误'); } }
  document.getElementById('in').addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); say(); } });
  refresh(); setInterval(refresh, 15000);
@@ -248,9 +253,26 @@ function lastUserMsgMs(): number | null {
   }
   return null;
 }
+function lastIndexOf(pred: (e: ReturnType<typeof store.list>[number]) => boolean): number {
+  const es = store.list();
+  for (let i = es.length - 1; i >= 0; i--) if (pred(es[i])) return i;
+  return -1;
+}
+// 她主动留的、尚未被回应的那句话（你回来时该看到的）。
+function pendingOutreach(): string | null {
+  const recvIdx = lastIndexOf((e) => e.type === 'MESSAGE_RECEIVED' && e.relationshipId === REL);
+  const es = store.list();
+  for (let i = es.length - 1; i > recvIdx; i--) {
+    const e = es[i];
+    if (e.type === 'MESSAGE_SENT' && e.relationshipId === REL && (e.payload as MessageSentPayload).unprompted) {
+      return (e.payload as MessageSentPayload).utterance;
+    }
+  }
+  return null;
+}
 
 // 回路 B 心跳：她醒着且空闲时，自己重放/想念/演化（不调模型，0 token）。
-const heartbeat = setInterval(() => {
+const heartbeat = setInterval(async () => {
   try {
     const snap = reconstruct(store.list());
     if (!snap.awake) return;
@@ -261,7 +283,15 @@ const heartbeat = setInterval(() => {
         runTurn(store, [{ type: 'CONNECTION_CLOSED', source: 'host', relationshipId: REL, occurredAt: now(), payload: { relationshipId: REL, reason: 'token_detached' } }]);
       }
     }
-    runAutonomousTick(store, now());
+    const tick = runAutonomousTick(store, now());
+    // 想念到一定程度（surface）→ 她主动留一句话；不刷屏：已有未回应的留言就不再发。
+    const head = tick.events[0];
+    const wantsReach =
+      head.type === 'AUTONOMOUS_TICK' &&
+      (head.payload as AutonomousTickPayload).formedIntents.some((i) => i.kind === 'reach_out' && i.gateDecision === 'surface');
+    if (wantsReach && pendingOutreach() === null) {
+      await reachOut(store, mouth, REL, now());
+    }
   } catch {
     /* 单次 tick 失败不拖垮守护进程 */
   }

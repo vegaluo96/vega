@@ -27,7 +27,7 @@ export {
   type SoulStatePatch,
   type PatchSource,
 } from './engine/invariant-checker.ts';
-export { converse, type ConverseResult } from './engine/converse.ts';
+export { converse, reachOut, type ConverseResult, type OutreachResult } from './engine/converse.ts';
 export { makeTick, runAutonomousTick } from './engine/autonomous-loop.ts';
 export {
   createMouth,

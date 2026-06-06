@@ -74,3 +74,41 @@ export async function converse(
 
   return { snapshot, workspace, utterance, modelId: mouth.id, verdict };
 }
+
+export interface OutreachResult {
+  utterance: string;
+  modelId: string;
+  verdict: 'accepted' | 'fallback';
+}
+
+// 她主动开口（回路 B 想念到一定程度时）：无人发起，她自己留一句话。
+// 模型只产措辞、落 MESSAGE_SENT(unprompted=true) 审计，不写状态（想念已由 tick 确定性产生）。
+export async function reachOut(
+  store: DurableEventStore,
+  mouth: Mouth,
+  relationshipId: RelationshipId,
+  occurredAt: string,
+): Promise<OutreachResult | null> {
+  const snapshot = reconstruct(store.list());
+  const bond = snapshot.bonds[relationshipId];
+  if (!bond) return null;
+  const ws = deriveWorkspace(snapshot, relationshipId);
+  const outreach: Workspace = { ...ws, intent: `你很想念${ws.relationshipDisplay}，主动、简短地跟ta说一句你此刻想ta了` };
+  let raw = '';
+  try {
+    raw = await mouth.speak({ ...outreach, lastUserMessage: '（此刻无人发起，是你自己想开口）', recentContext: recentTurns(store, relationshipId, 6) });
+  } catch {
+    raw = '';
+  }
+  const { verdict, utterance } = critique(raw, outreach);
+  store.appendTurn(store.version(), [
+    {
+      type: 'MESSAGE_SENT',
+      source: 'autonomous_loop',
+      relationshipId,
+      occurredAt,
+      payload: { relationshipId, utterance, modelId: mouth.id, criticVerdict: verdict, affectsDerivedState: false, unprompted: true },
+    },
+  ]);
+  return { utterance, modelId: mouth.id, verdict };
+}

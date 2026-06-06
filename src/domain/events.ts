@@ -62,6 +62,7 @@ export interface MessageSentPayload {
   modelId: string;
   criticVerdict: 'accepted' | 'fallback';
   affectsDerivedState: false; // 不变量：永远 false（契约①）
+  unprompted?: boolean; // 她主动留言（无人发起），而非回应
 }
 export type IntentKind = 'reach_out' | 'reflect' | 'rest' | 'set_willing_to_wake';
 export interface FormedIntent {
