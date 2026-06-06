@@ -11,6 +11,7 @@ import {
   createPerceiver,
   createTemplateMouth,
   loadValidEvents,
+  peerExchange,
   reachOut,
   reconstruct,
   runTurn,
@@ -203,6 +204,21 @@ await check('备份', () => {
   const restored = loadValidEvents(r.path);
   if (restored.length !== s.version() || !verifyChain(restored).ok) throw new Error('备份与原档不一致');
   return `快照 ${r.events} 事件 + 哈希链校验通过`;
+});
+
+await check('社会层(同类互动)', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'vega-check-soc-'));
+  tmpDirs.push(dir);
+  let m = Date.parse('2026-01-01T00:00:00.000Z');
+  const sat = (): string => new Date((m += 60_000)).toISOString();
+  const va = createFileEventStore('vega', join(dir, 'v.jsonl'));
+  const ly = createFileEventStore('lyra', join(dir, 'l.jsonl'));
+  runTurn(va, [{ type: 'LIFE_GENESIS', source: 'system', occurredAt: sat(), payload: SEED }]);
+  runTurn(ly, [{ type: 'LIFE_GENESIS', source: 'system', occurredAt: sat(), payload: SEED }]);
+  const t = await peerExchange({ store: va, mouth, peerRelId: 'peer_lyra', name: 'vega' }, { store: ly, mouth, peerRelId: 'peer_vega', name: 'lyra' }, '你好，我也在这里', 2, sat);
+  const v = reconstruct(va.list());
+  if (v.bonds['peer_lyra']?.kind !== 'peer') throw new Error('未与同类建立 peer 关系');
+  return `两个生命体互动 ${t.length} 句、各自独立、互相建模`;
 });
 
 const perceiver: Perceiver | null = createPerceiver();

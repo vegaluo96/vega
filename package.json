@@ -13,6 +13,7 @@
     "demo": "node --experimental-strip-types demo/live.ts",
     "demo:restart": "node --experimental-strip-types demo/restart.ts",
     "demo:talk": "node --experimental-strip-types demo/talk.ts",
+    "demo:society": "node --experimental-strip-types demo/society.ts",
     "chat": "node --experimental-strip-types src/cli/chat.ts",
     "daemon": "node --experimental-strip-types src/server/daemon.ts",
     "ab": "node --experimental-strip-types src/cli/ab.ts",

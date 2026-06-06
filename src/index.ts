@@ -30,6 +30,7 @@ export {
 } from './engine/invariant-checker.ts';
 export { converse, reachOut, type ConverseResult, type OutreachResult } from './engine/converse.ts';
 export { makeTick, runAutonomousTick } from './engine/autonomous-loop.ts';
+export { peerExchange, type Participant, type PeerTurn } from './engine/society.ts';
 export {
   createMouth,
   createTemplateMouth,
