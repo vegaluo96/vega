@@ -124,7 +124,7 @@ function applyEvent(st: RState, e: LifeEvent): void {
     }
     case 'RELATIONSHIP_OPENED': {
       const p = e.payload as RelationshipOpenedPayload;
-      st.bonds[p.relationshipId] = { kind: p.kind, trust: 0.1, closeness: 0, security: 0.5, repairNeed: 0 };
+      st.bonds[p.relationshipId] = { kind: p.kind, displayRef: p.displayRef, trust: 0.1, closeness: 0, security: 0.5, repairNeed: 0 };
       break;
     }
     case 'MESSAGE_RECEIVED':

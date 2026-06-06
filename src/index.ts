@@ -17,3 +17,23 @@ export {
 } from './persistence/file-event-store.ts';
 export { assertPersistenceSafeForProd, type GuardOpts } from './persistence/guard.ts';
 export { runTurn, runMessageTurn, type TurnResult } from './engine/turn-runner.ts';
+// 神圣链路："嘴" + 工作区 + 评审 + 不变量 + 对话/自主回路
+export { deriveWorkspace, type Workspace } from './engine/soul-workspace.ts';
+export { critique, type CriticResult } from './engine/critic.ts';
+export {
+  assertPatchAllowed,
+  commitPatches,
+  PATCH_SOURCE_WHITELIST,
+  type SoulStatePatch,
+  type PatchSource,
+} from './engine/invariant-checker.ts';
+export { converse, type ConverseResult } from './engine/converse.ts';
+export { makeTick, runAutonomousTick } from './engine/autonomous-loop.ts';
+export {
+  createMouth,
+  createTemplateMouth,
+  createApiyiMouth,
+  type Mouth,
+  type MouthInput,
+  type ApiyiConfig,
+} from './model/mouth.ts';

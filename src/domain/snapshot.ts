@@ -28,6 +28,7 @@ export interface MemoryEntry {
 
 export interface Bond {
   kind: 'human' | 'peer';
+  displayRef: string;
   trust: number; // [-1,1]
   closeness: number; // [0,1]
   security: number; // [0,1]
