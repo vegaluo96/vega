@@ -1,4 +1,4 @@
-// append-only 事件存储（C1）。第 0 步：内存实现（prod 须禁内存库——C4，后续增 guard）。
+// append-only 事件存储（C1）。buildEvent 为内存/持久化两种实现共享。
 import {
   type EventDraft,
   type EventType,
@@ -6,6 +6,40 @@ import {
   type LifeId,
 } from '../domain/events.ts';
 import { computeContentHash } from './hash.ts';
+
+// 由 draft 构造一条完整事件（填 seq/eventId/prevHash/contentHash/recordedAt）。纯逻辑，便于复用。
+export function buildEvent<T extends EventType>(
+  lifeId: LifeId,
+  seq: number,
+  prev: LifeEvent | null,
+  lastOccurredAt: string,
+  draft: EventDraft<T>,
+): LifeEvent<T> {
+  if (seq === 0 && draft.type !== 'LIFE_GENESIS') throw new Error('first event must be LIFE_GENESIS');
+  if (seq > 0 && draft.type === 'LIFE_GENESIS') throw new Error('LIFE_GENESIS only allowed at seq 0');
+  // occurredAt 单调不减（时钟回拨钳到 ≥ 前一条），保护 Δt 永不为负。
+  const occurredAt = draft.occurredAt < lastOccurredAt ? lastOccurredAt : draft.occurredAt;
+  const schemaVersion = draft.schemaVersion ?? 1;
+  const core = {
+    lifeId,
+    seq,
+    type: draft.type,
+    schemaVersion,
+    occurredAt,
+    source: draft.source,
+    payload: draft.payload,
+  };
+  return {
+    ...core,
+    eventId: `evt_${lifeId}_${seq}`,
+    recordedAt: new Date().toISOString(), // 仅审计：唯一允许读墙钟之处，永不进 reconstruct
+    contentHash: computeContentHash(core),
+    prevHash: prev ? prev.contentHash : null,
+    relationshipId: draft.relationshipId,
+    turnId: draft.turnId,
+    causationId: draft.causationId,
+  } as LifeEvent<T>;
+}
 
 export interface EventStore {
   append<T extends EventType>(draft: EventDraft<T>): LifeEvent<T>;
@@ -16,45 +50,14 @@ export interface EventStore {
 export function createInMemoryEventStore(lifeId: LifeId): EventStore {
   const events: LifeEvent[] = [];
   let lastOccurredAt = '';
-
-  function append<T extends EventType>(draft: EventDraft<T>): LifeEvent<T> {
-    const seq = events.length; // gapless，0-based，genesis 在 0
-    if (seq === 0 && draft.type !== 'LIFE_GENESIS') {
-      throw new Error('first event must be LIFE_GENESIS');
-    }
-    if (seq > 0 && draft.type === 'LIFE_GENESIS') {
-      throw new Error('LIFE_GENESIS only allowed at seq 0');
-    }
-    const prev = events[events.length - 1] ?? null;
-    // occurredAt 单调不减（时钟回拨钳到 ≥ 前一条），保护 Δt 永不为负。
-    const occurredAt = draft.occurredAt < lastOccurredAt ? lastOccurredAt : draft.occurredAt;
-    const schemaVersion = draft.schemaVersion ?? 1;
-    const core = {
-      lifeId,
-      seq,
-      type: draft.type,
-      schemaVersion,
-      occurredAt,
-      source: draft.source,
-      payload: draft.payload,
-    };
-    const event: LifeEvent<T> = {
-      ...core,
-      eventId: `evt_${lifeId}_${seq}`,
-      recordedAt: new Date().toISOString(), // 仅审计：唯一允许读墙钟之处，永不进 reconstruct
-      contentHash: computeContentHash(core),
-      prevHash: prev ? prev.contentHash : null,
-      relationshipId: draft.relationshipId,
-      turnId: draft.turnId,
-      causationId: draft.causationId,
-    } as LifeEvent<T>;
-    events.push(event);
-    lastOccurredAt = occurredAt;
-    return event;
-  }
-
   return {
-    append,
+    append<T extends EventType>(draft: EventDraft<T>): LifeEvent<T> {
+      const prev = events[events.length - 1] ?? null;
+      const e = buildEvent(lifeId, events.length, prev, lastOccurredAt, draft);
+      events.push(e);
+      lastOccurredAt = e.occurredAt;
+      return e;
+    },
     list: () => events,
     head: () => events[events.length - 1] ?? null,
   };

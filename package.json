@@ -10,7 +10,8 @@
   "scripts": {
     "test": "node --experimental-strip-types --test test/*.test.ts",
     "typecheck": "tsc --noEmit",
-    "demo": "node --experimental-strip-types demo/live.ts"
+    "demo": "node --experimental-strip-types demo/live.ts",
+    "demo:restart": "node --experimental-strip-types demo/restart.ts"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
