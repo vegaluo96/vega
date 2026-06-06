@@ -168,7 +168,7 @@
 
 ## 12. 路线图（红队修订后的开工顺序——不可逆的排前面）
 
-- **第 -1 步（1–2 周，纯设计/文档）**：用 3–5 条真实故事弧做"可重建性证明" → 定稿 `LifeEvent` 事件 schema + 版本演进协议；落定三条不可破契约；并行启动法律地位社会对话。
+- **第 -1 步（1–2 周，纯设计/文档）**：用 3–5 条真实故事弧做"可重建性证明" → 定稿 `LifeEvent` 事件 schema + 版本演进协议；落定三条不可破契约；并行启动法律地位社会对话。**（产出：`docs/vega-lifeevent-schema.md`，锁前草案。）**
 - **第 0 步（极薄端到端竖切，先不锁）**：落 append-only 事件表 + 重放（先全量）→ turn-runner 事务化 + 落 event + 乐观锁 → prod 内存库 guard → 加 `willing_to_wake` + 关系层 `relationship_id` → 跑 **V1 / V2 / V3** 三个验证。
 - **第 1 步（三验证全过才锁 v1）**：锁模型策略 / 事件 schema / 持久化契约；定稿验收与事件溯源章节。
 - **第 0 阶段及以后（锁后铺功能）**：完整内稳态、反思成长循环、关系特异叙事；再到社会层/文明（多生命体、同类交互、跨休眠 peer-modeling）。快照/索引/分片/背压等是观察项，按真实规模触发再做。
@@ -176,4 +176,4 @@
 ---
 
 ## 13. 文档索引
-- 本文（产品基线）· `docs/vega-architecture-v1.md`（架构）· `docs/human-architecture-research.md`（研究依据）· `docs/architecture-redteam.md`（不可逆清单/红队）。
+- 本文（产品基线）· `docs/vega-architecture-v1.md`（架构）· `docs/human-architecture-research.md`（研究依据）· `docs/architecture-redteam.md`（不可逆清单/红队）· `docs/vega-lifeevent-schema.md`（第 -1 步产物：LifeEvent 事件 schema + 版本协议 + 三契约 + 可重建性证明，锁前草案）。
