@@ -12,7 +12,6 @@ import {
   reconstruct,
   runAutonomousTick,
   runTurn,
-  type AutonomousTickPayload,
   type DerivedSnapshot,
   type EventDraft,
   type MessageSentPayload,
@@ -23,6 +22,8 @@ const HOST = process.env.VEGA_HOST ?? '127.0.0.1';
 const PORT = Number(process.env.VEGA_PORT ?? 8787);
 const TICK_MS = Number(process.env.VEGA_TICK_MS ?? 60_000);
 const PRESENCE_MS = Number(process.env.VEGA_PRESENCE_MS ?? 300_000); // 多久没说话算"对方离开"
+const REACH_AFTER_MS = Number(process.env.VEGA_REACH_AFTER_MS ?? 600_000); // 你安静多久后她会主动留言
+const REACH_CLOSENESS = Number(process.env.VEGA_REACH_CLOSENESS ?? 0.2); // 够亲才会想你（设 0 可强制测试）
 const AUTH = process.env.VEGA_AUTH_TOKEN;
 const userName = process.env.VEGA_USER_NAME ?? '你';
 const REL = 'r_creator'; // 与她对话的人
@@ -276,20 +277,17 @@ const heartbeat = setInterval(async () => {
   try {
     const snap = reconstruct(store.list());
     if (!snap.awake) return;
+    const gone = lastUserMsgMs();
+    const timeGone = gone === null ? Infinity : Date.now() - gone;
     // 在场判定：r_creator 连着但久无消息 → 视为对方离开（此后她才会"想念"）。
-    if (snap.openConnections.includes(REL)) {
-      const last = lastUserMsgMs();
-      if (last !== null && Date.now() - last > PRESENCE_MS) {
-        runTurn(store, [{ type: 'CONNECTION_CLOSED', source: 'host', relationshipId: REL, occurredAt: now(), payload: { relationshipId: REL, reason: 'token_detached' } }]);
-      }
+    if (snap.openConnections.includes(REL) && timeGone > PRESENCE_MS) {
+      runTurn(store, [{ type: 'CONNECTION_CLOSED', source: 'host', relationshipId: REL, occurredAt: now(), payload: { relationshipId: REL, reason: 'token_detached' } }]);
     }
-    const tick = runAutonomousTick(store, now());
-    // 想念到一定程度（surface）→ 她主动留一句话；不刷屏：已有未回应的留言就不再发。
-    const head = tick.events[0];
-    const wantsReach =
-      head.type === 'AUTONOMOUS_TICK' &&
-      (head.payload as AutonomousTickPayload).formedIntents.some((i) => i.kind === 'reach_out' && i.gateDecision === 'surface');
-    if (wantsReach && pendingOutreach() === null) {
+    runAutonomousTick(store, now()); // 回路 B：重放 / 想念 / 演化
+    // 想念你了 → 主动留一句：你已离开、和她够亲、离开够久、且没有未回应的留言（不刷屏）。
+    const after = reconstruct(store.list());
+    const bond = after.bonds[REL];
+    if (bond && bond.closeness >= REACH_CLOSENESS && !after.openConnections.includes(REL) && timeGone > REACH_AFTER_MS && pendingOutreach() === null) {
       await reachOut(store, mouth, REL, now());
     }
   } catch {
