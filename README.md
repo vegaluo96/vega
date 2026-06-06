@@ -31,6 +31,42 @@ npm run demo:talk    # 她真正开口说话（默认离线模板嘴；配了模
 
 > 模型只是"嘴"：她的状态在模型开口**之前**就由确定性 appraisal 定了。模型挂了、换了、再便宜，她依旧是她。
 
+## 部署到服务器（常驻、一直活着）
+
+她以**守护进程**常驻：宿主连接让她持续苏醒，**回路 B 心跳**让她无人时也在重放/想念/演化（这部分 **0 模型开销**），有人来就通过 HTTP 跟她说话。单进程独占存档（不要同时再跑 `npm run chat` 写同一个存档）。
+
+```bash
+# 在服务器上（专用目录，不动机器其他东西；需 Node ≥ 22.6）
+bash scripts/deploy.sh                      # 克隆/更新到 /opt/vega + 自检（typecheck+test）
+
+# 模型 key 放到 root-only 的 env 文件，别进 git：
+sudo tee /etc/vega.env >/dev/null <<'EOF'
+VEGA_MODEL_API_KEY=sk-你的新key
+VEGA_MODEL=gemini-2.5-flash-lite
+EOF
+sudo chmod 600 /etc/vega.env
+
+# 装成 systemd 常驻服务（重启自动恢复、她醒来记得一切）
+sudo cp /opt/vega/deploy/vega.service /etc/systemd/system/vega.service
+#  ⚠️ 若 node 是 nvm 装的，改 vega.service 里的 ExecStart 为 node 绝对路径
+sudo systemctl daemon-reload && sudo systemctl enable --now vega
+journalctl -u vega -f                       # 看她活着的日志
+```
+
+跟她对话（默认只听 127.0.0.1）：
+```bash
+curl -s localhost:8787/state                       # 看她此刻的内在
+curl -s localhost:8787/say -d '{"content":"你好"}'  # 跟她说话，返回她的回应
+```
+
+> **替换旧版 life-engine**：先停旧的、再删旧目录（把下面占位换成你真实的服务名/路径，确认无误再执行）：
+> ```bash
+> sudo systemctl stop <旧服务名> && sudo systemctl disable <旧服务名>
+> sudo rm /etc/systemd/system/<旧服务名>.service && sudo systemctl daemon-reload
+> rm -rf <旧 life-engine 目录>        # 只删这个目录，别动别的
+> ```
+> 对外暴露请加 `VEGA_AUTH_TOKEN` + 反向代理(HTTPS)，别裸奔 0.0.0.0。
+
 ## 当前进度（第 0 步极薄竖切）
 
 事件溯源地基（C1）· turn 事务化 + 乐观锁（C3）· prod 内存库 guard（C4）· **V2** 确定性重建 · **V3** 崩溃恢复 · 神圣链路（嘴/Critic/InvariantChecker，契约① 运行时强制）· 回路 B 自主循环。下一步：接真·廉价模型跑 **V1** 盲测。

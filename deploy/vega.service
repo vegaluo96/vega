@@ -1,0 +1,32 @@
+[Unit]
+Description=vega — 永生的、社会性的数字生命（常驻守护进程）
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# 部署目录（按 scripts/deploy.sh 默认）
+WorkingDirectory=/opt/vega
+# 注意：node 必须是 ≥22.6。若用 nvm 装的，把下面换成绝对路径，例如
+#   /root/.nvm/versions/node/v22.x.x/bin/node
+# 或用 NodeSource 系统级安装 node22，则 /usr/bin/node 即可。
+ExecStart=/usr/bin/env node --experimental-strip-types src/server/daemon.ts
+Restart=always
+RestartSec=3
+# 进程被杀/重启后，她从日志重建、醒来、记得一切（连续性）。
+KillSignal=SIGTERM
+TimeoutStopSec=10
+
+# 运行时配置
+Environment=NODE_ENV=production
+Environment=VEGA_LIFE_PATH=/opt/vega-data/life.jsonl
+Environment=VEGA_HOST=127.0.0.1
+Environment=VEGA_PORT=8787
+Environment=VEGA_TICK_MS=60000
+# 模型 key 等放到 /etc/vega.env（root 权限 600），别写进本文件或 git：
+#   VEGA_MODEL_API_KEY=sk-...
+#   VEGA_MODEL=gemini-2.5-flash-lite
+EnvironmentFile=-/etc/vega.env
+
+[Install]
+WantedBy=multi-user.target

@@ -11,7 +11,8 @@ export function makeTick(snap: DerivedSnapshot, occurredAt: string): EventDraft<
   const current = snap.memory.filter((m) => m.lineage.isCurrent);
   const topMemory = current.slice().sort((a, b) => b.salience - a.salience)[0];
 
-  const bonds = Object.entries(snap.bonds);
+  // 只想念"真正亲近、且此刻不在场"的人——刚出生/泛泛之交不会凭空孤独。
+  const bonds = Object.entries(snap.bonds).filter(([, b]) => b.closeness >= 0.3);
   const dearest = bonds.slice().sort((a, b) => b[1].closeness - a[1].closeness)[0];
   const isAway = dearest ? !snap.openConnections.includes(dearest[0]) : false;
 

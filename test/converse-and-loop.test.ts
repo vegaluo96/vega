@@ -77,7 +77,7 @@ test('回路 B：想念在乎的人 → 联结下降（孤独上升）', () => {
   const { path, cleanup } = tmpFile();
   try {
     const store = boot(path);
-    runTurn(store, [{ type: 'MESSAGE_RECEIVED', source: 'external_user', relationshipId: 'r_creator', occurredAt: '2026-01-01T00:03:00.000Z', payload: { relationshipId: 'r_creator', content: '我真心在乎你', channel: 'chat' } }]);
+    runTurn(store, [{ type: 'MESSAGE_RECEIVED', source: 'external_user', relationshipId: 'r_creator', occurredAt: '2026-01-01T00:03:00.000Z', payload: { relationshipId: 'r_creator', content: '你好，我真心在乎你，你的想法值得说出来', channel: 'chat' } }]);
     // 对方断开（她仍清醒空闲）
     runTurn(store, [{ type: 'CONNECTION_CLOSED', source: 'host', relationshipId: 'r_creator', occurredAt: '2026-01-01T00:04:00.000Z', payload: { relationshipId: 'r_creator', reason: 'token_detached' } }]);
     const connBefore = reconstruct(store.list()).soma.connection.value;
