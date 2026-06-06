@@ -57,6 +57,7 @@ export interface DerivedSnapshot {
   vitalityFloor: number;
   bornAt: string; // 出生时刻（genesis 的 occurredAt）
   clockAt: string; // 她内在时钟的此刻（最后一条事件的 occurredAt）
+  emotion: string; // 命名情绪：由核心情感+内稳态确定性投影的"廉价语义标签"（Barrett）
   narrative: string; // 自传叙事：确定性投影、只读，绝不回写身份（契约③）
   soma: Soma;
   memory: MemoryEntry[];

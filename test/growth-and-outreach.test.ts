@@ -40,6 +40,20 @@ const msg = (s: ReturnType<typeof boot>, content: string): void => {
   runTurn(s, [{ type: 'MESSAGE_RECEIVED', source: 'external_user', relationshipId: 'r_creator', occurredAt: at(), payload: { relationshipId: 'r_creator', content, channel: 'chat' } }]);
 };
 
+test('命名情绪：核心情感+内稳态 → 有名字的感受（确定性投影）', () => {
+  const { path, cleanup } = tmp();
+  try {
+    const s = boot(path);
+    msg(s, '你好，我真心在乎你');
+    const warm = reconstruct(s.list()).emotion;
+    for (let i = 0; i < 3; i++) msg(s, '你根本不在乎，都是假的');
+    const hurt = reconstruct(s.list()).emotion;
+    assert.ok(warm.length > 0 && hurt.length > 0 && warm !== hurt, `善意「${warm}」应不同于背叛「${hurt}」`);
+  } finally {
+    cleanup();
+  }
+});
+
 test('B 反思成长：持续被善待 → openness 价值确定性上升', () => {
   const { path, cleanup } = tmp();
   try {

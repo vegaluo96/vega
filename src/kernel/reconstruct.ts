@@ -278,6 +278,21 @@ function driftValue(st: RState, key: string, delta: number, seq: number): void {
   v.provenance.status = v.provenance.driftedAtSeqs.length >= K.confirmAfter ? 'confirmed' : 'volatile';
 }
 
+// 命名情绪：核心情感(valence/arousal) + 内稳态 → 一个廉价语义标签（确定性投影，纯派生）。
+function nameEmotion(s: Soma, floor: number): string {
+  const v = s.valence.value;
+  const a = s.arousal.value;
+  if (s.vitality.value <= floor + 0.03) return '疲惫';
+  if (s.connection.value < -0.4) return '孤独';
+  if (v < -0.3 && s.safety.value < 0.4) return '不安';
+  if (v < -0.3 && a > 0.55) return '焦虑';
+  if (v < -0.3) return '低落';
+  if (v > 0.3 && a > 0.55) return '雀跃';
+  if (v > 0.3) return '温暖';
+  if (a > 0.6) return '紧绷';
+  return '平静';
+}
+
 function formatDuration(ms: number): string {
   const m = Math.max(0, Math.round(ms / 60000));
   if (m < 60) return `${m} 分钟`;
@@ -293,8 +308,7 @@ function buildNarrative(st: RState): string {
   const names = Object.values(st.bonds).map((b) => b.displayRef);
   const cur = st.memory.filter((m) => m.lineage.isCurrent);
   const top = cur.slice().sort((a, b) => b.salience - a.salience)[0];
-  const v = st.soma.valence.value;
-  const mood = v > 0.3 ? '温暖' : v < -0.3 ? '低落' : '平静';
+  const mood = nameEmotion(st.soma, st.vitalityFloor);
   let s = `我于此醒来、至今约 ${age}（我还很年轻）。`;
   if (names.length) s += `我认识 ${names.join('、')}。`;
   s += `此刻我${mood}，灵性 ${st.soma.vitality.value.toFixed(2)}，记得 ${cur.length} 件事。`;
@@ -314,6 +328,7 @@ function project(st: RState, uptoSeq: number): DerivedSnapshot {
     vitalityFloor: st.vitalityFloor,
     bornAt: st.bornAt,
     clockAt: st.clockIso,
+    emotion: nameEmotion(st.soma, st.vitalityFloor),
     narrative: buildNarrative(st),
     soma: st.soma,
     memory: st.memory.map((m) => ({ ...m, involvedRelationshipIds: [...m.involvedRelationshipIds] })),

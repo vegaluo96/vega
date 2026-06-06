@@ -15,7 +15,7 @@ export function deriveWorkspace(snap: DerivedSnapshot, relationshipId: Relations
   const name = bond?.displayRef ?? relationshipId;
   const val = snap.soma.valence.value;
   const vit = snap.soma.vitality.value;
-  const mood = val > 0.3 ? '温暖、敞开' : val < -0.3 ? '受伤、戒备' : '平静';
+  const mood = snap.emotion; // 命名情绪（温暖/孤独/焦虑/疲惫…）
 
   let intent: string;
   if (bond && bond.repairNeed > 0.6 && bond.trust < 0) {

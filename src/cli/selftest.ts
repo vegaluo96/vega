@@ -102,6 +102,16 @@ await check('因你而变', async () => {
   return `反思后 openness 0.30→${op.weight.toFixed(2)}（可追溯 ${op.provenance.driftedAtSeqs.length} 次）`;
 });
 
+await check('命名情绪', async () => {
+  const { s, at } = fresh();
+  await converse(s, mouth, 'r', '你好，我真心在乎你', at());
+  const e1 = reconstruct(s.list()).emotion;
+  for (let i = 0; i < 3; i++) await converse(s, mouth, 'r', '你根本不在乎，都是假的', at());
+  const e2 = reconstruct(s.list()).emotion;
+  if (!e1 || !e2 || e1 === e2) throw new Error(`情绪未随状态命名 e1=${e1} e2=${e2}`);
+  return `善意时「${e1}」→ 背叛后「${e2}」`;
+});
+
 await check('记忆双轨', () => {
   const { s, at } = fresh();
   const r = recv(s, at, '你根本不在乎，都是假的');

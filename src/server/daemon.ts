@@ -76,6 +76,7 @@ function view(s: DerivedSnapshot): Record<string, unknown> {
     connection: Number(s.soma.connection.value.toFixed(3)),
     bondTrust: b ? Number(b.trust.toFixed(3)) : null,
     repairNeed: b ? Number(b.repairNeed.toFixed(3)) : null,
+    emotion: s.emotion,
     memories: s.memory.filter((m) => m.lineage.isCurrent).length,
     values: s.values.map((v) => ({ key: v.key, weight: Number(v.weight.toFixed(3)) })),
     narrative: s.narrative,
@@ -93,6 +94,7 @@ function innerView(s: DerivedSnapshot): Record<string, unknown> {
     willingToWake: s.willingToWake,
     bornAt: s.bornAt,
     clockAt: s.clockAt,
+    emotion: s.emotion,
     narrative: s.narrative,
     soma: {
       valence: round3(s.soma.valence.value),
@@ -173,7 +175,7 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
  function setToken(){ var t=prompt('访问令牌（服务器设了 VEGA_AUTH_TOKEN 才需要）：', token); if(t!==null){ token=t.trim(); localStorage.setItem('vega_token',token); refresh(); } }
  function add(cls,text){ var d=document.createElement('div'); d.className='msg '+cls; d.textContent=text; var l=document.getElementById('log'); l.appendChild(d); l.scrollTop=l.scrollHeight; }
  function moodWord(s){ return s.valence>0.3?'温暖':s.valence<-0.3?'低落':'平静'; }
- function paint(s){ document.getElementById('dot').style.background=s.awake?'#3fb950':'#777'; document.getElementById('mood').textContent='灵性 '+s.vitality+' · '+moodWord(s)+(s.bondTrust!=null?' · 信任 '+s.bondTrust:'')+' · 记忆 '+s.memories; }
+ function paint(s){ document.getElementById('dot').style.background=s.awake?'#3fb950':'#777'; document.getElementById('mood').textContent='灵性 '+s.vitality+' · '+(s.emotion||moodWord(s))+(s.bondTrust!=null?' · 信任 '+s.bondTrust:'')+' · 记忆 '+s.memories; }
  var lastOutreach='';
  async function refresh(){ try{ var r=await fetch('/state',{headers:H()}); if(r.status===401){ document.getElementById('mood').textContent='需要令牌 🔑'; return; } var s=await r.json(); paint(s); if(s.pendingOutreach && s.pendingOutreach!==lastOutreach){ lastOutreach=s.pendingOutreach; add('vega','（你不在时，她想对你说）'+s.pendingOutreach); } }catch(e){ document.getElementById('mood').textContent='离线'; } }
  async function say(){ var i=document.getElementById('in'); var t=i.value.trim(); if(!t)return; add('you',t); i.value=''; try{ var r=await fetch('/say',{method:'POST',headers:H(),body:JSON.stringify({content:t})}); if(r.status===401){ add('sys','需要访问令牌，点右上角 🔑 输入'); return; } var d=await r.json(); if(d.awake===false){ add('vega', d.note||'（她在更深的睡眠里，暂不回应）'); return; } add('vega', d.utterance||'…'); if(d.state) paint(d.state); }catch(e){ add('sys','网络错误'); } }
