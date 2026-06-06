@@ -30,13 +30,19 @@ export interface MemoryEntry {
   provenance: { originSeq: number; createdAtSeq: number; confidence: number; status: 'volatile' | 'confirmed' };
 }
 
-export interface Bond {
+// 依恋核心（内部维护、随交互更新）
+export interface BondCore {
   kind: 'human' | 'peer';
   displayRef: string;
   trust: number; // [-1,1]
   closeness: number; // [0,1]
   security: number; // [0,1]
   repairNeed: number; // [0,1]
+}
+// 关系层（差异化核心）：对方模型(ToM) + 关系特异的自我，由该关系的交互史确定性派生（纯派生）。
+export interface Bond extends BondCore {
+  theoryOfMind: { warmthRatio: number; volatility: number; trend: number; style: string }; // 我读这个人
+  relationalSelf: { openness: number; guardedness: number; stance: string }; // 和这个人在一起时的我
 }
 
 export interface ValueEntry {

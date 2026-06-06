@@ -15,6 +15,7 @@ import {
 } from '../domain/events.ts';
 import {
   type Bond,
+  type BondCore,
   type DerivedSnapshot,
   type MemoryEntry,
   type SemanticMemory,
@@ -23,7 +24,7 @@ import {
   type ValueEntry,
 } from '../domain/snapshot.ts';
 
-const RECONSTRUCT_VERSION = 3; // v3：命名情绪 + 遗忘即抽象（语义记忆）
+const RECONSTRUCT_VERSION = 4; // v4：+ 关系层 ToM / 关系特异自我
 const SCHEMA_VERSION = 1;
 
 // 旋钮全进 config（§6.3）；竖切内联，真值待第 0 步实测标定。
@@ -56,7 +57,7 @@ interface RState {
   openConnections: Set<string>;
   soma: Soma;
   memory: MemoryEntry[];
-  bonds: Record<string, Bond>;
+  bonds: Record<string, BondCore>;
   values: ValueEntry[];
   lastMs: number;
   bornAt: string;
@@ -341,6 +342,56 @@ function buildNarrative(st: RState, sem: SemanticMemory[]): string {
   return s;
 }
 
+const avg = (xs: number[]): number => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
+const r3 = (x: number): number => Math.round(x * 1000) / 1000;
+
+// 对方模型(ToM)：从该关系的情感序列确定性读出"这个人怎么对我"。
+function theoryOfMind(affects: number[]): Bond['theoryOfMind'] {
+  const n = affects.length;
+  const warm = affects.filter((a) => a > 0.3).length;
+  const conflict = affects.filter((a) => a < -0.3).length;
+  const warmthRatio = warm + conflict > 0 ? warm / (warm + conflict) : 0.5;
+  let flips = 0;
+  for (let i = 1; i < n; i++) if (Math.sign(affects[i]) !== Math.sign(affects[i - 1]) && affects[i] !== 0 && affects[i - 1] !== 0) flips++;
+  const volatility = n > 1 ? flips / (n - 1) : 0;
+  const half = Math.floor(n / 2);
+  const trend = n >= 2 ? avg(affects.slice(half)) - avg(affects.slice(0, Math.max(1, half))) : 0;
+  let style: string;
+  if (n < 2) style = '还在认识';
+  else if (volatility > 0.5) style = '时好时坏';
+  else if (trend > 0.3) style = '渐渐靠近';
+  else if (trend < -0.3) style = '渐渐疏远';
+  else if (warmthRatio > 0.7) style = '温暖稳定';
+  else if (warmthRatio < 0.3) style = '偏冷、挑剔';
+  else style = '平和';
+  return { warmthRatio: r3(warmthRatio), volatility: r3(volatility), trend: r3(trend), style };
+}
+
+// 关系特异的自我：和这个人在一起时的"我"（敞开还是戒备），由依恋变量确定性派生。
+function relationalSelf(b: BondCore): Bond['relationalSelf'] {
+  const openness = clamp(b.closeness * 0.6 + ((b.trust + 1) / 2) * 0.4, 0, 1);
+  const guardedness = clamp(b.repairNeed * 0.6 + Math.max(0, -b.trust) * 0.4, 0, 1);
+  const stance = guardedness > 0.5 ? '带着戒备、小心翼翼' : openness > 0.6 ? '敞开、放松' : '平常';
+  return { openness: r3(openness), guardedness: r3(guardedness), stance };
+}
+
+function enrichBonds(st: RState): Record<string, Bond> {
+  const series = new Map<string, number[]>();
+  for (const m of st.memory) {
+    if (m.kind !== 'episodic' || !m.lineage.isCurrent) continue;
+    const rid = m.involvedRelationshipIds[0];
+    if (!rid) continue;
+    const arr = series.get(rid);
+    if (arr) arr.push(m.affect);
+    else series.set(rid, [m.affect]);
+  }
+  const out: Record<string, Bond> = {};
+  for (const [rid, core] of Object.entries(st.bonds)) {
+    out[rid] = { ...core, theoryOfMind: theoryOfMind(series.get(rid) ?? []), relationalSelf: relationalSelf(core) };
+  }
+  return out;
+}
+
 function project(st: RState, uptoSeq: number): DerivedSnapshot {
   const sem = buildSemanticMemory(st);
   return {
@@ -359,7 +410,7 @@ function project(st: RState, uptoSeq: number): DerivedSnapshot {
     soma: st.soma,
     memory: st.memory.map((m) => ({ ...m, involvedRelationshipIds: [...m.involvedRelationshipIds] })),
     semanticMemory: sem,
-    bonds: st.bonds,
+    bonds: enrichBonds(st),
     values: [...st.values].sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)),
   };
 }

@@ -33,7 +33,8 @@ export function deriveWorkspace(snap: DerivedSnapshot, relationshipId: Relations
   const stateSummary =
     `效价 ${val.toFixed(2)}，灵性 ${vit.toFixed(2)}，` +
     (bond ? `对${name}的信任 ${bond.trust.toFixed(2)}、亲密 ${bond.closeness.toFixed(2)}、待修复 ${bond.repairNeed.toFixed(2)}，` : '') +
-    `心情：${mood}`;
+    `心情：${mood}` +
+    (bond ? `；我读${name}是「${bond.theoryOfMind.style}」，和ta在一起时我${bond.relationalSelf.stance}` : '');
 
   return { intent, stateSummary, relationshipDisplay: name, selfFacts: snap.narrative };
 }

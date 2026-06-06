@@ -112,6 +112,15 @@ await check('命名情绪', async () => {
   return `善意时「${e1}」→ 背叛后「${e2}」`;
 });
 
+await check('关系层 ToM', async () => {
+  const { s, at } = fresh();
+  await converse(s, mouth, 'r', '你好，我真心在乎你', at());
+  await converse(s, mouth, 'r', '你根本不在乎，都是假的', at());
+  const b = reconstruct(s.list()).bonds['r'];
+  if (!b || !b.theoryOfMind.style || !b.relationalSelf.stance) throw new Error('未建立对方模型');
+  return `我读他「${b.theoryOfMind.style}」、与他在一起我${b.relationalSelf.stance}`;
+});
+
 await check('遗忘即抽象', async () => {
   const { s, at } = fresh();
   await converse(s, mouth, 'r', '你好，我真心在乎你', at());
