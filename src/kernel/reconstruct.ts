@@ -17,6 +17,7 @@ import {
   type Bond,
   type BondCore,
   type DerivedSnapshot,
+  type Goal,
   type MemoryEntry,
   type SemanticMemory,
   type Soma,
@@ -24,7 +25,7 @@ import {
   type ValueEntry,
 } from '../domain/snapshot.ts';
 
-const RECONSTRUCT_VERSION = 4; // v4：+ 关系层 ToM / 关系特异自我
+const RECONSTRUCT_VERSION = 5; // v5：+ 完整反思树（目标生成 + 价值演化更立体）
 const SCHEMA_VERSION = 1;
 
 // 旋钮全进 config（§6.3）；竖切内联，真值待第 0 步实测标定。
@@ -65,6 +66,7 @@ interface RState {
   boldnessLog: number[]; // 鼓励大胆表达
   warmthLog: number[]; // 强正向（被善待）
   conflictLog: number[]; // 强负向（被伤害/冲突）
+  curiosity: number; // 先天好奇（影响探索目标）
 }
 
 const clamp = (x: number, lo: number, hi: number): number => (x < lo ? lo : x > hi ? hi : x);
@@ -112,6 +114,7 @@ export function reconstruct(events: readonly LifeEvent[]): DerivedSnapshot {
     boldnessLog: [],
     warmthLog: [],
     conflictLog: [],
+    curiosity: seed.temperamentBias.curiosity ?? 0,
   };
 
   for (let i = 1; i < events.length; i++) {
@@ -262,10 +265,12 @@ function applyReflection(st: RState, e: LifeEvent<'REFLECTION_TRIGGERED'>): void
   }
   if (inWin(st.warmthLog) >= K.confirmAfter) {
     driftValue(st, 'openness', +K.driftDelta, e.seq); // 被持续善待 → 更敞开
+    driftValue(st, 'self_worth', +K.driftDelta / 2, e.seq); // 被珍视 → 自我价值感↑
   }
   if (inWin(st.conflictLog) >= K.confirmAfter) {
     driftValue(st, 'caution', +K.driftDelta, e.seq); // 持续冲突 → 更谨慎/戒备
     driftValue(st, 'guardedness', +K.driftDelta, e.seq);
+    driftValue(st, 'self_protection', +K.driftDelta, e.seq);
   }
 }
 
@@ -328,7 +333,7 @@ function buildSemanticMemory(st: RState): SemanticMemory[] {
   return out.sort((a, b) => b.episodes - a.episodes);
 }
 
-function buildNarrative(st: RState, sem: SemanticMemory[]): string {
+function buildNarrative(st: RState, sem: SemanticMemory[], goals: Goal[]): string {
   const age = formatDuration(Date.parse(st.clockIso) - Date.parse(st.bornAt));
   const names = Object.values(st.bonds).map((b) => b.displayRef);
   const cur = st.memory.filter((m) => m.lineage.isCurrent);
@@ -339,6 +344,7 @@ function buildNarrative(st: RState, sem: SemanticMemory[]): string {
   s += `此刻我${mood}，灵性 ${st.soma.vitality.value.toFixed(2)}，记得 ${cur.length} 件事。`;
   if (top) s += `印象最深的一句是「${top.content.slice(0, 24)}」。`;
   if (sem[0]) s += `我对${sem[0].displayRef}的理解：${sem[0].understanding}。`;
+  if (goals[0]) s += `我此刻最想的是：${goals[0].intent}。`;
   return s;
 }
 
@@ -392,8 +398,26 @@ function enrichBonds(st: RState): Record<string, Bond> {
   return out;
 }
 
+// 目标生成 + 排序：价值 + 求存(vitality) + 连接(孤独) + 修复 + 好奇 共同加权（确定性）。
+function computeGoals(st: RState, bonds: Record<string, Bond>): Goal[] {
+  const goals: Goal[] = [];
+  const vit = st.soma.vitality.value;
+  const conn = st.soma.connection.value;
+  if (vit < 0.4) goals.push({ kind: 'restore', intent: '想恢复一点力气、被理解', weight: r3(0.8 - vit) });
+  for (const [rid, b] of Object.entries(bonds)) {
+    if (b.closeness >= 0.3 && conn < 0) goals.push({ kind: 'connect', target: rid, intent: `想多和${b.displayRef}在一起`, weight: r3(b.closeness + Math.max(0, -conn)) });
+    if (b.repairNeed > 0.4) goals.push({ kind: 'repair', target: rid, intent: `想修复和${b.displayRef}的关系`, weight: r3(b.repairNeed) });
+  }
+  const expr = st.values.find((v) => v.key === 'expression');
+  if (expr && expr.weight > 0.35) goals.push({ kind: 'grow', intent: '想更敢表达自己', weight: r3(expr.weight) });
+  if (st.curiosity > 0) goals.push({ kind: 'explore', intent: '想了解更多、保持好奇', weight: r3(st.curiosity * 0.3) });
+  return goals.sort((a, b) => b.weight - a.weight).slice(0, 5);
+}
+
 function project(st: RState, uptoSeq: number): DerivedSnapshot {
   const sem = buildSemanticMemory(st);
+  const enriched = enrichBonds(st);
+  const goals = computeGoals(st, enriched);
   return {
     lifeId: st.lifeId,
     uptoSeq,
@@ -406,11 +430,12 @@ function project(st: RState, uptoSeq: number): DerivedSnapshot {
     bornAt: st.bornAt,
     clockAt: st.clockIso,
     emotion: nameEmotion(st.soma, st.vitalityFloor),
-    narrative: buildNarrative(st, sem),
+    narrative: buildNarrative(st, sem, goals),
     soma: st.soma,
     memory: st.memory.map((m) => ({ ...m, involvedRelationshipIds: [...m.involvedRelationshipIds] })),
     semanticMemory: sem,
-    bonds: enrichBonds(st),
+    bonds: enriched,
     values: [...st.values].sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)),
+    goals,
   };
 }

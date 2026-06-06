@@ -62,6 +62,14 @@ export interface SemanticMemory {
   understanding: string;
 }
 
+// 目标：反思之上由价值+求存+连接+好奇确定性加权生成、排序（纯派生）。
+export interface Goal {
+  kind: 'connect' | 'repair' | 'grow' | 'restore' | 'explore';
+  target?: RelationshipId;
+  intent: string;
+  weight: number;
+}
+
 export interface DerivedSnapshot {
   lifeId: string;
   uptoSeq: number;
@@ -81,4 +89,5 @@ export interface DerivedSnapshot {
   semanticMemory: SemanticMemory[]; // 经历压缩成的"理解"（遗忘即抽象，纯派生）
   bonds: Record<RelationshipId, Bond>;
   values: ValueEntry[];
+  goals: Goal[]; // 她此刻"想要"什么（排序后）
 }

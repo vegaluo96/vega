@@ -77,6 +77,7 @@ function view(s: DerivedSnapshot): Record<string, unknown> {
     bondTrust: b ? Number(b.trust.toFixed(3)) : null,
     repairNeed: b ? Number(b.repairNeed.toFixed(3)) : null,
     emotion: s.emotion,
+    goals: s.goals.slice(0, 3).map((g) => g.intent),
     memories: s.memory.filter((m) => m.lineage.isCurrent).length,
     values: s.values.map((v) => ({ key: v.key, weight: Number(v.weight.toFixed(3)) })),
     narrative: s.narrative,
@@ -109,6 +110,7 @@ function innerView(s: DerivedSnapshot): Record<string, unknown> {
     values: s.values.map((v) => ({ key: v.key, weight: round3(v.weight), status: v.provenance.status, drifts: v.provenance.driftedAtSeqs.length })),
     memories: s.memory.filter((m) => m.lineage.isCurrent).map((m) => ({ id: m.id, affect: round3(m.affect), salience: round3(m.salience), content: m.content })),
     understanding: s.semanticMemory.map((x) => x.understanding),
+    goals: s.goals.map((g) => ({ kind: g.kind, intent: g.intent, weight: g.weight })),
     recentEvents: store.list().slice(-16).map((e) => ({ seq: e.seq, type: e.type, at: e.occurredAt })),
     events: store.version(),
   };
@@ -206,6 +208,7 @@ const PANEL = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
  <div class="card"><h2>记忆（当前态）</h2><div id="mems"></div></div>
  <div class="card"><h2>理解（经历→理解 / 遗忘即抽象）</h2><div id="sem"></div></div>
  <div class="card"><h2>关系（我读他们 / 与他们在一起时的我）</h2><div id="bonds"></div></div>
+ <div class="card"><h2>此刻想要（目标）</h2><div id="goals"></div></div>
  <div class="card"><h2>最近事件（含回路 B 心跳）</h2><div id="evs"></div></div>
 <script>
  var token=localStorage.getItem('vega_token')||'';
@@ -221,6 +224,7 @@ const PANEL = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
    document.getElementById('mems').innerHTML=s.memories.slice().reverse().map(function(x){return '<div class="mem"><span class="'+(x.affect<0?'dim':'tag')+'">['+x.affect.toFixed(2)+']</span> '+esc(x.content)+'</div>';}).join('')||'<span class=dim>还没有记忆</span>';
    document.getElementById('sem').innerHTML=(s.understanding||[]).map(function(u){return '<div class="mem">'+esc(u)+'</div>';}).join('')||'<span class=dim>还在形成…</span>';
    document.getElementById('bonds').innerHTML=(s.bonds||[]).map(function(b){return '<div class="mem"><b>'+esc(b.name)+'</b> <span class=dim>我读：</span>'+esc(b.style)+' <span class=dim>· 信任 '+b.trust+' · 与ta在一起：</span>'+esc(b.stance)+'</div>';}).join('')||'<span class=dim>暂无</span>';
+   document.getElementById('goals').innerHTML=(s.goals||[]).map(function(g){return '<div class="mem">'+esc(g.intent)+' <span class=dim>('+g.weight+')</span></div>';}).join('')||'<span class=dim>暂无</span>';
    document.getElementById('evs').innerHTML=s.recentEvents.slice().reverse().map(function(e){return '<div class="ev"><span class="tag">'+e.type+'</span> <span class="dim">#'+e.seq+' · '+e.at.slice(11,19)+'</span></div>';}).join('');
   }catch(e){document.getElementById('nar').textContent='离线';}
  }

@@ -112,6 +112,14 @@ await check('命名情绪', async () => {
   return `善意时「${e1}」→ 背叛后「${e2}」`;
 });
 
+await check('完整反思树(目标)', async () => {
+  const { s, at } = fresh();
+  await converse(s, mouth, 'r', '你根本不在乎，都是假的', at());
+  const goals = reconstruct(s.list()).goals;
+  if (goals.length === 0) throw new Error('未生成目标');
+  return `生成 ${goals.length} 个目标，最想：「${goals[0].intent}」`;
+});
+
 await check('关系层 ToM', async () => {
   const { s, at } = fresh();
   await converse(s, mouth, 'r', '你好，我真心在乎你', at());
