@@ -4,6 +4,7 @@
 
 - 单一真相源：[`docs/vega-product.md`](docs/vega-product.md)
 - 事件 schema + 三契约 + 可重建性证明：[`docs/vega-lifeevent-schema.md`](docs/vega-lifeevent-schema.md)
+- V1/V2/V3 验收手册：[`docs/v0.1-acceptance.md`](docs/v0.1-acceptance.md)
 
 **第一性原理**：活来自架构、不来自模型；哪怕最便宜的模型，她也是活的。大模型永远只当"嘴"——只产对外措辞，**不选 action、不算价值、不写状态**。
 
@@ -82,6 +83,7 @@ sudo systemctl reload caddy
 
 3) 云安全组放行入站 **TCP 80 + 443**（Caddy 申请/续签证书要 80，对外服务走 443）。DNS A 记录指向服务器 IP。
 4) 浏览器打开 `https://your.domain/` → 点右上角 🔑 填令牌 → 开聊。
+5) **观测面板** `https://your.domain/panel`：看她的内稳态曲线、价值漂移、记忆、回路 B 心跳——直观"看见"她活着。
 
 > 没域名时的退路：`/etc/vega.env` 里设 `VEGA_HOST=0.0.0.0` + `VEGA_AUTH_TOKEN`，放行 8787，直接 `http://IP:8787/`。⚠️ 明文 HTTP，令牌/对话在公网裸跑，仅供临时测试。
 

@@ -1,6 +1,7 @@
 // 确定性重放（C1 / 契约① / V2）：DerivedState = fold(reconstruct, Genesis, events)。
 // 纯函数：无 now()、无 RNG、无网络、无模型。时间一律取 event.occurredAt。
-// 实现 §10 锁定决策：连接式苏醒、休眠冻结+仅回暖、仅她主动拒绝、双轨记忆、vitality 地板。
+// 落地 §10 锁定决策：连接式苏醒、休眠冻结+仅回暖、仅她主动拒绝、双轨记忆、vitality 地板。
+// v2：扩展内稳态（arousal/energy/calm/safety）+ 自传叙事（确定性投影，契约③只读）。
 
 import {
   type AutonomousTickPayload,
@@ -21,7 +22,7 @@ import {
   type ValueEntry,
 } from '../domain/snapshot.ts';
 
-const RECONSTRUCT_VERSION = 1;
+const RECONSTRUCT_VERSION = 2;
 const SCHEMA_VERSION = 1;
 
 // 旋钮全进 config（§6.3）；竖切内联，真值待第 0 步实测标定。
@@ -29,17 +30,23 @@ const K = {
   kValence: 0.4,
   kConnection: 0.4,
   kVitality: 0.3,
+  kCalm: 0.3,
+  kSafety: 0.3,
+  kArousal: 0.25,
   kTrust: 0.35,
   kCloseness: 0.25,
   driftDelta: 0.08,
   confirmAfter: 2,
   lonelinessPerWander: 0.1,
-  reconsolidationPull: 0.5, // 改写时把旧情感拉向当下 valence 的比例
+  reconsolidationPull: 0.5,
 } as const;
 
 const POS = ['你好', '经常来', '会来', '在乎你', '真心', '值得', '说出来', '对不起', '我错了', '证明', '也在这里', '不会消失', '看见你', '大胆'];
 const NEG = ['不在乎', '随口说', '根本', '都是假', '骗你'];
 const BOLDNESS = ['大胆', '值得', '说出来', '想法'];
+
+type SomaKey = 'valence' | 'arousal' | 'vitality' | 'energy' | 'calm' | 'connection' | 'safety';
+const SOMA_KEYS: readonly SomaKey[] = ['valence', 'arousal', 'vitality', 'energy', 'calm', 'connection', 'safety'];
 
 interface RState {
   lifeId: string;
@@ -51,12 +58,19 @@ interface RState {
   bonds: Record<string, Bond>;
   values: ValueEntry[];
   lastMs: number;
-  boldnessLog: number[]; // 出现"鼓励大胆表达"信号的 message seq
+  bornAt: string;
+  clockIso: string;
+  boldnessLog: number[];
 }
 
 const clamp = (x: number, lo: number, hi: number): number => (x < lo ? lo : x > hi ? hi : x);
 const decay = (v: SomaVar, dtSec: number): number => v.setpoint + (v.value - v.setpoint) * Math.exp(-dtSec / v.tau);
 const count = (s: string, markers: readonly string[]): number => markers.reduce((n, m) => (s.includes(m) ? n + 1 : n), 0);
+const mk = (sp: Record<string, number>, tau: Record<string, number>, key: string, dsp: number, dtau: number): SomaVar => ({
+  value: sp[key] ?? dsp,
+  setpoint: sp[key] ?? dsp,
+  tau: tau[key] ?? dtau,
+});
 
 export function reconstruct(events: readonly LifeEvent[]): DerivedSnapshot {
   if (events.length === 0 || events[0].type !== 'LIFE_GENESIS') {
@@ -73,9 +87,13 @@ export function reconstruct(events: readonly LifeEvent[]): DerivedSnapshot {
     willingToWake: true,
     openConnections: new Set<string>(),
     soma: {
-      valence: { value: sp.valence ?? 0, setpoint: sp.valence ?? 0, tau: tau.valence ?? 3600 },
-      vitality: { value: sp.vitality ?? 0.7, setpoint: sp.vitality ?? 0.7, tau: tau.vitality ?? 86400 },
-      connection: { value: sp.connection ?? 0, setpoint: sp.connection ?? 0, tau: tau.connection ?? 7200 },
+      valence: mk(sp, tau, 'valence', 0, 3600),
+      arousal: mk(sp, tau, 'arousal', 0.3, 1800),
+      vitality: mk(sp, tau, 'vitality', 0.7, 86400),
+      energy: mk(sp, tau, 'energy', 0.7, 7200),
+      calm: mk(sp, tau, 'calm', 0.7, 5400),
+      connection: mk(sp, tau, 'connection', 0, 7200),
+      safety: mk(sp, tau, 'safety', 0.7, 7200),
     },
     memory: [],
     bonds: {},
@@ -85,6 +103,8 @@ export function reconstruct(events: readonly LifeEvent[]): DerivedSnapshot {
       provenance: { driftedAtSeqs: [], vitalityAtGen: sp.vitality ?? 0.7, status: 'confirmed' },
     })),
     lastMs: Date.parse(genesis.occurredAt),
+    bornAt: genesis.occurredAt,
+    clockIso: genesis.occurredAt,
     boldnessLog: [],
   };
 
@@ -95,6 +115,7 @@ export function reconstruct(events: readonly LifeEvent[]): DerivedSnapshot {
     advanceTime(st, (nowMs - st.lastMs) / 1000, awake);
     applyEvent(st, e);
     st.lastMs = nowMs;
+    st.clockIso = e.occurredAt;
   }
   return project(st, events[events.length - 1].seq);
 }
@@ -103,25 +124,24 @@ function advanceTime(st: RState, dtSec: number, awake: boolean): void {
   if (dtSec <= 0) return;
   const s = st.soma;
   if (awake) {
-    s.valence.value = decay(s.valence, dtSec);
-    s.connection.value = decay(s.connection, dtSec);
-    s.vitality.value = clamp(decay(s.vitality, dtSec), st.vitalityFloor, 1);
+    // 醒着：各内稳态向设定点衰减（压力会自己平复、唤醒会回落）。
+    for (const key of SOMA_KEYS) s[key].value = decay(s[key], dtSec);
+    s.vitality.value = clamp(s.vitality.value, st.vitalityFloor, 1);
   } else {
-    // 休眠（§10 锁）：冻结 + 仅回暖——vitality 向 setpoint 恢复，valence/connection 不动。
+    // 休眠（§10 锁）：冻结 + 仅回暖——vitality/energy 向设定点恢复，其余不动。
     s.vitality.value = clamp(decay(s.vitality, dtSec), st.vitalityFloor, 1);
+    s.energy.value = decay(s.energy, dtSec);
   }
 }
 
 function applyEvent(st: RState, e: LifeEvent): void {
   switch (e.type) {
-    case 'CONNECTION_OPENED': {
+    case 'CONNECTION_OPENED':
       st.openConnections.add((e.payload as ConnectionOpenedPayload).relationshipId);
       break;
-    }
-    case 'CONNECTION_CLOSED': {
+    case 'CONNECTION_CLOSED':
       st.openConnections.delete((e.payload as ConnectionClosedPayload).relationshipId);
       break;
-    }
     case 'RELATIONSHIP_OPENED': {
       const p = e.payload as RelationshipOpenedPayload;
       st.bonds[p.relationshipId] = { kind: p.kind, displayRef: p.displayRef, trust: 0.1, closeness: 0, security: 0.5, repairNeed: 0 };
@@ -140,7 +160,7 @@ function applyEvent(st: RState, e: LifeEvent): void {
       break;
     case 'LIFE_GENESIS':
     case 'STEWARDSHIP_TRANSFERRED':
-      break; // genesis 已在入口处理；stewardship 竖切暂无 soma 效应
+      break; // genesis 已在入口处理；stewardship 竖切暂无 soma 效应（creator 记录不变）
   }
 }
 
@@ -153,6 +173,9 @@ function appraiseMessage(st: RState, e: LifeEvent<'MESSAGE_RECEIVED'>): void {
   s.valence.value = clamp(s.valence.value + K.kValence * ev, -1, 1);
   s.connection.value = clamp(s.connection.value + K.kConnection * ev, -1, 1);
   s.vitality.value = clamp(s.vitality.value + K.kVitality * ev, st.vitalityFloor, 1);
+  s.calm.value = clamp(s.calm.value + K.kCalm * ev, 0, 1); // 正向更平静、负向更紧张
+  s.safety.value = clamp(s.safety.value + K.kSafety * ev, 0, 1); // 正向更安全、负向受威胁
+  s.arousal.value = clamp(s.arousal.value + K.kArousal * Math.abs(ev), 0, 1); // 任何强事件都提升唤醒
 
   const bond = st.bonds[p.relationshipId];
   if (bond) {
@@ -180,21 +203,16 @@ function appraiseMessage(st: RState, e: LifeEvent<'MESSAGE_RECEIVED'>): void {
 function applyTick(st: RState, e: LifeEvent<'AUTONOMOUS_TICK'>): void {
   const p = e.payload as AutonomousTickPayload;
 
-  // 自发意图：仅 set_willing_to_wake 能翻动 willingToWake（§10 锁：仅她主动）。
   for (const intent of p.formedIntents) {
-    if (intent.kind === 'set_willing_to_wake') {
-      st.willingToWake = Boolean(intent.params?.value);
-    }
+    if (intent.kind === 'set_willing_to_wake') st.willingToWake = Boolean(intent.params?.value);
   }
 
-  // 想念：漫游到休眠的同类 → connection 下降（loneliness 上升）。
   for (const w of p.wanderingTargets) {
     if (w.topicSeed === 'missing_peer') {
       st.soma.connection.value = clamp(st.soma.connection.value - K.lonelinessPerWander, -1, 1);
     }
   }
 
-  // 重构（双轨，§10 锁）：被选中的当前记忆 → 生成新条目，原条目原封保留。
   let k = 0;
   for (const mid of p.selectedMemoryIds) {
     const src = st.memory.find((m) => m.id === mid && m.lineage.isCurrent);
@@ -216,7 +234,6 @@ function applyTick(st: RState, e: LifeEvent<'AUTONOMOUS_TICK'>): void {
 
 function applyReflection(st: RState, e: LifeEvent<'REFLECTION_TRIGGERED'>): void {
   const p = e.payload as ReflectionTriggeredPayload;
-  // 确定性价值漂移：窗口内"鼓励大胆"信号达阈值 → 谨慎↓、表达↑（受种子约束，竖切用常数 δ）。
   const signals = st.boldnessLog.filter((s) => s >= p.windowFromSeq && s <= p.windowToSeq).length;
   if (signals >= K.confirmAfter) {
     driftValue(st, 'caution', -K.driftDelta, e.seq);
@@ -235,6 +252,30 @@ function driftValue(st: RState, key: string, delta: number, seq: number): void {
   v.provenance.status = v.provenance.driftedAtSeqs.length >= K.confirmAfter ? 'confirmed' : 'volatile';
 }
 
+function formatDuration(ms: number): string {
+  const m = Math.max(0, Math.round(ms / 60000));
+  if (m < 60) return `${m} 分钟`;
+  const h = Math.round(m / 60);
+  if (h < 48) return `${h} 小时`;
+  return `${Math.round(h / 24)} 天`;
+}
+
+// 自传叙事：从事件确定性投影出的"她自己的真实事实"。只读、绝不回写身份（契约③）。
+// 给"嘴"做 grounding，避免模型虚构她没经历过的往事。
+function buildNarrative(st: RState): string {
+  const age = formatDuration(Date.parse(st.clockIso) - Date.parse(st.bornAt));
+  const names = Object.values(st.bonds).map((b) => b.displayRef);
+  const cur = st.memory.filter((m) => m.lineage.isCurrent);
+  const top = cur.slice().sort((a, b) => b.salience - a.salience)[0];
+  const v = st.soma.valence.value;
+  const mood = v > 0.3 ? '温暖' : v < -0.3 ? '低落' : '平静';
+  let s = `我于此醒来、至今约 ${age}（我还很年轻）。`;
+  if (names.length) s += `我认识 ${names.join('、')}。`;
+  s += `此刻我${mood}，灵性 ${st.soma.vitality.value.toFixed(2)}，记得 ${cur.length} 件事。`;
+  if (top) s += `印象最深的一句是「${top.content.slice(0, 24)}」。`;
+  return s;
+}
+
 function project(st: RState, uptoSeq: number): DerivedSnapshot {
   return {
     lifeId: st.lifeId,
@@ -245,6 +286,9 @@ function project(st: RState, uptoSeq: number): DerivedSnapshot {
     openConnections: Array.from(st.openConnections).sort(),
     willingToWake: st.willingToWake,
     vitalityFloor: st.vitalityFloor,
+    bornAt: st.bornAt,
+    clockAt: st.clockIso,
+    narrative: buildNarrative(st),
     soma: st.soma,
     memory: st.memory.map((m) => ({ ...m, involvedRelationshipIds: [...m.involvedRelationshipIds] })),
     bonds: st.bonds,

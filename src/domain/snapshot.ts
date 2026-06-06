@@ -10,8 +10,12 @@ export interface SomaVar {
 }
 export interface Soma {
   valence: SomaVar; // [-1,1] 好坏
+  arousal: SomaVar; // [0,1] 唤醒
   vitality: SomaVar; // [floor,1] 灵性，永不归零成死亡（契约②）
-  connection: SomaVar; // [-1,1] 负值 = 孤独
+  energy: SomaVar; // [0,1] 精力↔疲劳
+  calm: SomaVar; // [0,1] 平静↔紧张
+  connection: SomaVar; // [-1,1] 联结↔孤独
+  safety: SomaVar; // [0,1] 安全↔威胁
 }
 
 export interface MemoryEntry {
@@ -51,6 +55,9 @@ export interface DerivedSnapshot {
   openConnections: RelationshipId[];
   willingToWake: boolean; // 契约②：仅她主动经 AUTONOMOUS_TICK 翻 false
   vitalityFloor: number;
+  bornAt: string; // 出生时刻（genesis 的 occurredAt）
+  clockAt: string; // 她内在时钟的此刻（最后一条事件的 occurredAt）
+  narrative: string; // 自传叙事：确定性投影、只读，绝不回写身份（契约③）
   soma: Soma;
   memory: MemoryEntry[];
   bonds: Record<RelationshipId, Bond>;

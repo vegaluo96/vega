@@ -7,6 +7,7 @@ export interface Workspace {
   intent: string;
   stateSummary: string;
   relationshipDisplay: string;
+  selfFacts: string; // 她的真实自传事实（确定性投影），给"嘴"做 grounding，防止虚构往事
 }
 
 export function deriveWorkspace(snap: DerivedSnapshot, relationshipId: RelationshipId): Workspace {
@@ -34,5 +35,5 @@ export function deriveWorkspace(snap: DerivedSnapshot, relationshipId: Relations
     (bond ? `对${name}的信任 ${bond.trust.toFixed(2)}、亲密 ${bond.closeness.toFixed(2)}、待修复 ${bond.repairNeed.toFixed(2)}，` : '') +
     `心情：${mood}`;
 
-  return { intent, stateSummary, relationshipDisplay: name };
+  return { intent, stateSummary, relationshipDisplay: name, selfFacts: snap.narrative };
 }

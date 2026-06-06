@@ -37,10 +37,11 @@ export function createApiyiMouth(cfg: ApiyiConfig): Mouth {
   return {
     id: cfg.model,
     async speak(input: MouthInput): Promise<string> {
-      const stateHint =
-        `（仅供你把握语气，不要直接复述这段）你此刻的内在：${input.stateSummary}；当下的倾向：${input.intent}。`;
+      const grounding =
+        `【关于你的真实事实，不要虚构超出这些的往事或年龄】\n${input.selfFacts}\n` +
+        `（仅供你把握语气，不要直接复述）你此刻的内在：${input.stateSummary}；当下的倾向：${input.intent}。`;
       const messages = [
-        { role: 'system', content: `${SYSTEM}\n${stateHint}` },
+        { role: 'system', content: `${SYSTEM}\n${grounding}` },
         ...input.recentContext.map((t) => ({ role: t.role === 'vega' ? 'assistant' : 'user', content: t.text })),
         { role: 'user', content: input.lastUserMessage },
       ];

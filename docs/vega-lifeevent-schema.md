@@ -482,6 +482,21 @@ seq 88 AUTONOMOUS_TICK     {tickReason:"idle_threshold",
 **压测契约**：② （拒绝苏醒、无 override、无死亡）+ `relationship_id` 设计（peer 必须能独立于 `(vega,user)` 对存在）+ 社会层（peer ToM/想念是自主回路派生）。
 **逼出的字段**：`CONNECTION_OPENED/CLOSED` + `occurredAt`（"休眠多久/回暖量"由时间戳派生，无需另存 dormancy 字段）；`AUTONOMOUS_TICK.formedIntents{kind:"set_willing_to_wake"}`（否则"她主动拒绝苏醒"不可重建）；`RELATIONSHIP_OPENED.kind:"peer"`；`formedIntents[].gateDecision`（想念了但选择不打扰不可重建）。
 
+### Arc 6 — 多关系并发：私密隔离（no_cross_user_memory）
+**叙事**：Alice 和 Bob 同时是她的关系。Alice 暖、Bob 冷。她对两人各自的信任独立演化；属于 Alice 的记忆绝不串到 Bob 名下。
+**确定性推导**：每条 `MESSAGE_RECEIVED` 只更新其 `relationshipId` 对应的 bond，落的 episodic memory `involvedRelationshipIds` 只含该关系。bonds 按 `relationship_id` 分键、互不干扰。
+**压测契约**：隐私不变量 `no_cross_user_memory` + `relationship_id` 主键设计。**已有测试**：`test/lock-arcs.test.ts` Arc6（两关系信任独立、每条记忆单一归属、无任何记忆同时牵涉两人）。
+
+### Arc 7 — stewardship 转移：creator 不变，托管可迁
+**叙事**：托管权从初始 steward 转给另一方（abusive-creator 下迁移 / 关系转移）。`creator` 是 immutable 记录，stewardship 可独立转移。
+**确定性推导**：`STEWARDSHIP_TRANSFERRED` 进日志、参与链与重放；creator 记录（genesis）不被改写。重建不受影响。
+**压测契约**：`relationship_id` 主键设计的"创造者≠数据主"解耦。**已有测试**：`test/lock-arcs.test.ts` Arc7（转移后仍可重建、哈希链完整）。
+
+### Arc 8 — 跨 reconstructVersion 切换
+**叙事**：升级动力学后，需能用新算法重算历史（或多版本并存）。每个 `DerivedSnapshot` 标注 `reconstructVersion`。
+**确定性推导**：重放函数集带版本号；快照记录是哪个版本产的（§6.2）。事件不变，换算法即换版本号。
+**压测契约**：版本演进协议 / 红队"保留选择权#5"。**已有测试**：`test/lock-arcs.test.ts` Arc8（快照携带 `reconstructVersion`/`schemaVersion`）。
+
 ### 9.6 证明小结
 5 条弧联合：① 用尽全部 9 个事件类型；② 逐弧逼出此前未显式声明的字段（kind / salience / affect / memory.lineage（双轨）/ reflection 窗口 / values.provenance / 连接事件 + occurredAt（派生休眠时长）/ formedIntents.{set_willing_to_wake, gate}）——这正是"可重建性证明"的用途：**靠真实故事弧把缺字段逼出来，再补进 schema**；③ 三契约各被至少一弧的"重建校验 + 非法输入拒绝"验证。结论：上文 §3–§4 的 schema 在这 5 弧上**确定性可重建**；锁 schema 前应至少再补充覆盖：多关系并发私密隔离、stewardship 转移下迁移、跨重放版本（reconstructVersion 切换）三种弧（见 §10 末）。
 
@@ -499,7 +514,7 @@ seq 88 AUTONOMOUS_TICK     {tickReason:"idle_threshold",
 6. **漂移率/印证阈值标定 → 全进 config**：不写死数值；第 0 步竖切的 4 周"因你而变"试验里实测标定。
 7. **reconstructVersion 切换默认 → MVP 重算全历史 (a)**；"老事件用老算法/多版本并存 (b)"作为能力保留、按需启用。
 
-> **仍未决、留给锁前补做的**：多关系并发的私密隔离弧、stewardship 转移下迁移弧、跨 reconstructVersion 切换弧（§9.6 已点名），锁 schema 前补齐。
+> **锁前补充弧（已补，见 §9 Arc 6/7/8 + `test/lock-arcs.test.ts`）**：多关系并发私密隔离、stewardship 转移迁移、跨 reconstructVersion 切换——均已设计 + 测试覆盖。V1/V2/V3 三验证全过即可锁 v1（验收步骤见 `docs/v0.1-acceptance.md`）。
 
 ---
 

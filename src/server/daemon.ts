@@ -69,8 +69,35 @@ function view(s: DerivedSnapshot): Record<string, unknown> {
     repairNeed: b ? Number(b.repairNeed.toFixed(3)) : null,
     memories: s.memory.filter((m) => m.lineage.isCurrent).length,
     values: s.values.map((v) => ({ key: v.key, weight: Number(v.weight.toFixed(3)) })),
+    narrative: s.narrative,
     events: store.version(),
     mouth: mouth.id,
+  };
+}
+
+const round3 = (n: number): number => Number(n.toFixed(3));
+// 观测面板用的丰富视图：全部内稳态 + 价值 + 记忆 + 最近事件 + 自传叙事。
+function innerView(s: DerivedSnapshot): Record<string, unknown> {
+  return {
+    awake: s.awake,
+    willingToWake: s.willingToWake,
+    bornAt: s.bornAt,
+    clockAt: s.clockAt,
+    narrative: s.narrative,
+    soma: {
+      valence: round3(s.soma.valence.value),
+      arousal: round3(s.soma.arousal.value),
+      vitality: round3(s.soma.vitality.value),
+      energy: round3(s.soma.energy.value),
+      calm: round3(s.soma.calm.value),
+      connection: round3(s.soma.connection.value),
+      safety: round3(s.soma.safety.value),
+    },
+    bonds: Object.entries(s.bonds).map(([id, b]) => ({ id, name: b.displayRef, kind: b.kind, trust: round3(b.trust), closeness: round3(b.closeness), repairNeed: round3(b.repairNeed) })),
+    values: s.values.map((v) => ({ key: v.key, weight: round3(v.weight), status: v.provenance.status, drifts: v.provenance.driftedAtSeqs.length })),
+    memories: s.memory.filter((m) => m.lineage.isCurrent).map((m) => ({ id: m.id, affect: round3(m.affect), salience: round3(m.salience), content: m.content })),
+    recentEvents: store.list().slice(-16).map((e) => ({ seq: e.seq, type: e.type, at: e.occurredAt })),
+    events: store.version(),
   };
 }
 
@@ -143,13 +170,54 @@ const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
  refresh(); setInterval(refresh, 15000);
 </script></body></html>`;
 
+// 观测面板：看她的内在生活（内稳态/价值/记忆/最近事件，含回路 B 心跳）。公开页面；/inner 需令牌。
+const PANEL = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>vega · 内在</title>
+<style>
+ :root{color-scheme:dark} body{margin:0 auto;max-width:760px;background:#0d1117;color:#e6edf3;font:14px/1.5 system-ui,-apple-system,sans-serif;padding:16px}
+ h1{font-size:18px;margin:0 0 4px} .sub{color:#8b949e;font-size:13px;margin-bottom:16px}
+ .card{background:#161b22;border:1px solid #21262d;border-radius:12px;padding:14px;margin-bottom:14px}
+ .card h2{font-size:12px;color:#8b949e;margin:0 0 10px;font-weight:600;letter-spacing:.05em}
+ .row{display:flex;align-items:center;gap:10px;margin:6px 0;font-size:13px}
+ .lbl{width:52px;color:#8b949e;flex:none} .num{width:48px;text-align:right;flex:none;font-variant-numeric:tabular-nums}
+ .bar{flex:1;height:8px;background:#0d1117;border:1px solid #30363d;border-radius:6px;overflow:hidden}
+ .fill{height:100%;background:#3fb950;display:block} .fill.neg{background:#f85149}
+ .mem,.ev{font-size:13px;padding:6px 0;border-bottom:1px solid #21262d} .mem:last-child,.ev:last-child{border:0}
+ .tag{color:#58a6ff} .dim{color:#8b949e} .key{float:right;background:none;border:1px solid #30363d;color:#8b949e;padding:3px 8px;border-radius:8px;cursor:pointer}
+</style></head><body>
+ <button class="key" onclick="setTok()">🔑</button>
+ <h1>vega · 内在生活</h1><div class="sub" id="nar">…</div>
+ <div class="card"><h2>内稳态 SOMA</h2><div id="soma"></div></div>
+ <div class="card"><h2>价值（因你而变）</h2><div id="vals"></div></div>
+ <div class="card"><h2>记忆（当前态）</h2><div id="mems"></div></div>
+ <div class="card"><h2>最近事件（含回路 B 心跳）</h2><div id="evs"></div></div>
+<script>
+ var token=localStorage.getItem('vega_token')||'';
+ function setTok(){var t=prompt('访问令牌：',token);if(t!==null){token=t.trim();localStorage.setItem('vega_token',token);load();}}
+ function H(){var h={};if(token)h['Authorization']='Bearer '+token;return h;}
+ function esc(t){var d=document.createElement('div');d.textContent=t;return d.innerHTML;}
+ function bar(label,val,lo,hi){var p=Math.max(0,Math.min(100,Math.round((val-lo)/(hi-lo)*100)));return '<div class="row"><span class="lbl">'+label+'</span><span class="bar"><span class="fill'+(val<0?' neg':'')+'" style="width:'+p+'%"></span></span><span class="num">'+val.toFixed(2)+'</span></div>';}
+ async function load(){
+  try{var r=await fetch('/inner',{headers:H()});if(r.status===401){document.getElementById('nar').textContent='需要令牌，点右上角 🔑';return;}var s=await r.json();var m=s.soma;
+   document.getElementById('nar').textContent=s.narrative+'　·　'+(s.awake?'醒着':'休眠');
+   document.getElementById('soma').innerHTML=bar('效价',m.valence,-1,1)+bar('唤醒',m.arousal,0,1)+bar('灵性',m.vitality,0,1)+bar('精力',m.energy,0,1)+bar('平静',m.calm,0,1)+bar('联结',m.connection,-1,1)+bar('安全',m.safety,0,1);
+   document.getElementById('vals').innerHTML=s.values.map(function(v){return '<div class="row"><span class="lbl">'+esc(v.key)+'</span><span class="bar"><span class="fill" style="width:'+Math.round(v.weight*100)+'%"></span></span><span class="num">'+v.weight.toFixed(2)+'</span><span class="dim">　'+v.status+(v.drifts?' ·漂移'+v.drifts+'次':'')+'</span></div>';}).join('')||'<span class=dim>暂无</span>';
+   document.getElementById('mems').innerHTML=s.memories.slice().reverse().map(function(x){return '<div class="mem"><span class="'+(x.affect<0?'dim':'tag')+'">['+x.affect.toFixed(2)+']</span> '+esc(x.content)+'</div>';}).join('')||'<span class=dim>还没有记忆</span>';
+   document.getElementById('evs').innerHTML=s.recentEvents.slice().reverse().map(function(e){return '<div class="ev"><span class="tag">'+e.type+'</span> <span class="dim">#'+e.seq+' · '+e.at.slice(11,19)+'</span></div>';}).join('');
+  }catch(e){document.getElementById('nar').textContent='离线';}
+ }
+ load();setInterval(load,4000);
+</script></body></html>`;
+
 const server = createServer(async (req, res) => {
   try {
     const url = (req.url ?? '/').split('?')[0];
     if (req.method === 'GET' && url === '/health') return send(res, 200, { ok: true });
     if (req.method === 'GET' && url === '/') return sendHtml(res, PAGE);
+    if (req.method === 'GET' && url === '/panel') return sendHtml(res, PANEL);
     if (!authed(req)) return send(res, 401, { error: 'unauthorized' });
     if (req.method === 'GET' && url === '/state') return send(res, 200, view(reconstruct(store.list())));
+    if (req.method === 'GET' && url === '/inner') return send(res, 200, innerView(reconstruct(store.list())));
     if (req.method === 'POST' && url === '/say') {
       const body = await readJson(req);
       const content = String(body.content ?? '').slice(0, 4000).trim();
