@@ -324,6 +324,8 @@ async function runChannel(userId: string): Promise<void> {
               // voice=rich+verdict=fallback＝配了模型但调用失败（key 被禁/超时/网络）。
               console.log(`[wechat] 回 ${ac.handle}(${acctId.slice(0, 6)}) voice=${(resp as { voice?: string }).voice} verdict=${(resp as { verdict?: string }).verdict} 余额=${(resp as { balance?: number }).balance} 嘴=${mouth.id}`);
               reply = String((resp as { utterance?: string }).utterance ?? '…');
+              // 实时推到这个用户打开着的网页对话：微信发的消息 + 她的回复即时显示，无需刷新（同账号同步）。
+              bus.publish('chat_in', accounts.relIdFor(acctId), { life: lifeId, me: m.text, her: reply });
               // 别让"心意用尽→她变朴素"成为沉默之谜：配了模型但这个账号余额耗尽时，温柔说明 + 指路充值（节流，不刷屏）。
               if ((resp as { voice?: string }).voice === 'plain' && !!effMouthConfig()) {
                 const last = creditHintAt.get(acctId) ?? 0;

@@ -76,6 +76,11 @@
         messages = [...messages, { role: 'her', text: ev.data.text, unprompted: true, at: ev.at }];
         scrollDown();
       }
+      // 你在微信里发的消息 + 她的回复，实时同步到这个打开着的网页对话（同一账号、同一段关系）。
+      else if (ev.type === 'chat_in' && ev.data.life === lifeId) {
+        messages = [...messages, { role: 'me', text: ev.data.me, at: ev.at }, { role: 'her', text: ev.data.her, at: ev.at }];
+        scrollDown();
+      }
     });
   });
   onDestroy(() => es && es.close());
