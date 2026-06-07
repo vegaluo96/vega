@@ -53,3 +53,16 @@ export {
   type ApiyiConfig,
 } from './model/mouth.ts';
 export { createPerceiver, createApiyiPerceiver, type Perceiver, type PerceiverConfig } from './model/perceiver.ts';
+// 平台边缘层（非内核）：身份/账号 + 多用户对话。
+export {
+  createAccountStore,
+  type AccountStore,
+  type Account,
+  type Role,
+  type AccountStatus,
+  type AccountStoreOptions,
+  type AuthResult,
+  type LoginResult,
+  type RechargeRequest,
+} from './platform/accounts.ts';
+export { ensureUserRelationship, userSay } from './platform/conversation.ts';

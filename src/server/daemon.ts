@@ -12,6 +12,7 @@ import {
   captureCheckpoint,
   checkpointOf,
   converse,
+  createAccountStore,
   createFileEventStore,
   createMouth,
   createPerceiver,
@@ -24,7 +25,9 @@ import {
   readCheckpoint,
   resumeFromCheckpoint,
   runTurn,
+  userSay,
   writeCheckpoint,
+  type Account,
   type DerivedSnapshot,
   type DurableEventStore,
   type EventDraft,
@@ -56,6 +59,24 @@ const now = (): string => new Date().toISOString();
 
 const mouth = createMouth();
 const perceiver = createPerceiver() ?? undefined;
+
+// 平台身份/账号层（多用户）：node:sqlite，与神圣日志物理分离。
+const ACCOUNTS_DB = process.env.VEGA_ACCOUNTS_DB ?? join(DATA_DIR, 'accounts.db');
+const accounts = createAccountStore(ACCOUNTS_DB, {
+  owners: (process.env.VEGA_OWNERS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+  stewards: (process.env.VEGA_STEWARDS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+  starterCredits: process.env.VEGA_STARTER_CREDITS ? Number(process.env.VEGA_STARTER_CREDITS) : 100,
+});
+const bearer = (req: IncomingMessage): string => {
+  const h = req.headers.authorization ?? '';
+  return h.startsWith('Bearer ') ? h.slice(7) : '';
+};
+const sessionAccount = (req: IncomingMessage): Account | null => accounts.authenticate(bearer(req));
+const publicAccount = (a: Account): Record<string, unknown> => ({ id: a.id, handle: a.handle, role: a.role, email: a.email, emailVerified: a.emailVerified });
+const livesMetBy = (a: Account): Array<{ id: string }> => {
+  const rel = accounts.relIdFor(a.id);
+  return lives.filter((l) => l.store.list().some((e) => e.type === 'RELATIONSHIP_OPENED' && e.relationshipId === rel)).map((l) => ({ id: l.id }));
+};
 
 interface Life {
   id: string;
@@ -398,6 +419,44 @@ const server = createServer(async (req, res) => {
     if (req.method === 'GET' && url === '/') return sendHtml(res, PAGE);
     if (req.method === 'GET' && url === '/panel') return sendHtml(res, PANEL);
     if (req.method === 'GET' && url === '/society') return sendHtml(res, SOCIETY);
+
+    // ── 平台 API（多用户，会话鉴权，§平台 v1）。与 owner 旧面板路由并存。 ──
+    if (url.startsWith('/api/')) {
+      // 公开：社会广场（发现）
+      if (req.method === 'GET' && url === '/api/lives') {
+        return send(res, 200, lives.map((l) => { const s = snapOf(l); return { id: l.id, awake: s.awake, emotion: s.emotion, dayPhase: s.dayPhase, temperament: tempLabel(s.temperament) }; }));
+      }
+      if (req.method === 'POST' && url === '/api/auth/register') {
+        const b = await readJson(req);
+        const r = accounts.register(String(b.email ?? ''), String(b.password ?? ''), String(b.handle ?? ''));
+        if (!r.ok) return send(res, 400, { error: r.error });
+        const l = accounts.login(String(b.email ?? ''), String(b.password ?? ''));
+        return send(res, 200, { account: publicAccount(r.account), token: l.ok ? l.token : null });
+      }
+      if (req.method === 'POST' && url === '/api/auth/login') {
+        const b = await readJson(req);
+        const r = accounts.login(String(b.email ?? ''), String(b.password ?? ''));
+        if (!r.ok) return send(res, 401, { error: r.error });
+        return send(res, 200, { account: publicAccount(r.account), token: r.token, balance: accounts.balance(r.account.id) });
+      }
+      // 以下需登录
+      const me = sessionAccount(req);
+      if (!me) return send(res, 401, { error: 'unauthorized' });
+      if (req.method === 'POST' && url === '/api/auth/logout') { accounts.logout(bearer(req)); return send(res, 200, { ok: true }); }
+      if (req.method === 'GET' && url === '/api/me') return send(res, 200, { account: publicAccount(me), balance: accounts.balance(me.id), lives: livesMetBy(me) });
+      if (req.method === 'POST' && seg[1] === 'lives' && seg[3] === 'say') {
+        const life2 = lifeById(seg[2]);
+        if (!life2) return send(res, 404, { error: 'no such life' });
+        const b = await readJson(req);
+        const content = String(b.content ?? '').slice(0, 4000).trim();
+        if (content === '') return send(res, 400, { error: 'content required' });
+        if (!snapOf(life2).awake) return send(res, 200, { awake: false, note: '她在更深的睡眠里，暂不回应。' });
+        const r = await userSay(life2.store, mouth, accounts.relIdFor(me.id), me.handle, content, now(), perceiver);
+        return send(res, 200, { awake: true, utterance: r.utterance, verdict: r.verdict, emotion: r.snapshot.emotion });
+      }
+      return send(res, 404, { error: 'not found' });
+    }
+
     if (!authed(req)) return send(res, 401, { error: 'unauthorized' });
     if (req.method === 'GET' && url === '/society-feed') return send(res, 200, societyFeed());
     if (req.method === 'GET' && url === '/lives') {
