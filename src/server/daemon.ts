@@ -369,6 +369,7 @@ function sendHtml(res: ServerResponse, html: string): void {
 }
 // 用户 SPA 静态托管（web/dist）：自含，无需 Caddy 也能跑；owner 面板仍在 /panel。
 const WEB_DIST = process.env.VEGA_WEB_DIST ?? join(process.cwd(), 'web', 'dist');
+const ADMIN_DIST = process.env.VEGA_ADMIN_DIST ?? join(process.cwd(), 'web-admin', 'dist');
 const CT: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.ico': 'image/x-icon', '.png': 'image/png', '.webp': 'image/webp', '.woff2': 'font/woff2' };
 function serveStatic(res: ServerResponse, file: string): boolean {
   try {
@@ -588,21 +589,27 @@ const server = createServer(async (req, res) => {
     const url = (req.url ?? '/').split('?')[0];
     const seg = url.split('/').filter(Boolean);
     if (req.method === 'GET' && url === '/health') return send(res, 200, { ok: true });
-    // 用户 SPA：/assets/* 静态资源 + / → index.html（dist 存在时）。owner 旧聊天页回退到 dist 缺失时。
+    // 按域名分流静态产物：admin.* → web-admin/dist；其余 → web/dist。
+    const isAdminHost = (req.headers.host ?? '').toLowerCase().startsWith('admin.');
+    const dist = isAdminHost ? ADMIN_DIST : WEB_DIST;
     if (req.method === 'GET' && url.startsWith('/assets/') && !url.includes('..')) {
-      if (serveStatic(res, join(WEB_DIST, url))) return;
+      if (serveStatic(res, join(dist, url))) return;
       return send(res, 404, { error: 'not found' });
     }
     // 根级静态文件（PWA：/sw.js /manifest.webmanifest /icon.svg /favicon.ico…）。单段、带扩展名 → 无路径穿越。
     if (req.method === 'GET' && /^\/[\w.-]+\.(?:js|webmanifest|svg|png|ico|json|txt|webp|woff2)$/.test(url)) {
-      if (serveStatic(res, join(WEB_DIST, url))) return;
+      if (serveStatic(res, join(dist, url))) return;
     }
-    // 按域名分流：admin.* 子域的根 → 后台观察页；其余 → 用户 SPA（dist 缺失回退旧聊天页）。
-    const isAdminHost = (req.headers.host ?? '').toLowerCase().startsWith('admin.');
     if (req.method === 'GET' && url === '/') {
-      if (isAdminHost) return sendHtml(res, ADMIN);
+      // admin.* → 管理 SPA(web-admin/dist)，缺失回退内联管理页；其余 → 用户 SPA，缺失回退旧聊天页。
+      if (isAdminHost) { if (serveStatic(res, join(ADMIN_DIST, 'index.html'))) return; return sendHtml(res, ADMIN); }
       if (serveStatic(res, join(WEB_DIST, 'index.html'))) return;
       return sendHtml(res, PAGE);
+    }
+    // /admin 路径（任意域名）→ 管理 SPA，缺失回退内联管理页（后备入口）。
+    if (req.method === 'GET' && url === '/admin') {
+      if (serveStatic(res, join(ADMIN_DIST, 'index.html'))) return;
+      return sendHtml(res, ADMIN);
     }
     if (req.method === 'GET' && url === '/panel') return sendHtml(res, PANEL);
     if (req.method === 'GET' && url === '/society') return sendHtml(res, SOCIETY);
@@ -782,8 +789,7 @@ const server = createServer(async (req, res) => {
       return send(res, 404, { error: 'not found' });
     }
 
-    // ── 管理后台（§22，owner/steward 角色门）。/admin 页面自身处理登录。 ──
-    if (req.method === 'GET' && url === '/admin') return sendHtml(res, ADMIN);
+    // ── 管理后台 API（§22，owner/steward 角色门）。/admin 页面已在上方按域名/路径服务。 ──
     if (url.startsWith('/admin/')) {
       const acct = sessionAccount(req);
       if (!acct || (acct.role !== 'owner' && acct.role !== 'steward')) return send(res, 403, { error: 'forbidden' });
