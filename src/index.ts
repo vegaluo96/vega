@@ -72,3 +72,4 @@ export { createEventBus, visibleTo, type EventBus, type BusEvent } from './platf
 export { generateVapidKeys, sendPush, type VapidKeys, type PushSubscription } from './platform/webpush.ts';
 export { createSettingsStore, type SettingsStore, type ModelOverride, type SocialConfig } from './platform/settings.ts';
 export { createFeedStore, type FeedStore, type FeedComment } from './platform/feed.ts';
+export { createWorldFeed, parseRss, parsePolymarket, type WorldFeed, type WorldItem } from './world/sources.ts';

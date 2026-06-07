@@ -45,5 +45,5 @@ export function genesisPayloadFor(
   creator: { relationshipId: RelationshipId; identityRef: string },
   circadianOffsetMin = 480,
 ): GenesisPayload {
-  return { innateSeed: innateSeedFor(id, circadianOffsetMin), reconstructVersionAtBirth: 10, creator };
+  return { innateSeed: innateSeedFor(id, circadianOffsetMin), reconstructVersionAtBirth: 11, creator };
 }

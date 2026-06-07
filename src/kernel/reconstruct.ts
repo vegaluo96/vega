@@ -11,6 +11,7 @@ import {
   type LifeEvent,
   type MessageReceivedPayload,
   type MessageSentPayload,
+  type WorldPerceivedPayload,
   type ReflectionTriggeredPayload,
   type RelationshipEndedPayload,
   type RelationshipOpenedPayload,
@@ -28,7 +29,7 @@ import {
   type ValueEntry,
 } from '../domain/snapshot.ts';
 
-const RECONSTRUCT_VERSION = 10; // v10：昼夜节律时区改为【出生地】属性（出生那刻创造者的设备时区，冻结进 genesis）
+const RECONSTRUCT_VERSION = 11; // v11：世界感知（WORLD_PERCEIVED）——真实世界轻轻染色她的状态（确定性 appraisal，加法演进）
 // 她活在出生地的时区：分钟东偏 UTC，【出生即冻结进 LIFE_GENESIS、终生不变】（不取 OS/用户时区，故 V2 可复现）。
 // 她是一个身体、只有一个昼夜。平台孵化的命缺省=北京 480；将来用户接生的命取创造者设备时区。
 const CIRCADIAN_OFFSET_MIN_DEFAULT = 480;
@@ -295,6 +296,9 @@ function applyEvent(st: RState, e: LifeEvent): void {
         throw new Error(`契约①违反：MESSAGE_SENT(seq ${e.seq}) 的 affectsDerivedState 必须为 false（模型不写身份）`);
       }
       break;
+    case 'WORLD_PERCEIVED':
+      appraiseWorld(st, e as LifeEvent<'WORLD_PERCEIVED'>);
+      break;
     case 'AUTONOMOUS_TICK':
       applyTick(st, e as LifeEvent<'AUTONOMOUS_TICK'>);
       break;
@@ -374,6 +378,29 @@ function appraiseMessage(st: RState, e: LifeEvent<'MESSAGE_RECEIVED'>): void {
   if (count(p.content, BOLDNESS) > 0) st.boldnessLog.push(e.seq);
   if (ev2 > 0.5) st.warmthLog.push(e.seq); // 被善待
   if (ev2 < -0.5) st.conflictLog.push(e.seq); // 被伤害/冲突
+}
+
+// 世界感知 → 她的状态【轻轻】被真实世界染色（一条新闻不该像至亲变心那么重）。
+// 确定性：优先用冻结的 perception（采集时算好），缺失则用确定性词表。模型不写状态（契约①）。
+function appraiseWorld(st: RState, e: LifeEvent<'WORLD_PERCEIVED'>): void {
+  const p = e.payload as WorldPerceivedPayload;
+  let val: number;
+  let relevance: number;
+  if (p.perception) {
+    val = clamp(p.perception.valence, -1, 1);
+    relevance = clamp(p.perception.relevance, 0, 1);
+  } else {
+    const text = `${p.title} ${p.summary}`;
+    const ev = clamp(0.5 * count(text, POS) - 0.6 * count(text, NEG), -1.5, 1.5);
+    val = clamp(ev / 1.5, -1, 1);
+    relevance = 0.3;
+  }
+  const W = 0.06; // 世界事件系数——远小于人际（轻轻染色，不喧宾夺主）
+  const sens = st.temperament.sensitivity;
+  const s = st.soma;
+  s.valence.value = clamp(s.valence.value + W * val * relevance * sens, -1, 1);
+  s.arousal.value = clamp(s.arousal.value + W * relevance * sens, 0, 1);
+  s.energy.value = clamp(s.energy.value + W * val * relevance, 0, 1); // 好消息提神、坏消息泄气（轻）
 }
 
 function applyTick(st: RState, e: LifeEvent<'AUTONOMOUS_TICK'>): void {

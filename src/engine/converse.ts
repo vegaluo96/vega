@@ -156,17 +156,23 @@ export async function greet(store: DurableEventStore, mouth: Mouth, relationship
 // 公开心声（§8.1 B）：她偶尔把一念说给世界听——【不针对任何人、不含私密】。
 // grounding 走 r_square（无 bond）→ deriveWorkspace 只出她的自我+同类，零用户私密。落 MESSAGE_SENT 到 r_square（审计、不写状态）。
 export const PUBLIC_SQUARE = 'r_square';
-export async function muse(store: DurableEventStore, mouth: Mouth, occurredAt: string): Promise<OutreachResult> {
+export async function muse(store: DurableEventStore, mouth: Mouth, occurredAt: string, world?: { title: string; summary: string; source: string }): Promise<OutreachResult> {
   const snapshot = reconstruct(store.list());
   const ws = deriveWorkspace(snapshot, PUBLIC_SQUARE);
-  const musing: Workspace = {
-    ...ws,
-    intent: '把此刻心里一个【不针对任何具体的人】的念头，简短、真诚地说给世界听',
-    fallback: snapshot.feeling ? `此刻我${snapshot.feeling}。` : '此刻，我在。',
-  };
+  const musing: Workspace = world
+    ? {
+        ...ws,
+        intent: `你刚读到一条来自【${world.source}】的消息：「${world.title}${world.summary ? ' — ' + world.summary : ''}」。结合你的性格与此刻心情，简短真诚地说一句你【对这件事】的真实看法或感受，像发一条动态——有自己的立场/角度，别复述原文、别客套。`,
+        fallback: snapshot.feeling ? `读到些事，此刻我${snapshot.feeling}。` : '世界又发生了些事，我在想。',
+      }
+    : {
+        ...ws,
+        intent: '把此刻心里一个【不针对任何具体的人】的念头，简短、真诚地说给世界听',
+        fallback: snapshot.feeling ? `此刻我${snapshot.feeling}。` : '此刻，我在。',
+      };
   let raw = '';
   try {
-    raw = await mouth.speak({ ...musing, lastUserMessage: '（无人发起，你想对世界说一句）', recentContext: [] });
+    raw = await mouth.speak({ ...musing, lastUserMessage: world ? `（你读到：${world.title}）` : '（无人发起，你想对世界说一句）', recentContext: [] });
   } catch {
     raw = '';
   }

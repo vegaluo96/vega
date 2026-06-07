@@ -18,6 +18,7 @@ export type EventType =
   | 'RELATIONSHIP_ENDED' // 一段关系永远结束（必朽者离去）——锁后加法演进，旧日志天然兼容
   | 'MESSAGE_RECEIVED'
   | 'MESSAGE_SENT'
+  | 'WORLD_PERCEIVED' // 她感知到一条真实世界信息（新闻/预测市场）——锁后加法演进，旧日志天然兼容
   | 'AUTONOMOUS_TICK'
   | 'REFLECTION_TRIGGERED';
 
@@ -72,6 +73,17 @@ export interface MessageReceivedPayload {
   channel: string;
   perception?: Perception; // 可选：模型感知特征（冻结输入，非派生状态）
 }
+// 世界感知特征（采集时算好、冻进事件 → 重放只读、不连网，V2 仍确定性）。
+export interface WorldPerception { valence: number; arousal: number; relevance: number }
+export interface WorldPerceivedPayload {
+  source: string; // 源（feed 主机名 / 'polymarket'）
+  worldKind: 'news' | 'market';
+  title: string; // 冻结的 ground truth
+  summary: string;
+  url: string;
+  topics: string[];
+  perception?: WorldPerception; // 缺失则 reconstruct 用确定性词表兜底（仍不连网）
+}
 export interface MessageSentPayload {
   relationshipId: RelationshipId;
   utterance: string; // 模型产物（对外措辞）
@@ -109,6 +121,7 @@ export interface PayloadMap {
   RELATIONSHIP_ENDED: RelationshipEndedPayload;
   MESSAGE_RECEIVED: MessageReceivedPayload;
   MESSAGE_SENT: MessageSentPayload;
+  WORLD_PERCEIVED: WorldPerceivedPayload;
   AUTONOMOUS_TICK: AutonomousTickPayload;
   REFLECTION_TRIGGERED: ReflectionTriggeredPayload;
 }

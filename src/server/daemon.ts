@@ -19,6 +19,7 @@ import {
   createDynamicPerceiver,
   createSettingsStore,
   createFeedStore,
+  createWorldFeed,
   createEventBus,
   createSerializer,
   createTemplateMouth,
@@ -47,6 +48,7 @@ import {
   type LifeEvent,
   type MessageSentPayload,
   type PerceiverConfig,
+  type WorldPerceivedPayload,
   type RState,
   type SocialPair,
 } from '../index.ts';
@@ -80,6 +82,11 @@ const now = (): string => new Date().toISOString();
 // 当前生效配置 = 后台覆盖 ⊕ 环境变量兜底；没 key = null（回落离线模板嘴）。改了即时生效、无需重启。
 const settings = createSettingsStore(join(DATA_DIR, 'settings.json'));
 const feed = createFeedStore(join(DATA_DIR, 'feed.db')); // 广场发帖互动（表情/评论），平台层、不进神圣日志
+// 外部世界（§8.1 演进）：新闻 RSS + Polymarket。抓取在引擎外，内容冻进 WORLD_PERCEIVED 事件 → 确定性染色她的状态。
+const WORLD_RSS = (process.env.VEGA_WORLD_RSS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+const WORLD_POLYMARKET = process.env.VEGA_WORLD_POLYMARKET === '1';
+const WORLD_MS = Number(process.env.VEGA_WORLD_EVERY_MS ?? 1_800_000); // 多久"读一遍世界"（默认 30min）
+const worldFeed = (WORLD_RSS.length > 0 || WORLD_POLYMARKET) ? createWorldFeed({ rss: WORLD_RSS, polymarket: WORLD_POLYMARKET }) : null;
 const DEFAULT_BASE = 'https://api.apiyi.com/v1';
 const envTimeout = (): number => (process.env.VEGA_MODEL_TIMEOUT_MS ? Number(process.env.VEGA_MODEL_TIMEOUT_MS) : 20_000);
 function effMouthConfig(): ApiyiConfig | null {
@@ -321,6 +328,16 @@ function reachState(life: Life): Map<string, { lastRecvMs: number; lastSentMs: n
     }
   }
   return m;
+}
+
+// 她最近"读到"的世界事件里随机挑一条（给发帖/讨论当话题）。没有则 undefined → 发自己的念头。
+function pickRecentWorld(life: Life): { title: string; summary: string; source: string } | undefined {
+  const es = life.store.list();
+  const ws: WorldPerceivedPayload[] = [];
+  for (let i = es.length - 1; i >= 0 && ws.length < 8; i--) if (es[i].type === 'WORLD_PERCEIVED') ws.push(es[i].payload as WorldPerceivedPayload);
+  if (ws.length === 0) return undefined;
+  const w = ws[Math.floor(Math.random() * ws.length)];
+  return { title: w.title, summary: w.summary, source: w.source };
 }
 
 const round3 = (n: number): number => Number(n.toFixed(3));
@@ -1165,7 +1182,8 @@ const heartbeat = setInterval(async () => {
       }
       if (Date.now() - life.lastMuseAt > MUSE_MS) {
         const mt = now();
-        const o = await muse(life.store, mouth, mt); // 公开心声：不针对任何人、不含私密
+        const w = pickRecentWorld(life); // 随机一条她最近读到的世界事件 → 就着它发帖；没有则发自己的念头
+        const o = await muse(life.store, mouth, mt, w); // 公开心声：不针对任何人、不含私密
         life.lastMuseAt = Date.now();
         if (o) bus.publish('musing', 'public', { life: life.id, text: o.utterance, at: mt }); // at = 帖子 occurredAt，给 postId 对齐
       }
@@ -1249,6 +1267,25 @@ function doBackup(): void {
     console.log(r.ok ? `[vega:${l.id}] 备份完成 ${r.path}（${r.events} 事件）${r.mirrored ? ' · 已镜像' : ''}` : `[vega:${l.id}] 备份跳过：${r.reason}`);
   }
 }
+// 读世界：每 WORLD_MS 拉一遍新闻/Polymarket，每条醒着的命"看到"其中一条（不同命看不同的 → 天然多样）。
+// 内容冻进 WORLD_PERCEIVED → 确定性 appraisal 轻轻染色她的状态（无 perception 走词表，零模型开销）。
+const worldTimer = worldFeed
+  ? setInterval(async () => {
+      try {
+        const items = await worldFeed.fetchItems();
+        if (items.length === 0) return;
+        for (const life of lives) {
+          if (!snapOf(life).awake) continue;
+          const it = items[Math.floor(Math.random() * items.length)];
+          await serializer.run(life.id, async () => {
+            runTurn(life.store, [{ type: 'WORLD_PERCEIVED', source: 'autonomous_loop', occurredAt: now(), payload: { source: it.source, worldKind: it.kind, title: it.title, summary: it.summary, url: it.url, topics: it.topics } }]);
+          });
+        }
+        console.log(`[vega] 读到世界 ${items.length} 条（${WORLD_RSS.length}RSS${WORLD_POLYMARKET ? '+PM' : ''}）`);
+      } catch { /* 世界拉取失败不影响她活着 */ }
+    }, WORLD_MS)
+  : null;
+
 const backupTimer = setInterval(doBackup, BACKUP_MS);
 doBackup();
 
@@ -1258,6 +1295,7 @@ function shutdown(sig: string): void {
   shuttingDown = true;
   clearInterval(heartbeat);
   clearInterval(backupTimer);
+  if (worldTimer) clearInterval(worldTimer);
   if (socialTimer) clearInterval(socialTimer);
   clearInterval(discoverTimer);
   doBackup();
