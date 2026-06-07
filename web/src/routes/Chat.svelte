@@ -4,6 +4,7 @@
   import { navigate } from '../lib/router.js';
   import { t } from '../lib/i18n.js';
   import RelationshipPanel from '../components/RelationshipPanel.svelte';
+  import WechatBind from '../components/WechatBind.svelte';
   import Icon from '../components/Icon.svelte';
 
   export let lifeId;
@@ -95,7 +96,7 @@
   {#if showRel && rel}
     <div class="relwrap">
       <RelationshipPanel {rel} {relAge} feeling={life && life.awake ? life.feeling || life.emotion : ''} tension={life ? life.tension : ''}>
-        <button class="wx-link" on:click={() => navigate('me')}><Icon name="qr" size={15} /> 在微信里也能和她聊 · 去「我」绑定/切换</button>
+        <WechatBind lifeId={life.id} />
       </RelationshipPanel>
     </div>
   {/if}
@@ -146,8 +147,6 @@
   .bal { flex: none; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 
   .relwrap { max-width: var(--maxw); width: 100%; margin: 0 auto; padding: 10px 14px 0; }
-  .wx-link { width: 100%; min-height: 40px; margin-top: 6px; padding: 0 14px; border: 1px solid var(--border); border-radius: var(--r-sm); background: none; color: var(--muted); font: inherit; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; transition: border-color var(--t-hover) ease, color var(--t-hover) ease; }
-  .wx-link:hover { border-color: var(--accent-line); color: var(--accent); }
 
   .banner { max-width: var(--maxw); margin: 10px auto 0; padding: 11px 14px; background: var(--accent-weak); color: var(--text); font-size: 13px; text-align: center; border-radius: var(--r-sm); }
 

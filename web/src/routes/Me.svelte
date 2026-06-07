@@ -23,7 +23,6 @@
 
   let me = null;
   let error = '';
-  let allLives = [];
   onMount(async () => {
     try {
       me = await api.me();
@@ -31,7 +30,6 @@
       error = e.message;
       if (e.status === 401) clearSession();
     }
-    try { allLives = await api.lives(); } catch { /* ignore */ }
   });
 
   // 微信：ZSKY 自己当机器人——网页把微信返回的授权网址生成成二维码，微信扫码即连接。
@@ -61,11 +59,6 @@
   }
   async function disconnectWx() {
     try { await api.wxDisconnect(); me = await api.me(); qrImg = ''; wxMsg = '已断开微信连接。'; } catch (e) { wxMsg = e.message; }
-  }
-  async function switchChannelLife(e) {
-    wxMsg = '';
-    try { await api.setChannelLife(e.target.value); if (me.wechatChannel) me.wechatChannel.lifeId = e.target.value; wxMsg = '已切换 · 微信里现在和 ' + e.target.value + ' 聊。'; }
-    catch (err) { wxMsg = err.message; }
   }
   async function logout() {
     try { await api.logout(); } catch {}
@@ -130,11 +123,8 @@
       <div class="card pad">
         {#if me.wechatChannel}
           <div class="kv"><span class="k">状态</span><span class="v">已连接微信</span></div>
-          <p class="caption note">在微信里和谁聊（随时切换，不用重连）：</p>
-          <select class="input sel" value={me.wechatChannel.lifeId} on:change={switchChannelLife}>
-            {#each (allLives.length ? allLives : me.lives) as l}<option value={l.id}>{l.id}</option>{/each}
-          </select>
-          <button class="btn-ghost btn" style="margin-top:12px" on:click={disconnectWx}>断开微信连接</button>
+          <p class="caption note">现在微信里和 <b>{me.wechatChannel.lifeId}</b> 聊。想换成别人：进那条命的对话，点「在微信里也和她聊」即可——一个微信只跟一条命。</p>
+          <button class="btn-ghost btn" on:click={disconnectWx}>断开微信连接</button>
         {:else if qrImg}
           <p class="caption note">用<b>微信扫这个码</b>授权连接，扫完确认后稍等几秒自动完成。</p>
           <img class="wxqr" src={qrImg} alt="微信连接二维码" />
