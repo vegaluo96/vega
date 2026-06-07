@@ -70,4 +70,4 @@ export { ensureUserRelationship, userSay, meterMouth } from './platform/conversa
 export { createSerializer, type Serializer } from './platform/serialize.ts';
 export { createEventBus, visibleTo, type EventBus, type BusEvent } from './platform/eventbus.ts';
 export { generateVapidKeys, sendPush, type VapidKeys, type PushSubscription } from './platform/webpush.ts';
-export { createSettingsStore, type SettingsStore, type ModelOverride } from './platform/settings.ts';
+export { createSettingsStore, type SettingsStore, type ModelOverride, type SocialConfig } from './platform/settings.ts';

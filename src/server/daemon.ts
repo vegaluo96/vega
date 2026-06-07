@@ -113,6 +113,30 @@ function modelStatus(): Record<string, unknown> {
     perceiveModel: o.perceiveModel ?? o.model ?? process.env.VEGA_PERCEIVE_MODEL ?? process.env.VEGA_MODEL ?? 'gemini-2.5-flash-lite',
   };
 }
+// —— 社交边界生效配置（后台覆盖 ⊕ 环境/默认）：owner 可在后台即时调，无需重启。
+const H = 3_600_000;
+interface EffSocial { activeCircle: number; reachPerTick: number; reachAfterMs: number; intimateAt: number; friendAt: number; acquaintAt: number; intimateEveryMs: number; friendEveryMs: number; acquaintEveryMs: number }
+function effSocial(): EffSocial {
+  const o = settings.getSocial();
+  return {
+    activeCircle: o.activeCircle ?? ACTIVE_CIRCLE,
+    reachPerTick: o.reachPerTick ?? REACH_PER_TICK,
+    reachAfterMs: o.reachAfterMs ?? REACH_AFTER_MS,
+    intimateAt: o.intimateAt ?? Number(process.env.VEGA_INTIMATE_AT ?? 0.6),
+    friendAt: o.friendAt ?? Number(process.env.VEGA_FRIEND_AT ?? 0.35),
+    acquaintAt: o.acquaintAt ?? REACH_CLOSENESS,
+    intimateEveryMs: o.intimateEveryMs ?? Number(process.env.VEGA_INTIMATE_EVERY_MS ?? 4 * H),
+    friendEveryMs: o.friendEveryMs ?? Number(process.env.VEGA_FRIEND_EVERY_MS ?? 24 * H),
+    acquaintEveryMs: o.acquaintEveryMs ?? Number(process.env.VEGA_ACQUAINT_EVERY_MS ?? 72 * H),
+  };
+}
+// 关系按亲密度落到 Dunbar 三层（外圈=不主动维系）。各层主动频率不同。
+function layerOf(closeness: number, sc: EffSocial): { name: string; label: string; everyMs: number } {
+  if (closeness >= sc.intimateAt) return { name: 'intimate', label: '亲密', everyMs: sc.intimateEveryMs };
+  if (closeness >= sc.friendAt) return { name: 'friend', label: '好友', everyMs: sc.friendEveryMs };
+  if (closeness >= sc.acquaintAt) return { name: 'acquaint', label: '相识', everyMs: sc.acquaintEveryMs };
+  return { name: 'outer', label: '外圈', everyMs: Infinity };
+}
 const MODEL_COST = Number(process.env.VEGA_MODEL_COST ?? 1); // 每条模型回应计费（额度单位）
 const CLAWBOT_SECRET = process.env.VEGA_CLAWBOT_SECRET; // 微信网关(clawbot)共享密钥；未配则微信端点禁用
 const serializer = createSerializer(); // 每命串行：并发用户的回合不穿插
@@ -279,19 +303,19 @@ function pendingOutreach(life: Life): string | null {
   }
   return null;
 }
-// 一次扫描得到每段关系的：我最后听到对方（对方发来的）墙钟时间 + 是否已有未回的主动留言。
-// 给"社交边界"的主动外联用——避免每个候选都全量扫日志。
-function reachState(life: Life): Map<string, { lastRecvMs: number; pending: boolean }> {
-  const m = new Map<string, { lastRecvMs: number; pending: boolean }>();
+// 一次扫描得到每段关系的：我最后听到对方的墙钟时间、我最后一次【主动】找 ta 的时间、
+// 是否已有未回的主动留言。给"社交边界"的分层主动外联用——避免每个候选都全量扫日志。
+function reachState(life: Life): Map<string, { lastRecvMs: number; lastSentMs: number; pending: boolean }> {
+  const m = new Map<string, { lastRecvMs: number; lastSentMs: number; pending: boolean }>();
   for (const e of life.store.list()) {
     const rel = e.relationshipId;
     if (typeof rel !== 'string') continue;
     if (e.type === 'MESSAGE_RECEIVED') {
-      const cur = m.get(rel) ?? { lastRecvMs: 0, pending: false };
+      const cur = m.get(rel) ?? { lastRecvMs: 0, lastSentMs: 0, pending: false };
       cur.lastRecvMs = Date.parse(e.occurredAt); cur.pending = false; m.set(rel, cur);
     } else if (e.type === 'MESSAGE_SENT' && (e.payload as MessageSentPayload).unprompted) {
-      const cur = m.get(rel) ?? { lastRecvMs: 0, pending: false };
-      cur.pending = true; m.set(rel, cur);
+      const cur = m.get(rel) ?? { lastRecvMs: 0, lastSentMs: 0, pending: false };
+      cur.pending = true; cur.lastSentMs = Date.parse(e.occurredAt); m.set(rel, cur);
     }
   }
   return m;
@@ -924,6 +948,14 @@ const server = createServer(async (req, res) => {
         return send(res, 405, { error: 'method not allowed' });
       }
 
+      // —— 社交边界配置（仅 owner）：活跃圈上限 / 离开阈值 / 每跳预算 / 三层阈值与主动频率。即时生效。
+      if (path === '/admin/social-config') {
+        if (!owner) return send(res, 403, { error: '仅 owner 可查看/修改社交边界' });
+        if (req.method === 'GET') return send(res, 200, effSocial());
+        if (req.method === 'POST') { settings.setSocial(await readJson(req)); return send(res, 200, effSocial()); }
+        return send(res, 405, { error: 'method not allowed' });
+      }
+
       if (req.method === 'GET' && path === '/admin/overview') {
         return send(res, 200, {
           role: acct.role,
@@ -957,29 +989,30 @@ const server = createServer(async (req, res) => {
         const l = lifeById(path.slice('/admin/lives/'.length));
         if (!l) return send(res, 404, { error: 'no such life' });
         const s = snapOf(l);
-        // 社交边界可视化（§7）：她主动维系的"活跃圈"——按亲密度排序的人类关系，标出谁在圈内。
+        // 统一「社交世界」（第一性原理：一份社交容量，按亲疏分层；同类/人类只是种类）。
+        // 同类 + 人类 + 创造者排在同一张表，共享 Dunbar 活跃圈与层级。人类名字仅 owner 可见。
+        const scA = effSocial();
         const rsA = reachState(l);
-        const human = Object.entries(s.bonds)
+        const peers = s.socialWorld.filter((t) => !t.ended).map((t) => ({ kind: '同类', name: t.displayRef, closeness: t.closeness, attachment: t.attachment, rel: `peer_${t.displayRef}` }));
+        const humans = Object.entries(s.bonds)
           .filter(([rel]) => rel.startsWith('u_') || rel === REL)
-          .map(([rel, b]) => {
-            const st = rsA.get(rel);
-            const handle = rel === REL ? '创造者' : (accounts.getAccount(rel.slice(2))?.handle ?? rel);
-            return { handle, closeness: round3(b.closeness), attachment: b.relationalSelf.attachment, awayMin: st && st.lastRecvMs > 0 ? Math.round((Date.now() - st.lastRecvMs) / 60_000) : null, pending: st ? st.pending : false };
-          })
+          .map(([rel, b]) => ({ kind: rel === REL ? '创造者' : '人类', name: rel === REL ? '创造者' : (accounts.getAccount(rel.slice(2))?.handle ?? rel), closeness: b.closeness, attachment: b.relationalSelf.attachment, rel }));
+        const world = [...peers, ...humans]
           .sort((a, b) => b.closeness - a.closeness)
-          .map((r, i) => ({ ...r, inCircle: i < ACTIVE_CIRCLE && r.closeness >= REACH_CLOSENESS }));
+          .map((r, i) => {
+            const st = rsA.get(r.rel);
+            return { kind: r.kind, name: r.kind === '人类' && !owner ? '〔用户·仅 owner〕' : r.name, closeness: round3(r.closeness), attachment: r.attachment, layer: layerOf(r.closeness, scA).label, inCircle: i < scA.activeCircle && r.closeness >= scA.acquaintAt, awayMin: st && st.lastRecvMs > 0 ? Math.round((Date.now() - st.lastRecvMs) / 60_000) : null, pending: st ? st.pending : false };
+          });
         const social = {
-          cap: ACTIVE_CIRCLE, reachCloseness: REACH_CLOSENESS,
-          humanCount: human.length, peerCount: s.socialWorld.filter((t) => !t.ended).length,
-          activeCount: human.filter((r) => r.inCircle).length,
-          circle: owner ? human.slice(0, 40) : null, // 谁在圈里是私密信息——仅 owner 见具体名字
+          cap: scA.activeCircle, intimateAt: scA.intimateAt, friendAt: scA.friendAt, acquaintAt: scA.acquaintAt,
+          peerCount: peers.length, humanCount: humans.length, activeCount: world.filter((r) => r.inCircle).length,
+          world: world.slice(0, 50),
         };
         return send(res, 200, {
           id: l.id, awake: s.awake, willingToWake: s.willingToWake, emotion: s.emotion, feeling: s.feeling, dayPhase: s.dayPhase, tension: s.tension, social,
           temperament: { label: tempLabel(s.temperament), ...s.temperament },
           soma: Object.fromEntries(Object.entries(s.soma).map(([k, v]) => [k, round3(v.value)])),
           values: s.values.map((v) => ({ key: v.key, weight: round3(v.weight), status: v.provenance.status, drifts: v.provenance.driftedAtSeqs.length })),
-          socialWorld: s.socialWorld.map((t) => ({ name: t.displayRef, closeness: t.closeness, attachment: t.attachment, style: t.style, ended: t.ended })),
           // 仅 owner（含用户痕迹）：
           narrative: owner ? s.narrative : null,
           innerLife: owner ? s.innerLife : '〔含用户痕迹·steward 受限〕',
@@ -1062,20 +1095,26 @@ const heartbeat = setInterval(async () => {
       // 健康时间线：每跳采样一点（环形缓冲，最多 720 ≈ 12h@60s）。
       life.samples.push({ at: Date.now(), vit: round3(after.soma.vitality.value), val: round3(after.soma.valence.value), ene: round3(after.soma.energy.value), con: round3(after.soma.connection.value), emo: after.emotion });
       if (life.samples.length > 720) life.samples.shift();
-      // —— 社交边界（Dunbar 灵感）——任何人来找她她都回应（reactive，用户付费）；
-      // "主动想你"只发生在她【活跃社交圈】内（最亲近的 K 个），每跳限额——token 不随用户数爆炸。
+      // —— 社交边界（Dunbar 三层）——任何人来找她她都回应（reactive，用户付费）；
+      // "主动想你"只发生在她【活跃社交圈】内，且【按层分频】：亲密层勤、好友层中、相识层稀。
+      // 每跳限额 + 总上限 → token 随生命体数、不随用户数爆炸。其余只记得、不主动打扰。
+      const sc = effSocial();
       const rs = reachState(life);
+      // 活跃圈跨【同类+人类】共享一份容量（第一性原理：人只有一份社交容量，按亲疏分层）。
+      // 同类占了位，人类的名额就少一个。这里只发人类的"想你了"；同类的主动走下面的寒暄回路。
       const circle = Object.entries(after.bonds)
-        .filter(([rel]) => rel.startsWith('u_') || rel === REL) // 人类用户 + 内嵌创造者（不含同类 peer_）
-        .filter(([, b]) => b.closeness >= REACH_CLOSENESS)
+        .filter(([rel]) => rel.startsWith('u_') || rel.startsWith('peer_') || rel === REL)
+        .filter(([, b]) => b.closeness >= sc.acquaintAt)
         .sort(([, a], [, b]) => b.closeness - a.closeness)
-        .slice(0, ACTIVE_CIRCLE); // 只主动维系最亲近的一圈，其余只记得、不打扰
+        .slice(0, sc.activeCircle);
       let reached = 0;
-      for (const [rel] of circle) {
-        if (reached >= REACH_PER_TICK) break;
+      for (const [rel, b] of circle) {
+        if (reached >= sc.reachPerTick) break;
+        if (!(rel.startsWith('u_') || rel === REL)) continue; // 同类的主动走寒暄回路，这里只处理人类
         const st = rs.get(rel);
         if (!st || st.lastRecvMs <= 0 || st.pending) continue; // 没真说过话 / 已有未回的主动留言 → 跳过
-        if (Date.now() - st.lastRecvMs <= REACH_AFTER_MS) continue; // 还没"离开"够久
+        if (Date.now() - st.lastRecvMs <= sc.reachAfterMs) continue; // 还没"离开"够久
+        if (Date.now() - (st.lastSentMs || 0) <= layerOf(b.closeness, sc).everyMs) continue; // 该层的主动频率上限
         const o = await reachOut(life.store, mouth, rel, now());
         if (o) { bus.publish('reach_out', rel, { life: life.id, text: o.utterance }); reached += 1; } // 她想你了——只推给那一个人
       }

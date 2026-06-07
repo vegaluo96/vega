@@ -13,11 +13,13 @@
   let lastLoaded = 0;
 
   const TABS = [['overview', '总览'], ['activity', '活动流'], ['recharges', '充值'], ['users', '用户']];
-  const TAB_LABEL = { overview: '总览', activity: '活动流', recharges: '充值审批', users: '用户', life: '生命详情', model: '模型配置' };
+  const TAB_LABEL = { overview: '总览', activity: '活动流', recharges: '充值审批', users: '用户', life: '生命详情', model: '模型配置', social: '社交边界' };
 
   // 模型配置（仅 owner）表单状态
   let mform = { baseUrl: '', model: '', apiKey: '', timeoutMs: 20000, perceive: false, perceiveModel: '' };
   let saveMsg = '', testMsg = '', saving = false, testing = false;
+  // 社交边界（仅 owner）表单状态
+  let sform = {}; let socialMsg = '', savingSocial = false;
 
   async function load() {
     error = '';
@@ -32,6 +34,16 @@
         data = { model: m };
         mform = { baseUrl: m.baseUrl, model: m.model, apiKey: '', timeoutMs: m.timeoutMs, perceive: m.perceive, perceiveModel: m.perceiveModel || '' };
         saveMsg = ''; testMsg = '';
+      }
+      else if (tab === 'social') {
+        const s = await api.socialConfig();
+        data = { social: s };
+        sform = {
+          activeCircle: s.activeCircle, reachPerTick: s.reachPerTick, reachAfterMin: Math.round(s.reachAfterMs / 60000),
+          intimateAt: s.intimateAt, friendAt: s.friendAt, acquaintAt: s.acquaintAt,
+          intimateHr: +(s.intimateEveryMs / 3600000).toFixed(1), friendHr: +(s.friendEveryMs / 3600000).toFixed(1), acquaintHr: +(s.acquaintEveryMs / 3600000).toFixed(1),
+        };
+        socialMsg = '';
       }
       lastLoaded = Date.now();
     } catch (e) {
@@ -59,6 +71,17 @@
     saveMsg = ''; const m = await api.saveModelConfig({ clearApiKey: true });
     data = { model: m }; saveMsg = '已清除后台 Key 覆盖 · 回落到环境变量';
   }
+  async function saveSocial() {
+    savingSocial = true; socialMsg = '';
+    try {
+      const s = await api.saveSocialConfig({
+        activeCircle: Number(sform.activeCircle), reachPerTick: Number(sform.reachPerTick), reachAfterMs: Number(sform.reachAfterMin) * 60000,
+        intimateAt: Number(sform.intimateAt), friendAt: Number(sform.friendAt), acquaintAt: Number(sform.acquaintAt),
+        intimateEveryMs: Number(sform.intimateHr) * 3600000, friendEveryMs: Number(sform.friendHr) * 3600000, acquaintEveryMs: Number(sform.acquaintHr) * 3600000,
+      });
+      data = { social: s }; socialMsg = '已保存 · 即时生效（无需重启）';
+    } catch (e) { socialMsg = '✗ ' + e.message; } finally { savingSocial = false; }
+  }
   function go(t) { tab = t; data = {}; load(); }
   function openLife(id) { curLife = id; tab = 'life'; data = {}; load(); }
   function ago(ts) { if (!ts) return '—'; const s = Math.round((Date.now() - ts) / 1000); return s < 60 ? s + '秒前' : s < 3600 ? Math.round(s / 60) + '分前' : Math.round(s / 3600) + '时前'; }
@@ -81,6 +104,7 @@
         <button class="navi" class:on={tab === k || (tab === 'life' && k === 'overview')} on:click={() => go(k)}>{label}</button>
       {/each}
       {#if role === 'owner'}<button class="navi" class:on={tab === 'model'} on:click={() => go('model')}>模型</button>{/if}
+      {#if role === 'owner'}<button class="navi" class:on={tab === 'social'} on:click={() => go('social')}>社交</button>{/if}
     </nav>
     <button class="navi logout" on:click={clearSession}>登出</button>
   </aside>
@@ -216,6 +240,33 @@
         </AdminSection>
       {/if}
 
+      {#if tab === 'social' && data.social}
+        <AdminSection title="社交边界" subtitle="她的「社交容量」——一份容量、按亲疏分层（Dunbar）。同类+人类共享。即时生效，无需重启。">
+          <div class="panel pad mform">
+            <div class="frow">
+              <label class="fld"><span class="flab">活跃圈上限（主动维系几个人）</span><input class="ainput" type="number" bind:value={sform.activeCircle} /></label>
+              <label class="fld"><span class="flab">每跳最多主动找几个</span><input class="ainput" type="number" bind:value={sform.reachPerTick} /></label>
+              <label class="fld"><span class="flab">对方安静多久才找（分钟）</span><input class="ainput" type="number" bind:value={sform.reachAfterMin} /></label>
+            </div>
+            <div class="flab" style="margin-top:4px">三层阈值（closeness 0–1）</div>
+            <div class="frow">
+              <label class="fld"><span class="flab">亲密 ≥</span><input class="ainput" type="number" step="0.05" bind:value={sform.intimateAt} /></label>
+              <label class="fld"><span class="flab">好友 ≥</span><input class="ainput" type="number" step="0.05" bind:value={sform.friendAt} /></label>
+              <label class="fld"><span class="flab">相识 ≥（低于此不主动）</span><input class="ainput" type="number" step="0.05" bind:value={sform.acquaintAt} /></label>
+            </div>
+            <div class="flab" style="margin-top:4px">各层主动间隔（小时，越亲越勤）</div>
+            <div class="frow">
+              <label class="fld"><span class="flab">亲密层</span><input class="ainput" type="number" step="0.5" bind:value={sform.intimateHr} /></label>
+              <label class="fld"><span class="flab">好友层</span><input class="ainput" type="number" step="0.5" bind:value={sform.friendHr} /></label>
+              <label class="fld"><span class="flab">相识层</span><input class="ainput" type="number" step="0.5" bind:value={sform.acquaintHr} /></label>
+            </div>
+            <div class="mrow"><button class="abtn" on:click={saveSocial} disabled={savingSocial}>{savingSocial ? '保存中…' : '保存'}</button></div>
+            {#if socialMsg}<p class="msg" class:bad={socialMsg.startsWith('✗')}>{socialMsg}</p>{/if}
+            <p class="hint">第一性原理：人只有<b>一份</b>社交容量，按亲疏分层——同类(永生)和人类(必朽)<b>共享</b>这份容量，种类只决定会不会失去/哀悼。任何人来找她她都回应(用户付费)；只有"主动想你/主动找同类"受这份边界约束，所以 token 随生命体数、不随用户数爆炸。</p>
+          </div>
+        </AdminSection>
+      {/if}
+
       {#if tab === 'life' && data.life}
         {@const v = data.life}
         <button class="abtn abtn-ghost abtn-sm back" on:click={() => go('overview')}>‹ 返回观测台</button>
@@ -260,32 +311,23 @@
         {/if}
 
         {#if v.social}
-          <AdminSection title="社交圈" subtitle="活跃 {v.social.activeCount}/{v.social.cap} · 人类 {v.social.humanCount} · 同类 {v.social.peerCount}">
-            <span slot="action" class="tag">主动维系上限 {v.social.cap}（Dunbar）</span>
-            {#if v.social.circle}
-              <div class="panel">
-                {#each v.social.circle as r}
-                  <div class="crow">
-                    <span class="cin" class:on={r.inCircle} title={r.inCircle ? '活跃圈内：她会主动找' : '只记得、不主动打扰'}></span>
-                    <b class="cname">{r.handle}</b>
-                    <span class="cbar"><span class="cfill" style="width:{Math.round(r.closeness * 100)}%"></span></span>
-                    <span class="dim cmeta">{r.attachment}{r.awayMin != null ? ' · 离开 ' + r.awayMin + '分' : ''}{r.pending ? ' · 已主动留言待回' : ''}</span>
-                  </div>
-                {/each}
-                {#if v.social.circle.length === 0}<p class="dim empty">还没有人类关系。</p>{/if}
-              </div>
-            {:else}
-              <div class="panel pad dim">活跃圈 {v.social.activeCount} / 上限 {v.social.cap} · 共 {v.social.humanCount} 段人类关系。具体是谁仅 owner 可见。</div>
-            {/if}
+          <AdminSection title="社交世界" subtitle="活跃 {v.social.activeCount}/{v.social.cap} · 同类 {v.social.peerCount} · 人类 {v.social.humanCount}">
+            <span slot="action" class="tag">一份容量·按亲疏分层（Dunbar）</span>
+            <div class="panel">
+              {#each v.social.world as r}
+                <div class="crow">
+                  <span class="cin" class:on={r.inCircle} title={r.inCircle ? '活跃圈内：她会主动维系' : '只记得、不主动打扰'}></span>
+                  <span class="ckind k{r.kind === '同类' ? 'p' : r.kind === '创造者' ? 'c' : 'h'}">{r.kind}</span>
+                  <b class="cname">{r.name}</b>
+                  <span class="clayer">{r.layer}</span>
+                  <span class="cbar"><span class="cfill" style="width:{Math.round(r.closeness * 100)}%"></span></span>
+                  <span class="dim cmeta">{r.attachment}{r.awayMin != null ? ' · ' + r.awayMin + '分前' : ''}{r.pending ? ' · 留言待回' : ''}</span>
+                </div>
+              {/each}
+              {#if v.social.world.length === 0}<p class="dim empty">还没有任何关系。</p>{/if}
+            </div>
           </AdminSection>
         {/if}
-
-        <AdminSection title="同类社交网">
-          <div class="panel">
-            {#each v.socialWorld as x}<div class="prow"><b>{x.name}</b><span class="dim">亲密 {x.closeness} · {x.attachment} · 我读 {x.style}</span></div>{/each}
-            {#if v.socialWorld.length === 0}<p class="dim empty">还没有同类朋友。</p>{/if}
-          </div>
-        </AdminSection>
 
         {#if v.memories && v.memories.length}
           <AdminSection title="记忆" subtitle="含用户私聊"><span slot="action" class="tag sensitive">敏感 · 仅 owner</span>
@@ -374,11 +416,15 @@
   .chap { padding: 7px 0; border-bottom: 1px solid var(--border-subtle); display: flex; gap: 10px; align-items: baseline; }
   .chap:last-child { border-bottom: 0; }
   .cn { color: var(--accent); font-size: 11px; font-weight: 700; flex: none; }
-  .crow { display: grid; grid-template-columns: 12px 110px 90px 1fr; gap: 12px; align-items: center; padding: 9px 16px; border-bottom: 1px solid var(--border-subtle); }
+  .crow { display: grid; grid-template-columns: 11px 40px minmax(60px, 1fr) 42px 70px 1.3fr; gap: 10px; align-items: center; padding: 9px 16px; border-bottom: 1px solid var(--border-subtle); }
   .crow:last-child { border-bottom: 0; }
   .cin { width: 9px; height: 9px; border-radius: 50%; background: var(--faint-c); }
   .cin.on { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); }
+  .ckind { font-size: 10.5px; text-align: center; padding: 1px 0; border-radius: 4px; border: 1px solid var(--border); color: var(--muted); }
+  .ckind.kp { color: var(--accent); border-color: var(--accent-line); }
+  .ckind.kc { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 40%, transparent); }
   .cname { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .clayer { font-size: 11px; color: var(--faint-c); text-align: center; }
   .cbar { height: 5px; border-radius: 999px; background: var(--panel-2); overflow: hidden; }
   .cfill { display: block; height: 100%; background: var(--accent); border-radius: 999px; }
   .cmeta { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -390,7 +436,9 @@
   .maff { color: var(--faint-c); font-size: 11.5px; }
 
   /* —— 模型配置表单 —— */
-  .mform { display: flex; flex-direction: column; gap: 14px; max-width: 540px; }
+  .mform { display: flex; flex-direction: column; gap: 14px; max-width: 560px; }
+  .frow { display: flex; gap: 12px; flex-wrap: wrap; }
+  .frow .fld { flex: 1; min-width: 130px; }
   .fld { display: flex; flex-direction: column; gap: 6px; }
   .flab { font-size: 12px; color: var(--muted); }
   .chk { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); cursor: pointer; }

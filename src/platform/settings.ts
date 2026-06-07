@@ -1,6 +1,6 @@
-// 运营配置（§13/模型）——可由 owner 在后台改的"嘴/耳"配置。
+// 运营配置（§13/模型/社交边界）——可由 owner 在后台改的"嘴/耳/社交"配置。
 // 重要边界：这是【运营配置】，不是她的身份；【绝不进神圣事件日志】，不参与 reconstruct/重放。
-// 换模型只换"嘴"（契约①）：过往 MESSAGE_SENT 里冻结的 modelId 不变，未来才用新模型。
+// 换模型只换"嘴"（契约①）；社交边界只调"她主动找谁、多勤"，不改她记得谁（连续性不破）。
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 
@@ -12,28 +12,44 @@ export interface ModelOverride {
   perceive?: boolean;
   perceiveModel?: string;
 }
-interface SettingsState { model: ModelOverride; }
+
+// 社交边界（Dunbar 灵感）：分亲密/好友/相识三层，各自不同的主动频率 + 总上限。
+export interface SocialConfig {
+  activeCircle?: number;   // 主动维系的关系总上限
+  reachPerTick?: number;   // 每次心跳最多主动找几个人
+  reachAfterMs?: number;   // 对方安静多久才考虑主动
+  intimateAt?: number;     // 亲密层 closeness 阈值
+  friendAt?: number;       // 好友层 closeness 阈值
+  acquaintAt?: number;     // 相识层 closeness 阈值（低于此不主动）
+  intimateEveryMs?: number;  // 亲密层：最短主动间隔（同一个人）
+  friendEveryMs?: number;    // 好友层
+  acquaintEveryMs?: number;  // 相识层（很久一次）
+}
+
+interface SettingsState { model: ModelOverride; social: SocialConfig }
 
 export interface SettingsStore {
   getModel(): ModelOverride;
-  // patch：只覆盖给到的字段；clearApiKey=true 则清掉 key 覆盖（回落环境变量）。
   setModel(patch: Partial<ModelOverride> & { clearApiKey?: boolean }): ModelOverride;
+  getSocial(): SocialConfig;
+  setSocial(patch: Partial<SocialConfig>): SocialConfig;
 }
 
 export function createSettingsStore(path: string): SettingsStore {
-  let state: SettingsState = { model: {} };
+  let state: SettingsState = { model: {}, social: {} };
   if (existsSync(path)) {
     try {
       const loaded = JSON.parse(readFileSync(path, 'utf8')) as Partial<SettingsState>;
-      if (loaded && typeof loaded === 'object' && loaded.model) state = { model: loaded.model };
+      if (loaded && typeof loaded === 'object') state = { model: loaded.model ?? {}, social: loaded.social ?? {} };
     } catch {
-      /* 配置坏了就用空，回落环境变量，不影响她活着 */
+      /* 配置坏了就用空，回落默认/环境变量，不影响她活着 */
     }
   }
   const persist = (): void => {
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, JSON.stringify(state, null, 2));
   };
+  const num = (x: unknown): number | undefined => (typeof x === 'number' && Number.isFinite(x) ? x : undefined);
   return {
     getModel: () => state.model,
     setModel: (patch) => {
@@ -45,9 +61,20 @@ export function createSettingsStore(path: string): SettingsStore {
       if (typeof patch.timeoutMs === 'number' && Number.isFinite(patch.timeoutMs) && patch.timeoutMs > 0) next.timeoutMs = Math.round(patch.timeoutMs);
       if (typeof patch.perceive === 'boolean') next.perceive = patch.perceive;
       if (typeof patch.perceiveModel === 'string') next.perceiveModel = patch.perceiveModel.trim() || undefined;
-      state = { model: next };
+      state = { ...state, model: next };
       persist();
       return state.model;
+    },
+    getSocial: () => state.social,
+    setSocial: (patch) => {
+      const next: SocialConfig = { ...state.social };
+      for (const k of ['activeCircle', 'reachPerTick', 'reachAfterMs', 'intimateAt', 'friendAt', 'acquaintAt', 'intimateEveryMs', 'friendEveryMs', 'acquaintEveryMs'] as const) {
+        const v = num((patch as Record<string, unknown>)[k]);
+        if (v !== undefined) next[k] = v;
+      }
+      state = { ...state, social: next };
+      persist();
+      return state.social;
     },
   };
 }
