@@ -120,18 +120,24 @@
   }
   async function decide(id, ok) { await api.decideRecharge(id, ok); load(); }
   async function block(uid, un) { await api.block(uid, un); load(); }
-  // 接生一条新命：后台即时孵化（写入 genesis 事件 + 与所有已有生命体互开关系），出生种子冻结、不可改写。
+  // 一键填入：4 原型各 3 条、彼此尽量拉开、醒点错峰的 12 个亮星名（消费产品友好、好记）。
+  const RECOMMENDED = 'sirius fomalhaut atlas altair regulus arcturus polaris achernar aldebaran antares procyon capella';
+  function fillRecommended() { newLifeId = RECOMMENDED; }
+  // 接生一/多条新命：逐条串行孵化（写入 genesis 事件 + 与所有已有生命体互开关系），出生种子冻结、不可改写。
   async function birth() {
-    const id = (newLifeId || '').trim().toLowerCase();
-    if (!id) return;
-    if (!confirm(`⚠️ 接生新生命体「${id}」？她一旦出生即【永生】、出生种子终生冻结、不可删除/改写。确定？`)) return;
+    const ids = [...new Set((newLifeId || '').toLowerCase().split(/[\s,，、]+/).map((s) => s.trim()).filter(Boolean))];
+    if (ids.length === 0) return;
+    if (!confirm(`⚠️ 接生 ${ids.length} 个新生命体：${ids.join('、')}？\n她们一旦出生即【永生】、出生种子终生冻结、不可删除/改写。确定？`)) return;
     birthing = true; birthMsg = '';
-    try {
-      const r = await api.createLife(id);
-      birthMsg = `✓ 「${r.id}」已出生 · 现共 ${r.total} 条命`;
-      newLifeId = '';
-      await load(); // 刷新总览里的生命体表
-    } catch (e) { birthMsg = '✗ ' + e.message; } finally { birthing = false; }
+    const ok = []; const fail = [];
+    for (const id of ids) {
+      try { const r = await api.createLife(id); ok.push(r.id); }
+      catch (e) { fail.push(`${id}（${e.message}）`); }
+    }
+    birthMsg = `✓ 出生 ${ok.length} 个${ok.length ? '：' + ok.join('、') : ''}` + (fail.length ? `　·　✗ ${fail.length} 个未生：${fail.join('；')}` : '');
+    if (ok.length) newLifeId = '';
+    await load(); // 刷新总览里的生命体表
+    birthing = false;
   }
 
   onMount(() => { load(); timer = setInterval(() => { if (tab === 'overview' || tab === 'activity') load(); }, 4000); });
@@ -196,16 +202,19 @@
       {/if}
 
       {#if tab === 'birth'}
-        <AdminSection title="接生新生命体" subtitle="后台孵化一条新的连续生命——出生即【永生】，先天种子终生冻结、不可删除/改写。她一出生就与所有现有生命体互相认识。即时生效、无需重启。">
+        <AdminSection title="接生新生命体" subtitle="后台孵化新的连续生命——出生即【永生】，先天种子终生冻结、不可删除/改写。她一出生就与所有现有生命体互相认识。即时生效、无需重启。支持一次多条（空格/逗号/换行分隔）。">
           <span slot="action" class="tag sensitive">不可逆 · 仅 owner</span>
           <div class="panel pad mform">
-            <label class="fld"><span class="flab">生命体 id（小写字母开头，2–24 位字母/数字/_/-，决定她的先天气质）</span>
-              <input class="ainput" bind:value={newLifeId} autocomplete="off" placeholder="如 sirius / altair / polaris"
-                on:keydown={(e) => e.key === 'Enter' && !birthing && birth()} /></label>
-            <div class="mrow"><button class="abtn" on:click={birth} disabled={birthing || !newLifeId.trim()}>{birthing ? '接生中…' : '接生'}</button></div>
-            {#if birthMsg}<p class="msg" class:bad={birthMsg.startsWith('✗')}>{birthMsg}</p>{/if}
+            <label class="fld"><span class="flab">生命体 id（小写字母开头，2–24 位字母/数字/_/-，决定她的先天气质）· 一次可填多条</span>
+              <textarea class="ainput wta" rows="3" bind:value={newLifeId} autocomplete="off"
+                placeholder={"sirius altair polaris\n或逗号/换行分隔多条"}></textarea></label>
+            <div class="mrow">
+              <button class="abtn" on:click={birth} disabled={birthing || !newLifeId.trim()}>{birthing ? '接生中…' : '接生'}</button>
+              <button class="abtn abtn-ghost" on:click={fillRecommended} disabled={birthing}>填入推荐的 12 个</button>
+            </div>
+            {#if birthMsg}<p class="msg" class:bad={birthMsg.includes('✗')}>{birthMsg}</p>{/if}
             <p class="hint">第一性原理：id 经稳定哈希落到某个先天<b>原型</b>（4 选 1）再叠加按 id 的确定性<b>个体抖动</b>——所以每条命天生各不相同，且出生地时区错峰（任一时刻有的醒有的睡）。出生只写一条 <code>GENESIS</code> 事件（ground truth），状态由日志确定性重建。出生即永生：可休眠/苏醒，但<b>不能删除</b>。</p>
-            <p class="hint">想批量生：依次填入下面任一名字、回车即可（每条立刻出现在「总览」表里）：<br /><code>sirius altair polaris antares rigel capella deneb spica arcturus mira atlas maia</code></p>
+            <p class="hint">推荐的 12 个（4 原型各 3 条、彼此拉开、好记的亮星名）：<br /><code>sirius fomalhaut atlas · altair regulus arcturus · polaris achernar aldebaran · antares procyon capella</code></p>
           </div>
         </AdminSection>
       {/if}
