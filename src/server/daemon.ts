@@ -16,6 +16,8 @@ import {
   createFileEventStore,
   createMouth,
   createPerceiver,
+  createTemplateMouth,
+  meterMouth,
   endRelationship,
   genesisPayloadFor,
   makeTick,
@@ -58,7 +60,9 @@ const peerId = (id: string): string => `peer_${id}`;
 const now = (): string => new Date().toISOString();
 
 const mouth = createMouth();
+const templateMouth = createTemplateMouth(); // 余额耗尽时的免费兜底嘴（她仍回应）
 const perceiver = createPerceiver() ?? undefined;
+const MODEL_COST = Number(process.env.VEGA_MODEL_COST ?? 1); // 每条模型回应计费（额度单位）
 
 // 平台身份/账号层（多用户）：node:sqlite，与神圣日志物理分离。
 const ACCOUNTS_DB = process.env.VEGA_ACCOUNTS_DB ?? join(DATA_DIR, 'accounts.db');
@@ -451,8 +455,12 @@ const server = createServer(async (req, res) => {
         const content = String(b.content ?? '').slice(0, 4000).trim();
         if (content === '') return send(res, 400, { error: 'content required' });
         if (!snapOf(life2).awake) return send(res, 200, { awake: false, note: '她在更深的睡眠里，暂不回应。' });
-        const r = await userSay(life2.store, mouth, accounts.relIdFor(me.id), me.handle, content, now(), perceiver);
-        return send(res, 200, { awake: true, utterance: r.utterance, verdict: r.verdict, emotion: r.snapshot.emotion });
+        // 额度只卡"嘴"：余额够走模型并计费；不够退免费模板嘴（她仍回应、关系照长）。她的状态不受钱影响。
+        const { mouth: useMouth, charge } = meterMouth(mouth, templateMouth, accounts.balance(me.id), MODEL_COST);
+        const r = await userSay(life2.store, useMouth, accounts.relIdFor(me.id), me.handle, content, now(), charge ? perceiver : undefined);
+        if (charge && r.verdict === 'accepted') accounts.debit(me.id, charge, 'model', life2.id); // 仅真模型且产出有效才扣
+        const balance = accounts.balance(me.id);
+        return send(res, 200, { awake: true, utterance: r.utterance, verdict: r.verdict, emotion: r.snapshot.emotion, balance, voice: useMouth.id === 'template' ? 'plain' : 'rich' });
       }
       return send(res, 404, { error: 'not found' });
     }

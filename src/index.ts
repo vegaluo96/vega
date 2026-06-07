@@ -65,4 +65,4 @@ export {
   type LoginResult,
   type RechargeRequest,
 } from './platform/accounts.ts';
-export { ensureUserRelationship, userSay } from './platform/conversation.ts';
+export { ensureUserRelationship, userSay, meterMouth } from './platform/conversation.ts';

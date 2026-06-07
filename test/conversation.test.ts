@@ -9,10 +9,12 @@ import {
   createFileEventStore,
   createTemplateMouth,
   genesisPayloadFor,
+  meterMouth,
   reconstruct,
   runTurn,
   userSay,
   type DurableEventStore,
+  type Mouth,
 } from '../src/index.ts';
 
 let ms = Date.parse('2026-01-01T00:00:00.000Z');
@@ -49,6 +51,22 @@ test('多用户私密隔离：两个用户对同一条命，各自一段 u_<id> 
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('额度只卡"嘴"：模型按余额放行、不足退模板嘴；模板嘴永远免费（她不因钱而哑）', () => {
+  const model: Mouth = { id: 'gemini-x', speak: () => Promise.resolve('（模型措辞）') };
+  const tmpl = createTemplateMouth();
+  // 配了真模型、余额够 → 用模型、计费
+  const a = meterMouth(model, tmpl, 100, 1);
+  assert.equal(a.mouth.id, 'gemini-x');
+  assert.equal(a.charge, 1);
+  // 配了真模型、余额不足 → 退模板嘴、不计费（她仍回应）
+  const b = meterMouth(model, tmpl, 0, 1);
+  assert.equal(b.mouth.id, 'template');
+  assert.equal(b.charge, 0);
+  // 本就是模板嘴(没配模型) → 永远免费
+  const c = meterMouth(tmpl, tmpl, 100, 1);
+  assert.equal(c.charge, 0);
 });
 
 test('账号 → 关系 → 对话 端到端：注册用户用其 u_<id> 和她说话、她记住的是这个人', async () => {

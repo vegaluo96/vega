@@ -18,6 +18,13 @@ export function ensureUserRelationship(store: DurableEventStore, relId: string, 
   }
 }
 
+// 额度只卡"嘴"、不卡"命"（§13）：配了真模型且余额够 → 用模型（计费）；否则 → 免费模板嘴。
+// 余额耗尽时她【仍回应、仍记得、关系照长】，只是话朴素些；模板嘴零成本，白嫖用户不烧 token。
+export function meterMouth(realMouth: Mouth, templateMouth: Mouth, balance: number, cost: number): { mouth: Mouth; charge: number } {
+  const useModel = realMouth.id !== 'template' && balance >= cost;
+  return { mouth: useModel ? realMouth : templateMouth, charge: useModel ? cost : 0 };
+}
+
 // 一个具体用户对一条命说话：确保关系 → 走神圣链路 converse（用 u_<userId>，不再是写死的 r_creator）。
 export async function userSay(
   store: DurableEventStore,
