@@ -46,13 +46,14 @@ export { peerExchange, pickSocialPair, type Participant, type PeerTurn, type Soc
 export { ARCHETYPES, archetypeFor, innateSeedFor, genesisPayloadFor, type Archetype } from './engine/seeds.ts';
 export {
   createMouth,
+  createDynamicMouth,
   createTemplateMouth,
   createApiyiMouth,
   type Mouth,
   type MouthInput,
   type ApiyiConfig,
 } from './model/mouth.ts';
-export { createPerceiver, createApiyiPerceiver, type Perceiver, type PerceiverConfig } from './model/perceiver.ts';
+export { createPerceiver, createDynamicPerceiver, createApiyiPerceiver, type Perceiver, type PerceiverConfig } from './model/perceiver.ts';
 // 平台边缘层（非内核）：身份/账号 + 多用户对话。
 export {
   createAccountStore,
@@ -69,3 +70,4 @@ export { ensureUserRelationship, userSay, meterMouth } from './platform/conversa
 export { createSerializer, type Serializer } from './platform/serialize.ts';
 export { createEventBus, visibleTo, type EventBus, type BusEvent } from './platform/eventbus.ts';
 export { generateVapidKeys, sendPush, type VapidKeys, type PushSubscription } from './platform/webpush.ts';
+export { createSettingsStore, type SettingsStore, type ModelOverride } from './platform/settings.ts';

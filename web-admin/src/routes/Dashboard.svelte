@@ -13,7 +13,11 @@
   let lastLoaded = 0;
 
   const TABS = [['overview', '总览'], ['activity', '活动流'], ['recharges', '充值'], ['users', '用户']];
-  const TAB_LABEL = { overview: '总览', activity: '活动流', recharges: '充值审批', users: '用户', life: '生命详情' };
+  const TAB_LABEL = { overview: '总览', activity: '活动流', recharges: '充值审批', users: '用户', life: '生命详情', model: '模型配置' };
+
+  // 模型配置（仅 owner）表单状态
+  let mform = { baseUrl: '', model: '', apiKey: '', timeoutMs: 20000, perceive: false, perceiveModel: '' };
+  let saveMsg = '', testMsg = '', saving = false, testing = false;
 
   async function load() {
     error = '';
@@ -23,11 +27,37 @@
       else if (tab === 'recharges') data = { rows: await api.recharges() };
       else if (tab === 'users') data = { rows: await api.users() };
       else if (tab === 'life') data = { life: await api.life(curLife), well: await api.wellbeing(curLife) };
+      else if (tab === 'model') {
+        const m = await api.modelConfig();
+        data = { model: m };
+        mform = { baseUrl: m.baseUrl, model: m.model, apiKey: '', timeoutMs: m.timeoutMs, perceive: m.perceive, perceiveModel: m.perceiveModel || '' };
+        saveMsg = ''; testMsg = '';
+      }
       lastLoaded = Date.now();
     } catch (e) {
       error = e.message;
       if (e.status === 401 || e.status === 403) clearSession();
     }
+  }
+
+  async function saveModel() {
+    saving = true; saveMsg = ''; testMsg = '';
+    try {
+      const patch = { baseUrl: mform.baseUrl, model: mform.model, timeoutMs: Number(mform.timeoutMs), perceive: mform.perceive, perceiveModel: mform.perceiveModel };
+      if (mform.apiKey && mform.apiKey.trim()) patch.apiKey = mform.apiKey.trim();
+      const m = await api.saveModelConfig(patch);
+      data = { model: m }; mform.apiKey = '';
+      saveMsg = '已保存 · 即时生效（无需重启）';
+    } catch (e) { saveMsg = '✗ ' + e.message; } finally { saving = false; }
+  }
+  async function testModel() {
+    testing = true; testMsg = '测试中…';
+    try { const r = await api.testModel(); testMsg = r.ok ? `✓ ${r.model} 通了：${r.sample}` : `✗ ${r.error}`; }
+    catch (e) { testMsg = '✗ ' + e.message; } finally { testing = false; }
+  }
+  async function clearKey() {
+    saveMsg = ''; const m = await api.saveModelConfig({ clearApiKey: true });
+    data = { model: m }; saveMsg = '已清除后台 Key 覆盖 · 回落到环境变量';
   }
   function go(t) { tab = t; data = {}; load(); }
   function openLife(id) { curLife = id; tab = 'life'; data = {}; load(); }
@@ -50,6 +80,7 @@
       {#each TABS as [k, label]}
         <button class="navi" class:on={tab === k || (tab === 'life' && k === 'overview')} on:click={() => go(k)}>{label}</button>
       {/each}
+      {#if role === 'owner'}<button class="navi" class:on={tab === 'model'} on:click={() => go('model')}>模型</button>{/if}
     </nav>
     <button class="navi logout" on:click={clearSession}>登出</button>
   </aside>
@@ -150,6 +181,37 @@
                 {/each}
               </tbody>
             </table>
+          </div>
+        </AdminSection>
+      {/if}
+
+      {#if tab === 'model' && data.model}
+        {@const m = data.model}
+        <AdminSection title="模型配置" subtitle="她的「嘴」——只换措辞，不动状态/记忆。改完即时生效，无需重启。">
+          <span slot="action" class="tag {m.active ? 'ok' : 'sensitive'}">{m.active ? '模型在线 · ' + m.model : '离线模板嘴'}</span>
+          <div class="panel pad mform">
+            <label class="fld"><span class="flab">模型名</span>
+              <input class="ainput" bind:value={mform.model} placeholder="如 qwen-long / gpt-4o-mini / deepseek-chat" /></label>
+            <label class="fld"><span class="flab">Base URL（OpenAI 兼容，结尾 /v1）</span>
+              <input class="ainput" bind:value={mform.baseUrl} placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1" /></label>
+            <label class="fld"><span class="flab">API Key {#if m.apiKeySet}<span class="faint">· 当前 {m.apiKeyMasked}（来自{m.apiKeyFrom === 'override' ? '后台' : '环境变量'}）</span>{/if}</span>
+              <input class="ainput" type="password" bind:value={mform.apiKey} autocomplete="off" placeholder={m.apiKeySet ? '留空＝不改' : '粘贴你的 API Key'} /></label>
+            <label class="fld"><span class="flab">超时（毫秒）</span>
+              <input class="ainput" type="number" bind:value={mform.timeoutMs} /></label>
+            <label class="chk"><input type="checkbox" bind:checked={mform.perceive} /> 开启「模型当耳朵」（感知自然语言；每条多一次调用）</label>
+            {#if mform.perceive}
+              <label class="fld"><span class="flab">感知模型（留空＝同上）</span>
+                <input class="ainput" bind:value={mform.perceiveModel} placeholder={mform.model} /></label>
+            {/if}
+
+            <div class="mrow">
+              <button class="abtn" on:click={saveModel} disabled={saving}>{saving ? '保存中…' : '保存'}</button>
+              <button class="abtn abtn-ghost" on:click={testModel} disabled={testing}>测试连接</button>
+              {#if m.apiKeyFrom === 'override'}<button class="abtn abtn-ghost" on:click={clearKey}>清除后台 Key</button>{/if}
+            </div>
+            {#if saveMsg}<p class="msg" class:bad={saveMsg.startsWith('✗')}>{saveMsg}</p>{/if}
+            {#if testMsg}<p class="msg" class:bad={testMsg.startsWith('✗')}>{testMsg}</p>{/if}
+            <p class="hint">换 <b>qwen-long</b>：Base URL 填 DashScope 兼容端点 <code>https://dashscope.aliyuncs.com/compatible-mode/v1</code> + 你的 DashScope Key；或继续用 apiyi 聚合端点、模型名填 <code>qwen-long</code>。模型报错/余额耗尽时她自动回落离线模板嘴，照样活着。</p>
           </div>
         </AdminSection>
       {/if}
@@ -297,6 +359,17 @@
   .mem { padding: 9px 16px; border-bottom: 1px solid var(--border-subtle); font-size: 13px; line-height: 1.55; }
   .mem:last-child { border-bottom: 0; }
   .maff { color: var(--faint-c); font-size: 11.5px; }
+
+  /* —— 模型配置表单 —— */
+  .mform { display: flex; flex-direction: column; gap: 14px; max-width: 540px; }
+  .fld { display: flex; flex-direction: column; gap: 6px; }
+  .flab { font-size: 12px; color: var(--muted); }
+  .chk { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); cursor: pointer; }
+  .mrow { display: flex; gap: 10px; margin-top: 4px; }
+  .msg { font-size: 13px; margin: 4px 0 0; color: var(--success); }
+  .msg.bad { color: var(--danger); }
+  .hint { font-size: 12px; color: var(--faint-c); line-height: 1.7; margin: 8px 0 0; }
+  .hint code { background: var(--panel-2); border: 1px solid var(--border-subtle); border-radius: 4px; padding: 1px 5px; font-size: 11.5px; }
 
   /* —— 平板/手机降级：侧栏转顶部，表格可横向滚动 —— */
   @media (max-width: 760px) {

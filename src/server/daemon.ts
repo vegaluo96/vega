@@ -15,8 +15,9 @@ import {
   converse,
   createAccountStore,
   createFileEventStore,
-  createMouth,
-  createPerceiver,
+  createDynamicMouth,
+  createDynamicPerceiver,
+  createSettingsStore,
   createEventBus,
   createSerializer,
   createTemplateMouth,
@@ -38,11 +39,13 @@ import {
   userSay,
   writeCheckpoint,
   type Account,
+  type ApiyiConfig,
   type DerivedSnapshot,
   type DurableEventStore,
   type EventDraft,
   type LifeEvent,
   type MessageSentPayload,
+  type PerceiverConfig,
   type RState,
   type SocialPair,
 } from '../index.ts';
@@ -69,9 +72,44 @@ const HOST_CONN = 'r_host'; // 宿主/基质连接（保持苏醒）
 const peerId = (id: string): string => `peer_${id}`;
 const now = (): string => new Date().toISOString();
 
-const mouth = createMouth();
+// 运营配置：可由 owner 在后台改的"嘴/耳"配置（settings.json，不进神圣日志、不参与重放）。
+// 当前生效配置 = 后台覆盖 ⊕ 环境变量兜底；没 key = null（回落离线模板嘴）。改了即时生效、无需重启。
+const settings = createSettingsStore(join(DATA_DIR, 'settings.json'));
+const DEFAULT_BASE = 'https://api.apiyi.com/v1';
+const envTimeout = (): number => (process.env.VEGA_MODEL_TIMEOUT_MS ? Number(process.env.VEGA_MODEL_TIMEOUT_MS) : 20_000);
+function effMouthConfig(): ApiyiConfig | null {
+  const o = settings.getModel();
+  const apiKey = (o.apiKey ?? process.env.VEGA_MODEL_API_KEY ?? '').trim();
+  if (!apiKey) return null;
+  return { baseUrl: o.baseUrl ?? process.env.VEGA_MODEL_BASE_URL ?? DEFAULT_BASE, apiKey, model: o.model ?? process.env.VEGA_MODEL ?? 'gpt-4o-mini', timeoutMs: o.timeoutMs ?? envTimeout() };
+}
+function effPerceiveConfig(): PerceiverConfig | null {
+  const o = settings.getModel();
+  const apiKey = (o.apiKey ?? process.env.VEGA_MODEL_API_KEY ?? '').trim();
+  const on = o.perceive ?? (process.env.VEGA_PERCEIVE === '1');
+  if (!apiKey || !on) return null;
+  return { baseUrl: o.baseUrl ?? process.env.VEGA_MODEL_BASE_URL ?? DEFAULT_BASE, apiKey, model: o.perceiveModel ?? o.model ?? process.env.VEGA_PERCEIVE_MODEL ?? process.env.VEGA_MODEL ?? 'gemini-2.5-flash-lite', timeoutMs: o.timeoutMs ?? envTimeout() };
+}
+const mouth = createDynamicMouth(effMouthConfig);
 const templateMouth = createTemplateMouth(); // 余额耗尽时的免费兜底嘴（她仍回应）
-const perceiver = createPerceiver() ?? undefined;
+const perceiver = createDynamicPerceiver(effPerceiveConfig);
+const maskKey = (k: string): string => { const s = k.trim(); return s.length > 8 ? `${s.slice(0, 4)}…${s.slice(-4)}` : (s ? '••••' : ''); };
+// 后台展示用：当前生效的模型配置（key 只回脱敏值，绝不回明文）。
+function modelStatus(): Record<string, unknown> {
+  const o = settings.getModel();
+  const rawKey = (o.apiKey ?? process.env.VEGA_MODEL_API_KEY ?? '').trim();
+  return {
+    active: !!effMouthConfig(),
+    baseUrl: o.baseUrl ?? process.env.VEGA_MODEL_BASE_URL ?? DEFAULT_BASE,
+    model: o.model ?? process.env.VEGA_MODEL ?? 'gpt-4o-mini',
+    timeoutMs: o.timeoutMs ?? envTimeout(),
+    apiKeySet: rawKey !== '',
+    apiKeyMasked: rawKey ? maskKey(rawKey) : null,
+    apiKeyFrom: o.apiKey ? 'override' : (process.env.VEGA_MODEL_API_KEY ? 'env' : 'none'),
+    perceive: o.perceive ?? (process.env.VEGA_PERCEIVE === '1'),
+    perceiveModel: o.perceiveModel ?? o.model ?? process.env.VEGA_PERCEIVE_MODEL ?? process.env.VEGA_MODEL ?? 'gemini-2.5-flash-lite',
+  };
+}
 const MODEL_COST = Number(process.env.VEGA_MODEL_COST ?? 1); // 每条模型回应计费（额度单位）
 const CLAWBOT_SECRET = process.env.VEGA_CLAWBOT_SECRET; // 微信网关(clawbot)共享密钥；未配则微信端点禁用
 const serializer = createSerializer(); // 每命串行：并发用户的回合不穿插
@@ -795,6 +833,50 @@ const server = createServer(async (req, res) => {
       if (!acct || (acct.role !== 'owner' && acct.role !== 'steward')) return send(res, 403, { error: 'forbidden' });
       const owner = acct.role === 'owner';
       const path = url.split('?')[0];
+
+      // —— 模型配置（仅 owner）：自助换模型/改 base/key/超时/感知，即时生效、无需重启。
+      // 换的只是"嘴"（契约①）；配置不进神圣日志、不参与重放；key 只回脱敏。
+      if (path === '/admin/model-config' || path === '/admin/model-config/test') {
+        if (!owner) return send(res, 403, { error: '仅 owner 可查看/修改模型配置' });
+        if (req.method === 'GET' && path === '/admin/model-config') return send(res, 200, modelStatus());
+        if (req.method === 'POST' && path === '/admin/model-config') {
+          const b = await readJson(req);
+          const patch: Record<string, unknown> = {};
+          if (typeof b.baseUrl === 'string') patch.baseUrl = b.baseUrl;
+          if (typeof b.model === 'string') patch.model = b.model;
+          if (typeof b.perceiveModel === 'string') patch.perceiveModel = b.perceiveModel;
+          if (typeof b.perceive === 'boolean') patch.perceive = b.perceive;
+          if (b.timeoutMs !== undefined && b.timeoutMs !== '') patch.timeoutMs = Number(b.timeoutMs);
+          if (b.clearApiKey === true) patch.clearApiKey = true;
+          // 收到脱敏值(含 …)视为"未改"，不覆盖明文 key。
+          else if (typeof b.apiKey === 'string' && b.apiKey.trim() !== '' && !b.apiKey.includes('…')) patch.apiKey = b.apiKey;
+          settings.setModel(patch);
+          return send(res, 200, modelStatus());
+        }
+        if (req.method === 'POST' && path === '/admin/model-config/test') {
+          const cfg = effMouthConfig();
+          if (!cfg) return send(res, 200, { ok: false, error: '未配置 API Key——当前是离线模板嘴' });
+          try {
+            const ctrl = new AbortController();
+            const timer = setTimeout(() => ctrl.abort(), Math.min(cfg.timeoutMs, 15_000));
+            const r = await fetch(`${cfg.baseUrl}/chat/completions`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.apiKey}` },
+              body: JSON.stringify({ model: cfg.model, messages: [{ role: 'user', content: '只回一个字：在' }], max_tokens: 16, temperature: 0 }),
+              signal: ctrl.signal,
+            });
+            clearTimeout(timer);
+            if (!r.ok) { const tx = await r.text().catch(() => ''); return send(res, 200, { ok: false, model: cfg.model, error: `HTTP ${r.status} ${tx.slice(0, 200)}` }); }
+            const d = (await r.json()) as { choices?: { message?: { content?: string } }[] };
+            const sample = (d.choices?.[0]?.message?.content ?? '(空响应)').toString().slice(0, 120);
+            return send(res, 200, { ok: true, model: cfg.model, sample });
+          } catch (e) {
+            return send(res, 200, { ok: false, model: cfg.model, error: (e as Error).message || '请求失败' });
+          }
+        }
+        return send(res, 405, { error: 'method not allowed' });
+      }
+
       if (req.method === 'GET' && path === '/admin/overview') {
         return send(res, 200, {
           role: acct.role,

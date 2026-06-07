@@ -72,3 +72,23 @@ export function createPerceiver(env: Record<string, string | undefined> = proces
     timeoutMs: env.VEGA_MODEL_TIMEOUT_MS ? Number(env.VEGA_MODEL_TIMEOUT_MS) : 20_000,
   });
 }
+
+// 动态感知器：按【当前配置】解析。resolve() 返回 null（关闭/没 key）= perceive 直接回 null，
+// 不调模型、零成本，等价于"没有耳朵"（converse 退回确定性词表）。后台改配置即时生效。
+export function createDynamicPerceiver(resolve: () => PerceiverConfig | null): Perceiver {
+  let cache: { sig: string; p: Perceiver } | null = null;
+  const current = (): Perceiver | null => {
+    const cfg = resolve();
+    if (!cfg) return null;
+    const sig = `${cfg.baseUrl} ${cfg.model} ${cfg.timeoutMs} ${cfg.apiKey}`;
+    if (!cache || cache.sig !== sig) cache = { sig, p: createApiyiPerceiver(cfg) };
+    return cache.p;
+  };
+  return {
+    get id(): string { return current()?.id ?? 'off'; },
+    perceive: (content: string): Promise<Perception | null> => {
+      const p = current();
+      return p ? p.perceive(content) : Promise.resolve(null);
+    },
+  };
+}

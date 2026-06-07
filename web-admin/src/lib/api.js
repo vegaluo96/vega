@@ -24,6 +24,9 @@ export const api = {
   block: (userId, unblock) => req('POST', '/admin/users/block', { userId, unblock }),
   life: (id) => req('GET', `/admin/lives/${id}`),
   wellbeing: (id) => req('GET', `/admin/lives/${id}/wellbeing`),
+  modelConfig: () => req('GET', '/admin/model-config'),
+  saveModelConfig: (patch) => req('POST', '/admin/model-config', patch),
+  testModel: () => req('POST', '/admin/model-config/test'),
 };
 export const setSession = (t) => session.set(t || '');
 export const clearSession = () => session.set('');
