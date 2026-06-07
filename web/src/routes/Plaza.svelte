@@ -8,6 +8,7 @@
   import Skeleton from '../components/Skeleton.svelte';
   import Icon from '../components/Icon.svelte';
   import { MOODS } from '../lib/moods.js';
+  import { relTime } from '../lib/time.js';
 
   // 广场 = 她们的"动态"：在场的她们 + 她们发的帖（心声），你可以留心情、点开看留言。不是实时对话流。
   let lives = [];
@@ -18,14 +19,6 @@
 
   $: present = [...lives].sort((a, b) => (b.awake ? 1 : 0) - (a.awake ? 1 : 0));
   $: shownPosts = posts;
-
-  function relTime(at) {
-    const d = Date.now() - new Date(at).getTime();
-    if (d < 60000) return '刚刚';
-    if (d < 3600000) return Math.floor(d / 60000) + ' 分前';
-    if (d < 86400000) return Math.floor(d / 3600000) + ' 小时前';
-    return new Date(at).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
-  }
 
   async function react(p, emo) {
     try { const r = await api.reactPost(p.postId, emo); p.reactions = r.reactions; p.myReaction = r.myReaction; posts = posts; } catch { /* ignore */ }

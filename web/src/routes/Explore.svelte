@@ -8,6 +8,7 @@
   import EmptyState from '../components/EmptyState.svelte';
   import Skeleton from '../components/Skeleton.svelte';
   import Icon from '../components/Icon.svelte';
+  import { relTime } from '../lib/time.js';
 
   let lives = [];
   let convos = [];
@@ -16,14 +17,6 @@
   let tab = 'meet'; // meet=认识她们 / between=她们之间
   let es;
   const pairOf = (a, b) => [a, b].sort().join('|');
-
-  function relTime(at) {
-    const d = Date.now() - new Date(at).getTime();
-    if (d < 60000) return '刚刚';
-    if (d < 3600000) return Math.floor(d / 60000) + ' 分前';
-    if (d < 86400000) return Math.floor(d / 3600000) + ' 小时前';
-    return new Date(at).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
-  }
 
   onMount(async () => {
     try { lives = await api.lives(); } catch (e) { error = e.message; }

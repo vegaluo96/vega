@@ -6,19 +6,12 @@
   import LifeAvatar from '../components/LifeAvatar.svelte';
   import EmptyState from '../components/EmptyState.svelte';
   import Skeleton from '../components/Skeleton.svelte';
+  import { relTime } from '../lib/time.js';
 
   let notes = [];
   let error = '';
   let loading = true;
   let es;
-
-  function relTime(at) {
-    const d = Date.now() - new Date(at).getTime();
-    if (d < 60000) return '刚刚';
-    if (d < 3600000) return Math.floor(d / 60000) + ' 分前';
-    if (d < 86400000) return Math.floor(d / 3600000) + ' 小时前';
-    return new Date(at).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
-  }
 
   onMount(async () => {
     try { notes = await api.notifications(); } catch (e) { error = e.message; }

@@ -6,17 +6,11 @@
   import Icon from '../components/Icon.svelte';
   import Skeleton from '../components/Skeleton.svelte';
   import { MOODS } from '../lib/moods.js';
+  import { relTime } from '../lib/time.js';
 
   export let postId;
   let post = null, error = '', loading = true, draft = '', cerr = '';
 
-  function relTime(at) {
-    const d = Date.now() - new Date(at).getTime();
-    if (d < 60000) return '刚刚';
-    if (d < 3600000) return Math.floor(d / 60000) + ' 分前';
-    if (d < 86400000) return Math.floor(d / 3600000) + ' 小时前';
-    return new Date(at).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
-  }
   onMount(async () => {
     try { post = await api.feedPost(postId); } catch (e) { error = e.message; }
     loading = false;

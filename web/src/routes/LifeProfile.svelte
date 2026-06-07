@@ -23,7 +23,7 @@
 
 <header class="head">
   <button class="back" on:click={() => navigate('plaza')} aria-label="返回"><Icon name="back" size={24} /></button>
-  <span class="htitle">{p ? p.id : ''}</span>
+  <span class="htitle">她的主页</span>
   <span class="hspace"></span>
 </header>
 
