@@ -15,9 +15,12 @@ const pick = (o: Record<string, unknown>, ...keys: string[]): unknown => { for (
 export function createIlink(cfg: IlinkConfig = {}) {
   const base = (cfg.base ?? 'https://ilinkai.weixin.qq.com').replace(/\/$/, '');
   const tmo = cfg.timeoutMs ?? 30_000;
-  async function call(method: string, url: string, body?: unknown, headers: Record<string, string> = {}): Promise<Record<string, unknown>> {
+  // 扫码联调（取码/查状态）要【快超时】：慢一次就返回，让前端继续轮询，不要卡满 30s 把浏览器/反代拖到"连接错误"。
+  // 只有 getupdates 长轮询才用长超时。
+  const FAST = 12_000;
+  async function call(method: string, url: string, body?: unknown, headers: Record<string, string> = {}, timeoutMs: number = tmo): Promise<Record<string, unknown>> {
     const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), tmo);
+    const t = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
       const r = await fetch(url, { method, headers: { 'Content-Type': 'application/json', ...headers }, body: body !== undefined ? JSON.stringify(body) : undefined, signal: ctrl.signal });
       const txt = await r.text();
@@ -30,14 +33,14 @@ export function createIlink(cfg: IlinkConfig = {}) {
   return {
     base,
     async getQrcode(): Promise<{ ok: boolean; qr?: QrStart; raw: unknown }> {
-      const raw = await call('GET', `${base}/ilink/bot/get_bot_qrcode?bot_type=3`);
+      const raw = await call('GET', `${base}/ilink/bot/get_bot_qrcode?bot_type=3`, undefined, {}, FAST);
       const d = dataOf(raw);
       const qrcode = String(pick(d, 'qrcode', 'qrcode_token') ?? '');
       const url = String(pick(d, 'qrcode_url', 'qrcode_img_content') ?? '');
       return qrcode ? { ok: true, qr: { qrcode, qrcodeUrl: url }, raw } : { ok: false, raw };
     },
     async getStatus(qrcode: string): Promise<QrStatus> {
-      const raw = await call('GET', `${base}/ilink/bot/get_qrcode_status?qrcode=${encodeURIComponent(qrcode)}`);
+      const raw = await call('GET', `${base}/ilink/bot/get_qrcode_status?qrcode=${encodeURIComponent(qrcode)}`, undefined, {}, FAST);
       const d = dataOf(raw);
       const c = (d.credentials as Record<string, unknown>) ?? d;
       return {

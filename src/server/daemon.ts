@@ -1048,9 +1048,10 @@ const server = createServer(async (req, res) => {
       }
       // 微信扫码连接（ZSKY 自己当机器人）：① 取登录二维码 ② 轮询状态，confirmed 即绑定+起收发循环。
       if (req.method === 'POST' && url === '/api/wechat/connect/start') {
-        const r = await ilink.getQrcode();
+        let r = await ilink.getQrcode();
+        if (!r.ok) r = await ilink.getQrcode(); // 偶发超时再试一次，别让一次抖动直接变"连接错误"
         console.log('[wechat] getQrcode ->', JSON.stringify(r.raw).slice(0, 400));
-        if (!r.ok || !r.qr) return send(res, 502, { error: 'iLink 取二维码失败（看服务器日志）', detail: r.raw });
+        if (!r.ok || !r.qr) return send(res, 502, { error: 'iLink 取二维码失败（多为网络/超时，稍后重点）', detail: r.raw });
         return send(res, 200, { qrcode: r.qr.qrcode, qrcodeUrl: r.qr.qrcodeUrl });
       }
       if (req.method === 'POST' && url === '/api/wechat/connect/poll') {
