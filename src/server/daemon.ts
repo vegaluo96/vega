@@ -666,6 +666,29 @@ const server = createServer(async (req, res) => {
         notes.sort((a, b) => (String(a.at) < String(b.at) ? 1 : -1));
         return send(res, 200, notes);
       }
+      // 对话收件箱：我遇见的每条命 + 最近一句 + 她是否有未回的主动留言（按最近活跃排序）。
+      if (req.method === 'GET' && url === '/api/chats') {
+        const rel = accounts.relIdFor(me.id);
+        const out: Array<Record<string, unknown>> = [];
+        for (const l of lives) {
+          const es = l.store.list();
+          if (!es.some((e) => e.type === 'RELATIONSHIP_OPENED' && e.relationshipId === rel)) continue;
+          let lastText = '';
+          let lastAt = '';
+          let lastFromHer = false;
+          let pending = false;
+          for (let i = es.length - 1; i >= 0; i--) {
+            const e = es[i];
+            if (e.relationshipId !== rel) continue;
+            if (e.type === 'MESSAGE_RECEIVED') { lastText = String((e.payload as { content?: string }).content ?? ''); lastAt = e.occurredAt; lastFromHer = false; break; }
+            if (e.type === 'MESSAGE_SENT') { const p = e.payload as MessageSentPayload; lastText = p.utterance; lastAt = e.occurredAt; lastFromHer = true; pending = Boolean(p.unprompted); break; }
+          }
+          const s = snapOf(l);
+          out.push({ life: l.id, awake: s.awake, emotion: s.emotion, lastText, lastAt, lastFromHer, pending });
+        }
+        out.sort((a, b) => (String(a.lastAt) < String(b.lastAt) ? 1 : -1));
+        return send(res, 200, out);
+      }
       // 钱包：申请充值（暂后台审批）。
       if (req.method === 'POST' && url === '/api/recharge') {
         const b = await readJson(req);

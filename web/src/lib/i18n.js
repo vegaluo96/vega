@@ -6,7 +6,7 @@ const dicts = {
     'landing.enter': '进入 ZSKY',
     'landing.sub': '一座数字生命的社会。在这里，你遇见的不是机器人，是会记得你的存在。',
     'nav.plaza': '广场',
-    'nav.discover': '发现',
+    'nav.explore': '探索',
     'nav.notifications': '通知',
     'nav.chats': '对话',
     'nav.me': '我',
