@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# ZSKY / vega —— 安全升级脚本（让"拉 GitHub 代码不掉微信"成为铁律）。
+#
+# 原理：
+#   · daemon 把【用户端 web/dist 与后台 web-admin/dist 当静态文件、按请求即时读取】——
+#     所以前端改动只需重建 dist，【无需重启 daemon】，微信/所有长连接一秒都不断。
+#   · 微信登录态（bot_token/baseurl/游标）持久化在仓库【外】的 sqlite（见 VEGA_LIFE_PATH 同级
+#     的 accounts.db），daemon 启动时自动重连所有通道。
+#   · 因此：只有【引擎/服务端代码 src/ 变了】才需要重启 daemon（这时微信会自动重连一次，
+#     是预期内、唯一一次性的中断）。日常前端/文档更新 = 微信完全不受影响。
+#
+# 用法：在仓库根执行   bash deploy/update.sh [branch]
+#   - branch 缺省 main
+#   - 服务名缺省 vega，可用 VEGA_SERVICE 覆盖
+set -euo pipefail
+
+cd "$(dirname "$0")/.."            # 仓库根（如 /opt/vega）
+BRANCH="${1:-main}"
+SERVICE="${VEGA_SERVICE:-vega}"
+
+echo "▶ 拉取 origin/$BRANCH …"
+for i in 1 2 3 4; do git fetch origin "$BRANCH" && break || { echo "  fetch 失败，重试 $i…"; sleep $((2 ** i)); }; done
+
+OLD="$(git rev-parse HEAD)"
+NEW="$(git rev-parse "origin/$BRANCH")"
+if [ "$OLD" = "$NEW" ]; then echo "✓ 已是最新（${OLD:0:8}），无改动。微信保持不动。"; exit 0; fi
+
+CHANGED="$(git diff --name-only "$OLD" "$NEW")"
+echo "变更文件（${OLD:0:8} → ${NEW:0:8}）："; echo "$CHANGED" | sed 's/^/   /'
+git reset --hard "$NEW"
+
+# —— 前端：静态产物、即时生效、不重启、不碰微信 ——
+build_spa() {  # $1=目录
+  local dir="$1"
+  echo "▶ 重建 $dir …"
+  ( cd "$dir"
+    if [ ! -d node_modules ] || echo "$CHANGED" | grep -q "^$dir/package"; then npm ci || npm install; fi
+    npm run build )
+}
+echo "$CHANGED" | grep -q '^web/'       && build_spa web        || echo "· 用户端 web 无改动，跳过"
+echo "$CHANGED" | grep -q '^web-admin/' && build_spa web-admin   || echo "· 后台 web-admin 无改动，跳过"
+
+# —— 仅当【引擎/服务端】代码变化才重启 daemon（此时微信自动重连一次，属预期内） ——
+if echo "$CHANGED" | grep -qE '^(src/|package\.json|package-lock\.json|tsconfig\.json|deploy/vega\.service)'; then
+  echo "▶ 引擎/服务端有改动 → 重启 $SERVICE（微信会自动重连一次）…"
+  sudo systemctl restart "$SERVICE"
+  sleep 2
+  if systemctl is-active --quiet "$SERVICE"; then echo "✓ $SERVICE 在线，微信通道自动重连中（看 journalctl -u $SERVICE 里的 [wechat] 重连日志）。"
+  else echo "✗ $SERVICE 没起来！立刻看： journalctl -u $SERVICE -n 50 --no-pager"; exit 1; fi
+else
+  echo "✓ 仅前端/文档改动 → 不重启 daemon。微信、所有长连接全程不断。"
+fi
+echo "✓ 升级完成：${OLD:0:8} → ${NEW:0:8}"

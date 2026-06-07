@@ -5,7 +5,7 @@
 //      VEGA_SOCIAL_EVERY_MS / VEGA_AUTH_TOKEN / 模型见 .env.example
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 import {
   advanceState,
   assertPersistenceSafeForProd,
@@ -56,6 +56,7 @@ import {
 
 const LIFE_PATH = process.env.VEGA_LIFE_PATH ?? join(process.cwd(), '.vega', 'life.jsonl');
 const DATA_DIR = dirname(LIFE_PATH);
+mkdirSync(DATA_DIR, { recursive: true }); // 确保数据目录存在——否则 accounts.db/feed.db 开不了库（新机/新卷首启）
 // 生命名册：env(VEGA_LIVES) ∪ 后台动态生成的命（落盘 lives.json，重启也在）。后台"生成生命体"即写这里。
 const registryPath = join(DATA_DIR, 'lives.json');
 const readRegistry = (): string[] => { try { const r = JSON.parse(readFileSync(registryPath, 'utf8')) as unknown; return Array.isArray(r) ? r.filter((x): x is string => typeof x === 'string') : []; } catch { return []; } };
@@ -289,6 +290,13 @@ async function runChannel(userId: string): Promise<void> {
   channelGen.set(userId, myGen); // 抢占为该用户当前唯一 worker；任何旧 worker 下一圈 gen 不等即自退
   const mine = (): boolean => channelGen.get(userId) === myGen;
   let backoff = 0; // 连续传输失败时的退避（ms），成功即清零——iLink 挂了也不会每 1.5s 猛敲
+  let failStreak = 0; // 连续失败计数：持续失败多半是 bot_token 被微信踢了(掉线)，需要重新扫码——大声提示，不静默空转
+  const noteFail = (): void => { // 退避 + 在"可能已掉线"时清晰告警（节流），让 owner 知道该去后台重新扫码
+    backoff = Math.min(backoff ? backoff * 2 : 3000, 60_000);
+    if (++failStreak === 5 || failStreak % 40 === 0) {
+      console.warn(`[wechat] channel ${userId.slice(0, 6)} 已连续失败 ${failStreak} 次（约 ${Math.round((failStreak * backoff) / 60000)} 分钟）——bot_token 可能被微信踢下线了，去 zsky.com 后台重新扫码即可恢复（登录态会再次持久化，之后重启不用再扫）。`);
+    }
+  };
   try {
     while (mine()) {
       const ch = accounts.channelFor(userId);
@@ -300,12 +308,11 @@ async function runChannel(userId: string): Promise<void> {
         // iLink 客户端不抛错、失败时返回 {_error}/{_status} → 这里识别为传输失败并指数退避（C1）。
         const r = upd.raw as Record<string, unknown> | undefined;
         if (r && (('_error' in r) || ('_status' in r))) {
-          backoff = Math.min(backoff ? backoff * 2 : 3000, 60_000);
-          console.log(`[wechat] channel ${userId} 取消息失败，退避 ${backoff}ms`);
+          noteFail();
           await sleep(backoff);
           continue;
         }
-        backoff = 0;
+        backoff = 0; failStreak = 0; // 取到消息＝通道健康，清零退避与失败计数
         const { msgs, buf } = upd;
         if (buf !== ch.buf) accounts.updateChannelBuf(userId, buf);
         for (const m of msgs) {
@@ -349,8 +356,8 @@ async function runChannel(userId: string): Promise<void> {
         }
         if (msgs.length === 0) await sleep(1500); // getupdates 多为长轮询会自阻塞；空转稍歇兜底
       } catch (e) {
-        backoff = Math.min(backoff ? backoff * 2 : 3000, 60_000);
         console.log(`[wechat] channel ${userId} 轮询出错:`, (e as Error).message);
+        noteFail();
         await sleep(backoff);
       }
     }
@@ -1660,8 +1667,26 @@ function shutdown(sig: string): void {
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 
-// 重启后恢复已连接的微信通道（继续收发）。
-for (const ch of accounts.listChannels()) runChannel(ch.userId);
+// 数据耐久性守卫：账号 / 微信登录态(bot_token) / 钱包 / 事件日志全在 DATA_DIR 的 sqlite+jsonl 里。
+// 若 DATA_DIR 落在【代码仓内】（cwd 之下），一次 fresh clone / git clean 就会连微信登录一起抹掉 →
+// 表现为"每次部署都掉微信"。线上必须放到仓库【外】的持久卷（如 /opt/vega-data）。
+function assertDurableDataDir(): void {
+  const dd = resolve(DATA_DIR);
+  const cwd = resolve(process.cwd());
+  console.log(`[vega] 数据目录：${dd}（账号 / 微信登录态 / 钱包 / 事件日志都在这里——它持久，微信就持久）`);
+  if (dd === cwd || dd.startsWith(cwd + sep)) {
+    console.error(
+      `[vega] ⚠️ 数据目录在代码仓内（${dd}）——拉取/重建/重新 clone 代码可能把【微信登录态】与账号一起抹掉，` +
+      `每次部署都会掉微信！请把 VEGA_LIFE_PATH 指到仓库【外】的持久卷（如 /opt/vega-data/life.jsonl）后重启。`,
+    );
+  }
+}
+assertDurableDataDir();
+
+// 重启后恢复已连接的微信通道（继续收发）。登录态持久、自动重连——这是"拉代码重启也不用重新扫码"的地基。
+const _channels = accounts.listChannels();
+if (_channels.length) console.log(`[vega] 重连 ${_channels.length} 条微信通道（沿用已存的 bot_token，无需重新扫码）…`);
+for (const ch of _channels) runChannel(ch.userId);
 
 server.listen(PORT, HOST, () => {
   console.log(`[vega] 醒着，活在 http://${HOST}:${PORT}   生命体：${lives.map((l) => l.id).join(', ')}   嘴=${mouth.id}   心跳 ${TICK_MS}ms`);
