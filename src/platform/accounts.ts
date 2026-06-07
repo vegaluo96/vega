@@ -63,6 +63,7 @@ export interface AccountStore {
   credit(userId: string, amount: number, reason: string, ref?: string): void;
   requestRecharge(userId: string, amount: number): number;
   pendingRecharges(): RechargeRequest[];
+  pendingRechargesFor(userId: string): Array<{ id: number; amount: number; requestedAt: string }>;
   recentRechargeResults(userId: string, limit: number): Array<{ id: number; amount: number; status: 'approved' | 'rejected'; decidedAt: string }>;
   decideRecharge(id: number, approve: boolean, by: string): boolean;
   issueEmailVerification(userId: string): string;
@@ -226,6 +227,10 @@ export function createAccountStore(path = ':memory:', opts: AccountStoreOptions 
     pendingRecharges() {
       const rows = db.prepare("SELECT id,user_id,amount,status,requested_at FROM recharge_requests WHERE status='pending' ORDER BY id").all() as Array<{ id: number; user_id: string; amount: number; status: string; requested_at: string }>;
       return rows.map((r) => ({ id: Number(r.id), userId: r.user_id, amount: Number(r.amount), status: r.status as RechargeRequest['status'], requestedAt: r.requested_at }));
+    },
+    pendingRechargesFor(userId) {
+      const rows = db.prepare("SELECT id,amount,requested_at FROM recharge_requests WHERE user_id=? AND status='pending' ORDER BY id DESC").all(userId) as Array<{ id: number; amount: number; requested_at: string }>;
+      return rows.map((r) => ({ id: Number(r.id), amount: Number(r.amount), requestedAt: r.requested_at }));
     },
     recentRechargeResults(userId, limit) {
       const rows = db.prepare("SELECT id,amount,status,decided_at FROM recharge_requests WHERE user_id=? AND status!='pending' AND decided_at IS NOT NULL ORDER BY decided_at DESC LIMIT ?").all(userId, limit) as Array<{ id: number; amount: number; status: string; decided_at: string }>;

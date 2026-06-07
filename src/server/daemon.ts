@@ -939,7 +939,7 @@ const server = createServer(async (req, res) => {
       const me = sessionAccount(req);
       if (!me) return send(res, 401, { error: 'unauthorized' });
       if (req.method === 'POST' && url === '/api/auth/logout') { accounts.logout(bearer(req)); return send(res, 200, { ok: true }); }
-      if (req.method === 'GET' && url === '/api/me') { const wc = accounts.channelFor(me.id); return send(res, 200, { account: publicAccount(me), balance: accounts.balance(me.id), lives: livesMetBy(me), wechat: accounts.wechatBindingFor(me.id), wechatChannel: wc ? { lifeId: wc.lifeId } : null }); }
+      if (req.method === 'GET' && url === '/api/me') { const wc = accounts.channelFor(me.id); return send(res, 200, { account: publicAccount(me), balance: accounts.balance(me.id), lives: livesMetBy(me), wechat: accounts.wechatBindingFor(me.id), wechatChannel: wc ? { lifeId: wc.lifeId } : null, pendingRecharge: accounts.pendingRechargesFor(me.id).reduce((s, p) => s + p.amount, 0) }); }
       // SSE 实时流：公开动态（广场/醒睡）+ 只属于我的（她想我了）。绝不推别人的私密事件（visibleTo 作用域）。
       if (req.method === 'GET' && url === '/api/stream') {
         const rel = accounts.relIdFor(me.id);
@@ -1067,6 +1067,10 @@ const server = createServer(async (req, res) => {
           notes.push({ type: 'wallet', ok: r.status === 'approved', at: r.decidedAt,
             title: r.status === 'approved' ? `充值到账 · ${r.amount} 心意` : `充值未通过 · ${r.amount} 心意`,
             text: r.status === 'approved' ? '已到账，可以和她们更丰富地聊了。' : '这笔申请没有通过，可重新申请。' });
+        }
+        // 2.5) 钱包：充值审批【进行中】——让用户看得见自己的申请，不再像石沉大海
+        for (const p of accounts.pendingRechargesFor(me.id)) {
+          notes.push({ type: 'wallet', ok: true, pending: true, at: p.requestedAt, title: `充值审批中 · ${p.amount} 心意`, text: '申请已收到，正在等待通过；通过后自动到账并通知你。' });
         }
         // 3) 系统：心意用尽提醒
         if (accounts.balance(me.id) <= 0) notes.push({ type: 'wallet', ok: false, at: now(), title: '心意用尽了', text: '她仍在、仍记得你，只是这会儿表达朴素些。充值可恢复。' });

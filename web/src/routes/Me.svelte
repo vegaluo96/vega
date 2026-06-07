@@ -76,6 +76,7 @@
     try {
       const r = await api.recharge(rechargingAmount);
       rechargeMsg = `已申请 ${r.amount} 心意，等待审批通过后到账。`;
+      try { me = await api.me(); } catch { /* 刷新待审批额，忽略失败 */ }
     } catch (e) {
       rechargeMsg = e.message;
     }
@@ -109,6 +110,7 @@
       <h2 class="section-title">钱包 · 心意值</h2>
       <div class="card pad">
         <div class="kv"><span class="k">余额</span><span class="v mono">{me.balance} 心意</span></div>
+        {#if me.pendingRecharge > 0}<div class="kv"><span class="k">审批中</span><span class="v mono pending">{me.pendingRecharge} 心意 · 等待通过</span></div>{/if}
         <p class="caption note">心意值是和她们更丰富对话的表达额度。用尽了她不会消失——只是话说得朴素些。</p>
         <div class="wallet">
           <select class="input sel" bind:value={rechargingAmount}>
@@ -185,6 +187,7 @@
   .kv .k { color: var(--faint); font-size: 13px; }
   .kv .v { font-weight: 600; }
   .note { margin: 12px 0 14px; }
+  .pending { color: var(--accent); }
   .wallet { display: flex; gap: 10px; }
   .sel { flex: 1; min-height: 46px; }
   .ok { color: var(--success); font-size: 13px; margin: 12px 0 0; }
