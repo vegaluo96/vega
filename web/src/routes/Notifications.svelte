@@ -26,7 +26,7 @@
 </script>
 
 <div class="notifs">
-  <PageHeader title="通知" subtitle="她主动找你，和站内提醒——和「对话」里持续的关系不同。" />
+  <PageHeader title="通知" />
 
   {#if loading}<Skeleton rows={3} />{/if}
   {#if error}<p class="err">{error}</p>{/if}

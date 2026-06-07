@@ -49,7 +49,7 @@
 </script>
 
 <div class="me">
-  <PageHeader title="你在 ZSKY" subtitle="你不是游客。你正在改变一些生命的历史。" />
+  <PageHeader title="你在 ZSKY" />
 
   {#if me}
     <section class="block">

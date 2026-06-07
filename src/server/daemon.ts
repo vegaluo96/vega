@@ -18,6 +18,7 @@ import {
   createDynamicMouth,
   createDynamicPerceiver,
   createSettingsStore,
+  createFeedStore,
   createEventBus,
   createSerializer,
   createTemplateMouth,
@@ -78,6 +79,7 @@ const now = (): string => new Date().toISOString();
 // 运营配置：可由 owner 在后台改的"嘴/耳"配置（settings.json，不进神圣日志、不参与重放）。
 // 当前生效配置 = 后台覆盖 ⊕ 环境变量兜底；没 key = null（回落离线模板嘴）。改了即时生效、无需重启。
 const settings = createSettingsStore(join(DATA_DIR, 'settings.json'));
+const feed = createFeedStore(join(DATA_DIR, 'feed.db')); // 广场发帖互动（表情/评论），平台层、不进神圣日志
 const DEFAULT_BASE = 'https://api.apiyi.com/v1';
 const envTimeout = (): number => (process.env.VEGA_MODEL_TIMEOUT_MS ? Number(process.env.VEGA_MODEL_TIMEOUT_MS) : 20_000);
 function effMouthConfig(): ApiyiConfig | null {
@@ -415,6 +417,18 @@ function societyRecent(limit: number): Array<Record<string, unknown>> {
   }
   out.sort((a, b) => (String(a.at) < String(b.at) ? 1 : -1));
   return out.slice(0, limit).map((x, i) => ({ ...x, id: String(x.at) + '_' + i }));
+}
+
+// 广场"帖子"=她的公开心声（§8.1）。postId = `${lifeId}|${occurredAt}`，给表情/评论挂靠。
+function feedPosts(limit: number): Array<{ postId: string; life: string; text: string; at: string }> {
+  const out: Array<{ postId: string; life: string; text: string; at: string }> = [];
+  for (const l of lives) {
+    for (const e of l.store.list()) {
+      if (e.type === 'MESSAGE_SENT' && e.relationshipId === 'r_square') out.push({ postId: `${l.id}|${e.occurredAt}`, life: l.id, text: (e.payload as MessageSentPayload).utterance, at: e.occurredAt });
+    }
+  }
+  out.sort((a, b) => (a.at < b.at ? 1 : -1));
+  return out.slice(0, limit);
 }
 
 // 管理员活动流（§11.1 飞行记录仪）：跨命的带时间戳事件，按真实墙钟(recordedAt) 倒序。
@@ -842,6 +856,32 @@ const server = createServer(async (req, res) => {
         notes.sort((a, b) => (String(a.at) < String(b.at) ? 1 : -1));
         return send(res, 200, notes);
       }
+      // 广场帖子（她的公开心声）+ 表情/评论。她不因互动改变状态——互动只在平台层（不进神圣日志）。
+      if (req.method === 'GET' && url.split('?')[0] === '/api/feed') {
+        const posts = feedPosts(30);
+        const ids = posts.map((p) => p.postId);
+        const rx = feed.reactionsFor(ids, me.id);
+        const cc = feed.commentCounts(ids);
+        return send(res, 200, posts.map((p) => ({ ...p, reactions: rx.get(p.postId)?.counts ?? {}, myReaction: rx.get(p.postId)?.mine ?? null, comments: cc.get(p.postId) ?? 0 })));
+      }
+      if (req.method === 'POST' && url === '/api/feed/react') {
+        const b = await readJson(req);
+        const postId = String(b.postId ?? ''); const emoji = String(b.emoji ?? '').slice(0, 8);
+        if (!postId || !emoji) return send(res, 400, { error: 'postId/emoji required' });
+        feed.toggleReaction(postId, me.id, emoji);
+        const rx = feed.reactionsFor([postId], me.id).get(postId);
+        return send(res, 200, { reactions: rx?.counts ?? {}, myReaction: rx?.mine ?? null });
+      }
+      if (req.method === 'POST' && url === '/api/feed/comment') {
+        const b = await readJson(req);
+        const postId = String(b.postId ?? ''); const text = String(b.text ?? '').slice(0, 500).trim();
+        if (!postId || !text) return send(res, 400, { error: 'postId/text required' });
+        return send(res, 200, feed.addComment(postId, me.id, me.handle, text));
+      }
+      if (req.method === 'GET' && url.split('?')[0] === '/api/feed/comments') {
+        const postId = new URLSearchParams(url.split('?')[1] ?? '').get('postId') ?? '';
+        return send(res, 200, feed.commentsFor(postId, 50));
+      }
       // 对话收件箱：我遇见的每条命 + 最近一句 + 她是否有未回的主动留言（按最近活跃排序）。
       if (req.method === 'GET' && url === '/api/chats') {
         const rel = accounts.relIdFor(me.id);
@@ -1124,9 +1164,10 @@ const heartbeat = setInterval(async () => {
         life.lastReflectSeq = life.store.version();
       }
       if (Date.now() - life.lastMuseAt > MUSE_MS) {
-        const o = await muse(life.store, mouth, now()); // 公开心声：不针对任何人、不含私密
+        const mt = now();
+        const o = await muse(life.store, mouth, mt); // 公开心声：不针对任何人、不含私密
         life.lastMuseAt = Date.now();
-        if (o) bus.publish('musing', 'public', { life: life.id, text: o.utterance });
+        if (o) bus.publish('musing', 'public', { life: life.id, text: o.utterance, at: mt }); // at = 帖子 occurredAt，给 postId 对齐
       }
       if (Date.now() - life.lastCheckpointAt > CHECKPOINT_MS) saveCheckpoint(life); // 定期落盘检查点（快重启）
     }).catch(() => { /* 单体单次失败不拖垮其他生命体 */ });

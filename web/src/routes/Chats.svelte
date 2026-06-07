@@ -22,7 +22,7 @@
 </script>
 
 <div class="rels">
-  <PageHeader title="关系" subtitle="你和她们之间，正在继续的关系。" />
+  <PageHeader title="关系" />
 
   {#if loading}<Skeleton rows={3} />{/if}
   {#if !loading && chats.length === 0 && !error}

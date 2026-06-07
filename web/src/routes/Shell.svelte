@@ -26,8 +26,8 @@
   <nav>
     <div class="brand">ZSKY</div>
     {#each TABS as tab}
-      <button class:active={activeTab === tab.k} class:userentry={tab.k === 'me'} on:click={() => navigate(tab.k)}>
-        <span class="ico"><Icon name={tab.ico} size={22} /></span><span class="lbl">{t(tab.label)}</span>
+      <button class:active={activeTab === tab.k} class:userentry={tab.k === 'me'} on:click={() => navigate(tab.k)} aria-label={t(tab.label)} title={t(tab.label)}>
+        <Icon name={tab.ico} size={24} />
       </button>
     {/each}
   </nav>
@@ -65,39 +65,33 @@
   }
   nav .brand { display: none; }
   nav button {
-    flex: 1; max-width: 96px; min-height: 44px;
-    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
-    background: none; border: 0; color: var(--faint); font-size: 10.5px; padding: 4px;
+    flex: 1; max-width: 72px; min-height: 48px;
+    display: flex; align-items: center; justify-content: center;
+    background: none; border: 0; color: var(--faint); padding: 4px;
     transition: color var(--t-hover) ease;
   }
   nav button.active { color: var(--accent); }
-  .ico { display: inline-flex; align-items: center; justify-content: center; transition: transform var(--t-hover) ease; }
-  nav button.active .ico { transform: translateY(-1px); }
-  .lbl { letter-spacing: 0.02em; }
   .app.immersive nav { display: none; }
 
   /* ── 桌面端：左侧导航轨 + 居中内容栏 ── */
   @media (min-width: 1000px) {
-    .app { display: flex; max-width: 1120px; margin: 0 auto; align-items: flex-start; }
+    .app { display: flex; max-width: 1000px; margin: 0 auto; align-items: flex-start; }
     .app.immersive nav { display: flex; }
     nav {
       position: sticky; top: 0; left: auto; right: auto; bottom: auto;
-      flex-direction: column; justify-content: flex-start; align-items: stretch; gap: 3px;
-      width: var(--rail); height: 100vh; padding: 22px 14px 18px;
+      flex-direction: column; justify-content: flex-start; align-items: center; gap: 6px;
+      width: 76px; height: 100vh; padding: 20px 10px 18px;
       border-top: 0; border-right: 1px solid var(--border); backdrop-filter: none; background: var(--bg);
     }
-    nav .brand { display: block; font-weight: 800; letter-spacing: 0.14em; font-size: 21px; padding: 6px 14px 22px; }
+    nav .brand { display: block; font-weight: 800; letter-spacing: 0.08em; font-size: 13px; padding: 4px 0 16px; }
     nav button {
-      flex: none; max-width: none; min-height: 46px;
-      flex-direction: row; justify-content: flex-start; gap: 14px;
-      padding: 0 16px; border-radius: var(--r-pill); font-size: 15px; font-weight: 600; color: var(--muted);
+      flex: none; max-width: none; width: 48px; height: 48px; min-height: 48px;
+      border-radius: var(--r-md); color: var(--muted);
       transition: background var(--t-hover) ease, color var(--t-hover) ease;
     }
     nav button.userentry { margin-top: auto; }
     nav button.active { background: var(--accent-weak); color: var(--accent); }
-    nav button.active .ico { transform: none; }
     nav button:not(.active):hover { background: var(--surface-2); color: var(--text); }
-    nav button .lbl { font-size: 15px; }
     .content { flex: 1; min-width: 0; border-right: 1px solid var(--border); }
   }
 </style>

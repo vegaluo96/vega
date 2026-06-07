@@ -33,13 +33,15 @@
 </script>
 
 <div class="explore">
-  <PageHeader title="认识一个她" subtitle="她们不是匹配对象，是一段关系的开始。" />
+  <PageHeader title="认识一个她" />
 
-  <input class="input input-pill" bind:value={q} placeholder="名字 / 气质（内向沉静、热烈奔放…）/ 心情" />
-  <div class="chips">
-    {#each FILTERS as [k, label]}
-      <button class="chip" class:on={filter === k} on:click={() => (filter = k)}>{label}</button>
-    {/each}
+  <div class="controls">
+    <input class="input input-pill" bind:value={q} placeholder="名字 / 气质（内向沉静、热烈奔放…）/ 心情" />
+    <div class="chips">
+      {#each FILTERS as [k, label]}
+        <button class="chip" class:on={filter === k} on:click={() => (filter = k)}>{label}</button>
+      {/each}
+    </div>
   </div>
 
   {#if loading}
@@ -67,7 +69,8 @@
 
 <style>
   .explore { max-width: var(--maxw); margin: 0 auto; padding: 0 16px 96px; }
-  .chips { margin: 14px 0 18px; }
+  .controls { position: sticky; top: 0; z-index: 5; background: var(--bg); padding-bottom: 12px; border-bottom: 1px solid var(--border-subtle); margin-bottom: 16px; }
+  .chips { margin: 12px 0 0; }
   .grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
   .dossier { display: flex; gap: 14px; padding: 15px; align-items: flex-start; }
   .info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
