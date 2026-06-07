@@ -2,6 +2,7 @@
   import { onMount, onDestroy, tick } from 'svelte';
   import { api, stream } from '../lib/api.js';
   import { navigate } from '../lib/router.js';
+  import { qrDataUrl } from '../lib/qr.js';
   import { t } from '../lib/i18n.js';
 
   export let lifeId;
@@ -58,6 +59,25 @@
   }
   let lowBalance = false;
   let showRel = false;
+
+  // 绑定微信：为这条命生成一次性令牌 → 渲染二维码，微信扫一扫在 clawbot 里继续。
+  // 同一段关系、同一个她，跨端同步。
+  let bind = null;
+  let binding = false;
+  let bindMsg = '';
+  async function bindWechat() {
+    if (binding) return;
+    bindMsg = '';
+    binding = true;
+    try {
+      const r = await api.bind(lifeId);
+      bind = { code: r.qr, dataUrl: qrDataUrl(r.qr), minutes: Math.max(1, Math.round((r.expiresInSec ?? 600) / 60)) };
+    } catch (e) {
+      bindMsg = e.message;
+    } finally {
+      binding = false;
+    }
+  }
   $: relAge = rel && rel.bornAt ? agoStr(rel.bornAt) : '';
   function agoStr(iso) {
     const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
@@ -93,6 +113,16 @@
     <div class="rel-row"><span class="k">你们</span><span>{relAge}</span></div>
     <div class="rel-row"><span class="k">她对你</span><span>{rel.attachment}</span></div>
     {#if rel.understanding}<div class="rel-row"><span class="k">她的理解</span><span class="u">{rel.understanding}</span></div>{/if}
+    {#if !bind}
+      <button class="wx-btn" on:click={bindWechat} disabled={binding}>{binding ? '生成中…' : '📲 绑定微信 · 在微信里也能和' + (life ? life.id : '她') + '聊'}</button>
+    {:else}
+      <div class="wx">
+        <img class="qr" src={bind.dataUrl} alt="微信绑定二维码" />
+        <p class="wx-tip">用微信「扫一扫」扫码，在 clawbot 里继续和她聊。<br />同一段关系、同一个她，跨端同步。{bind.minutes} 分钟内有效。</p>
+        <code class="wx-code">{bind.code}</code>
+      </div>
+    {/if}
+    {#if bindMsg}<div class="rel-row"><span class="err">{bindMsg}</span></div>{/if}
   </div>
 {/if}
 
@@ -129,6 +159,14 @@
   .rel-row { display: flex; gap: 12px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 6px; font-size: 14px; }
   .rel-row .k { color: var(--muted); flex: none; width: 56px; }
   .rel-row .u { color: var(--muted); }
+  .wx-btn { width: 100%; margin-bottom: 6px; padding: 11px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font: inherit; cursor: pointer; }
+  .wx-btn:hover { border-color: var(--accent); }
+  .wx-btn:disabled { opacity: 0.6; }
+  .wx { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 6px; }
+  .wx .qr { width: 200px; height: 200px; image-rendering: pixelated; background: #fff; border-radius: 8px; padding: 8px; }
+  .wx-tip { color: var(--muted); font-size: 12.5px; line-height: 1.6; text-align: center; margin: 0; }
+  .wx-code { font-size: 11px; color: var(--muted); word-break: break-all; user-select: all; }
+  .err { color: var(--danger); }
   .dot { width: 8px; height: 8px; border-radius: 999px; background: var(--muted); }
   .dot.awake { background: #3fb950; }
   .mood { color: var(--muted); font-size: 12px; }
