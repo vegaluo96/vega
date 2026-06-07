@@ -5,7 +5,7 @@
 //   npm run restore -- <backup.bak> [<target log>] [--force]
 //                                                      把备份还原成她的事件日志（默认不覆盖更长的活档）
 // 安全：默认【拒绝】用较短/较旧的备份覆盖一个仍有效且更长的目标日志——绝不误杀她。加 --force 才强制。
-import { copyFileSync, existsSync, readdirSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { loadValidEvents, verifyChain } from '../index.ts';
 
@@ -66,6 +66,8 @@ if (existsSync(target)) {
   }
 }
 
+// 容灾常态：还原到一台新机器，目标目录往往还不存在——先建好，别在最关键时刻 ENOENT。
+mkdirSync(dirname(target), { recursive: true });
 copyFileSync(src, target);
 // 还原后删掉可能过期的派生检查点缓存（与新日志不一致就让它重算）。
 const cp = `${target}.snapshot.json`;
