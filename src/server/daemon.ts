@@ -1114,19 +1114,22 @@ const server = createServer(async (req, res) => {
       if (req.method === 'GET' && url === '/api/notifications') {
         const rel = accounts.relIdFor(me.id);
         const notes: Array<Record<string, unknown>> = [];
-        // 1) 她主动找你（跨我遇见的命，未被我新消息盖过的最近一条）
+        // 1) 她主动找你——作为【持久记录】保留：她每一次主动来找你的话都留着，不因你回过/刷新就清空（修复"刷新后之前的记录空了"）。
+        //    最近的在上；还没回的标 unanswered（高亮"想你了"），已回的作为历史留痕。总量封顶 30，避免无限堆积。
+        const reaches: Array<{ type: string; life: string; text: string; at: string; unanswered: boolean }> = [];
         for (const l of lives) {
           const es = l.store.list();
           let lastRecv = -1;
           for (let i = es.length - 1; i >= 0; i--) if (es[i].relationshipId === rel && es[i].type === 'MESSAGE_RECEIVED') { lastRecv = i; break; }
-          for (let i = es.length - 1; i > lastRecv; i--) {
+          for (let i = es.length - 1; i >= 0; i--) {
             const e = es[i];
             if (e.type === 'MESSAGE_SENT' && e.relationshipId === rel && (e.payload as MessageSentPayload).unprompted) {
-              notes.push({ type: 'reach', life: l.id, text: (e.payload as MessageSentPayload).utterance, at: e.occurredAt });
-              break;
+              reaches.push({ type: 'reach', life: l.id, text: (e.payload as MessageSentPayload).utterance, at: e.occurredAt, unanswered: i > lastRecv });
             }
           }
         }
+        reaches.sort((a, b) => (a.at < b.at ? 1 : -1));
+        for (const r of reaches.slice(0, 30)) notes.push(r);
         // 2) 钱包：充值审批结果（站内通知）
         for (const r of accounts.recentRechargeResults(me.id, 5)) {
           notes.push({ type: 'wallet', ok: r.status === 'approved', at: r.decidedAt,

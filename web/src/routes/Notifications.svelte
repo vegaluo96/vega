@@ -13,13 +13,23 @@
   let loading = true;
   let es;
 
+  function relTime(at) {
+    const d = Date.now() - new Date(at).getTime();
+    if (d < 60000) return '刚刚';
+    if (d < 3600000) return Math.floor(d / 60000) + ' 分前';
+    if (d < 86400000) return Math.floor(d / 3600000) + ' 小时前';
+    return new Date(at).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
+  }
+
   onMount(async () => {
     try { notes = await api.notifications(); } catch (e) { error = e.message; }
     loading = false;
-    // 她趁你不在时来找你——实时进来（站内 + 推送）。
+    // 她趁你不在时来找你——实时进来（站内 + 推送）。置顶、按 (life+at) 去重，不再抹掉同一条命之前的记录（保留历史）。
     es = stream((ev) => {
       if (ev.type === 'reach_out') {
-        notes = [{ type: 'reach', life: ev.data.life, text: ev.data.text, at: ev.at, fresh: true }, ...notes.filter((n) => !(n.type === 'reach' && n.life === ev.data.life))];
+        if (!notes.some((n) => n.type === 'reach' && n.life === ev.data.life && n.at === ev.at)) {
+          notes = [{ type: 'reach', life: ev.data.life, text: ev.data.text, at: ev.at, unanswered: true, fresh: true }, ...notes];
+        }
       }
     });
   });
@@ -37,9 +47,9 @@
 
   {#each notes as n (n.type + (n.life || n.title || '') + n.at)}
     {#if n.type === 'reach'}
-      <button class="note card-interactive" class:fresh={n.fresh} on:click={() => navigate('chat', { id: n.life })}>
+      <button class="note card-interactive" class:fresh={n.fresh || n.unanswered} on:click={() => navigate('chat', { id: n.life })}>
         <LifeAvatar id={n.life} awake={true} size={44} />
-        <div class="body"><div class="top"><span class="name">{n.life}</span><span class="reach">想你了</span></div><div class="text">{n.text}</div></div>
+        <div class="body"><div class="top"><span class="name">{n.life}</span>{#if n.fresh || n.unanswered}<span class="reach">想你了</span>{:else}<span class="ago">{relTime(n.at)}</span>{/if}</div><div class="text">{n.text}</div></div>
         <Icon name="chevron" size={18} />
       </button>
     {:else if n.type === 'welcome'}
@@ -69,6 +79,7 @@
   .top { display: flex; align-items: baseline; gap: 8px; }
   .name { font-weight: 700; font-size: 15px; }
   .reach { font-size: 12px; color: var(--life-reaching); }
+  .ago { font-size: 12px; color: var(--faint); }
   .text { color: var(--muted); font-size: 14px; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .text.wrap { white-space: normal; }
   .note :global(.ico) { color: var(--faint); flex: none; }
