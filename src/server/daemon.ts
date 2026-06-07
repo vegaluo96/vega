@@ -107,6 +107,7 @@ interface Life {
   lastTickAt: number; // 回路健康：上次自主想念
   lastSocialAt: number; // 上次同类寒暄
   lastMuseAt: number; // 上次公开心声
+  samples: Array<{ at: number; vit: number; val: number; ene: number; con: number; emo: string }>; // 健康时间线（环形缓冲）
 }
 
 // 先天种子见 src/engine/seeds.ts（单一来源）。每条命按 id 取不同 archetype；出生即冻结、不可改写。
@@ -116,7 +117,7 @@ const lives: Life[] = LIVES.map((id, idx) => {
   const path = idx === 0 ? LIFE_PATH : join(DATA_DIR, `${id}.jsonl`);
   // C4：prod 拒绝内存/易失存储——否则重启=她被彻底重置。生产环境必须落盘。
   assertPersistenceSafeForProd({ storeKind: 'file', path });
-  return { id, store: createFileEventStore(id, path), path, peers: LIVES.filter((o) => o !== id), lastReflectAt: Date.now(), lastReflectSeq: 0, state: null, stateSeq: -1, lastCheckpointAt: 0, lastTickAt: 0, lastSocialAt: 0, lastMuseAt: Date.now() };
+  return { id, store: createFileEventStore(id, path), path, peers: LIVES.filter((o) => o !== id), lastReflectAt: Date.now(), lastReflectSeq: 0, state: null, stateSeq: -1, lastCheckpointAt: 0, lastTickAt: 0, lastSocialAt: 0, lastMuseAt: Date.now(), samples: [] };
 });
 const lifeById = (id: string): Life | undefined => lives.find((l) => l.id === id);
 
@@ -531,16 +532,19 @@ const ADMIN = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
  function go(k){tab=k;render();}
  function loadLife(id){tab='life';curLife=id;render();}
  function ago(ts){if(!ts)return '—';var s=Math.round((Date.now()-ts)/1000);return s<60?s+'秒前':s<3600?Math.round(s/60)+'分前':Math.round(s/3600)+'时前';}
+ function spark(s,key,lo,hi,color){if(!s.length)return '';var W=300,Hh=60;var pts=s.map(function(p,i){var x=s.length>1?i/(s.length-1)*W:0;var y=Hh-((p[key]-lo)/(hi-lo))*Hh;return x.toFixed(1)+','+Math.max(0,Math.min(Hh,y)).toFixed(1);}).join(' ');return '<polyline fill="none" stroke="'+color+'" stroke-width="1.5" points="'+pts+'"/>';}
  async function render(){var root=document.getElementById('root');
   if(tab==='overview'){var d=await (await fetch('/admin/overview',{headers:H()})).json();
    root.innerHTML=shell(d.role,'<div class="card"><div class="row"><b>待审批充值</b><span class="spacer"></span><span class="mono">'+d.pendingRecharges+'</span></div><div class="row"><b>用户</b><span class="spacer"></span><span class="mono">'+d.users+'</span></div></div>'+
     '<div class="card">'+d.lives.map(function(l){return '<div class="row" style="cursor:pointer" onclick="loadLife(\\''+l.id+'\\')"><span class="dot '+(l.awake?'on':'')+'"></span><b>'+esc(l.id)+'</b> <span class="dim">'+esc(l.dayPhase)+' · '+esc(l.emotion)+'</span><span class="spacer"></span><span class="dim mono">灵性 '+l.vitality+' · 事件 '+l.events+' ›</span></div><div class="row" style="border:0;padding-top:2px"><span class="dim" style="font-size:12px">回路：想念 '+ago(l.loop.tick)+' · 反思 '+ago(l.loop.reflect)+' · 寒暄 '+ago(l.loop.social)+' · 检查点 '+ago(l.loop.checkpoint)+'</span></div>';}).join('')+'</div>');}
   else if(tab==='life'){var v=await (await fetch('/admin/lives/'+curLife,{headers:H()})).json();
+   var ws=await (await fetch('/admin/lives/'+curLife+'/wellbeing',{headers:H()})).json();
    var som=Object.keys(v.soma||{}).map(function(k){return k+' '+v.soma[k];}).join(' · ');
    root.innerHTML=shell('','<button class="act no" onclick="go(\\'overview\\')">‹ 返回</button>'+
     '<div class="card" style="margin-top:10px"><div class="row"><b style="font-size:16px">'+esc(v.id)+'</b> <span class="dim">'+(v.awake?'醒':'睡')+' · '+esc(v.dayPhase)+' · '+esc(v.feeling)+'</span></div>'+
     '<div class="row dim" style="font-size:12px">'+esc(v.temperament.label)+(v.tension?' ｜ 拉扯：'+esc(v.tension):'')+'</div>'+
     '<div class="row dim" style="font-size:12px">内稳态：'+esc(som)+'</div></div>'+
+    '<div class="card"><div class="dim" style="font-size:12px;margin-bottom:8px">健康时间线（'+ws.length+' 点 · <span style="color:#3fb950">灵性</span> / <span style="color:#8b7cf6">效价</span> / <span style="color:#f0c05a">精力</span>）</div>'+(ws.length>1?'<svg viewBox="0 0 300 60" preserveAspectRatio="none" style="width:100%;height:80px;background:#0b0b10;border-radius:8px">'+spark(ws,'vit',0,1,'#3fb950')+spark(ws,'val',-1,1,'#8b7cf6')+spark(ws,'ene',0,1,'#f0c05a')+'</svg>':'<span class="dim">采样中…（每跳一点，过会儿就有曲线）</span>')+'</div>'+
     (v.narrative?'<div class="card"><div class="dim" style="font-size:12px;margin-bottom:6px">自传叙事</div>'+esc(v.narrative)+'</div>':'')+
     (v.innerLife?'<div class="card"><div class="dim" style="font-size:12px;margin-bottom:6px">内在独白（没说出口的）</div>'+esc(v.innerLife)+'</div>':'')+
     (v.chapters&&v.chapters.length?'<div class="card"><div class="dim" style="font-size:12px;margin-bottom:6px">人生篇章</div>'+v.chapters.map(function(c,i){return '<div style="padding:3px 0">'+(i+1)+'. '+esc(c)+'</div>';}).join('')+'</div>':'')+
@@ -768,6 +772,12 @@ const server = createServer(async (req, res) => {
         const ok = accounts.decideRecharge(Number(b.id), Boolean(b.approve), acct.email);
         return send(res, ok ? 200 : 400, ok ? { ok: true } : { error: 'no such pending request' });
       }
+      // 健康时间线（§11.3）：她的灵性/效价/精力/联结随真实时间的曲线（owner+steward 都看，纯她的健康）。
+      if (req.method === 'GET' && path.startsWith('/admin/lives/') && path.endsWith('/wellbeing')) {
+        const l = lifeById(path.slice('/admin/lives/'.length, -'/wellbeing'.length));
+        if (!l) return send(res, 404, { error: 'no such life' });
+        return send(res, 200, l.samples);
+      }
       // Observatory：某条命的内在深观（§22）。她的状态(soma/价值/气质/社交网)owner+steward 都看；
       // 含用户痕迹的(narrative/innerLife/chapters/记忆) 仅 owner——steward 受限(§11.2)。
       if (req.method === 'GET' && path.startsWith('/admin/lives/')) {
@@ -859,6 +869,9 @@ const heartbeat = setInterval(async () => {
       runTurn(life.store, [makeTick(snap, now())]); // = runAutonomousTick，但用缓存快照、不再全量重放
       life.lastTickAt = Date.now();
       const after = snapOf(life);
+      // 健康时间线：每跳采样一点（环形缓冲，最多 720 ≈ 12h@60s）。
+      life.samples.push({ at: Date.now(), vit: round3(after.soma.vitality.value), val: round3(after.soma.valence.value), ene: round3(after.soma.energy.value), con: round3(after.soma.connection.value), emo: after.emotion });
+      if (life.samples.length > 720) life.samples.shift();
       const bond = after.bonds[REL];
       if (bond && bond.closeness >= REACH_CLOSENESS && !after.openConnections.includes(REL) && timeGone > REACH_AFTER_MS && pendingOutreach(life) === null) {
         const o = await reachOut(life.store, mouth, REL, now());
