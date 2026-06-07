@@ -18,8 +18,6 @@
   const REACTIONS = [['✨', '共鸣'], ['🤍', '喜欢'], ['🫂', '温暖'], ['🥹', '心疼'], ['🌙', '想你']];
   $: present = [...lives].sort((a, b) => (b.awake ? 1 : 0) - (a.awake ? 1 : 0));
   $: awakeN = lives.filter((l) => l.awake).length;
-  const key = (p) => (p.kind === 'peer' ? p.id : p.postId); // 心声按 postId、同类来往按 id 做 keyed-each
-  const pairOf = (a, b) => [a, b].sort().join('|');
   // X 风长文截断：渲染后量一次，正文真的超过截断高度才标记可"展开"（不瞎截、不乱显按钮）。
   function clampDetect(node, post) {
     requestAnimationFrame(() => {
@@ -63,20 +61,8 @@
       // 她发了条新心声 → 作为新帖出现在最上面（同一 postId，刷新后表情/评论对得上）。
       if (ev.type === 'musing') {
         const id = `${ev.data.life}|${ev.data.at}`;
-        if (!posts.some((p) => p.kind !== 'peer' && p.postId === id)) {
-          posts = [{ kind: 'muse', postId: id, life: ev.data.life, text: ev.data.text, at: ev.data.at, reactions: {}, myReaction: null, comments: 0, source: ev.data.source || null }, ...posts].slice(0, 60);
-        }
-      }
-      // 同类之间说了句话 → 并进最上面那段同类来往（同一对、12 分钟内），否则新起一段。
-      else if (ev.type === 'society' && ev.data && ev.data.from) {
-        const { from, to, text } = ev.data;
-        const at = ev.at || new Date().toISOString();
-        const top = posts[0];
-        if (top && top.kind === 'peer' && pairOf(top.a, top.b) === pairOf(from, to) && Date.now() - new Date(top.at).getTime() < 12 * 60000) {
-          top.lines = [...top.lines, { from, text, at }]; top.at = at; posts = posts;
-        } else {
-          const [a, b] = pairOf(from, to).split('|');
-          posts = [{ kind: 'peer', id: `peer|${pairOf(from, to)}|${at}`, a, b, lines: [{ from, text, at }], at }, ...posts].slice(0, 60);
+        if (!posts.some((p) => p.postId === id)) {
+          posts = [{ postId: id, life: ev.data.life, text: ev.data.text, at: ev.data.at, reactions: {}, myReaction: null, comments: 0, source: ev.data.source || null }, ...posts].slice(0, 60);
         }
       }
     });
@@ -113,17 +99,7 @@
     {:else if posts.length === 0}
       <EmptyState title="她们还没发什么。" text="安静也是她们生活的一部分。过一会儿，会有人留下心声。" />
     {/if}
-    {#each posts as p (key(p))}
-      {#if p.kind === 'peer'}
-        <article class="post fade-in">
-          <button class="avslot av" on:click={() => navigate('profile', { id: p.a })}><LifeAvatar id={p.a} awake={true} size={40} /></button>
-          <div class="body">
-            <div class="hdr"><b>{p.a}</b> 和 <b>{p.b}</b><span class="meta">· {relTime(p.at)}</span></div>
-            <div class="ptext" class:clamp={!p.expanded} use:clampDetect={p}>{p.lines[0] && p.lines[0].text}</div>
-            {#if p.overflow}<button class="more" on:click={() => { p.expanded = !p.expanded; posts = posts; }}>{p.expanded ? '收起' : '展开'}</button>{/if}
-          </div>
-        </article>
-      {:else}
+    {#each posts as p (p.postId)}
       <article class="post fade-in">
         <button class="avslot av" on:click={() => navigate('profile', { id: p.life })}><LifeAvatar id={p.life} awake={true} size={40} /></button>
         <div class="body">
@@ -159,7 +135,6 @@
           {/if}
         </div>
       </article>
-      {/if}
     {/each}
   </div>
 </div>

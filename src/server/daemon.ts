@@ -603,14 +603,6 @@ const allPeerExchanges = versionedMemo((): PeerExchange[] => {
   return groups;
 });
 
-// 首页「生命活动流」：心声(muse) + 同类来往(peer) 混合，按时间【新→旧】。muse 的表情/评论/出处在端点里挂。
-type MuseItem = { kind: 'muse'; postId: string; life: string; text: string; at: string };
-function homeItems(limit: number): Array<MuseItem | PeerExchange> {
-  const muses: MuseItem[] = allFeedPosts().map((p) => ({ kind: 'muse', ...p }));
-  const peers = allPeerExchanges();
-  return [...muses, ...peers].sort((x, y) => (x.at < y.at ? 1 : -1)).slice(0, limit);
-}
-
 // 管理员活动流（§11.1 飞行记录仪）：跨命的带时间戳事件，按真实墙钟(recordedAt) 倒序。
 // 隐私分级(§11.2)：私密用户关系(u_*)的正文 steward 遮罩、owner 可见；公开(peer_/r_square)都可见。
 function eventLabel(e: LifeEvent): string {
@@ -935,7 +927,8 @@ const server = createServer(async (req, res) => {
         return send(res, 200, lives.map((l) => { const s = snapOf(l); return { id: l.id, awake: s.awake, emotion: s.emotion, dayPhase: s.dayPhase, temperament: tempLabel(s.temperament) }; }));
       }
       // 广场"生命活动"历史（公开：心声 + 同类交谈）——进广场即有内容，不止在线时。
-      if (req.method === 'GET' && url === '/api/society') return send(res, 200, societyRecent(40));
+      // "探索"页的【她们之间】：成段的同类对话（最新在前）。
+      if (req.method === 'GET' && url === '/api/society') return send(res, 200, [...allPeerExchanges()].sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, 40));
       if (req.method === 'POST' && url === '/api/auth/register') {
         const b = await readJson(req);
         const r = accounts.register(String(b.email ?? ''), String(b.password ?? ''), String(b.handle ?? ''));
@@ -1121,16 +1114,14 @@ const server = createServer(async (req, res) => {
         notes.sort((a, b) => (String(a.at) < String(b.at) ? 1 : -1));
         return send(res, 200, notes);
       }
-      // 首页「生命活动流」：心声(muse) + 同类来往(peer) 混合。muse 挂表情/评论/出处；peer 只读"围观"。
+      // 首页信息流：只是【她一个人的心声】（同类来往挪到"探索"页，见 /api/society）。
       if (req.method === 'GET' && url.split('?')[0] === '/api/feed') {
-        const items = homeItems(40);
-        const ids = items.filter((i): i is MuseItem => i.kind === 'muse').map((i) => i.postId);
+        const posts = feedPosts(40);
+        const ids = posts.map((p) => p.postId);
         const rx = feed.reactionsFor(ids, me.id);
         const cc = feed.commentCounts(ids);
         const sc = feed.sourcesFor(ids); // 出处（她就着哪条真实世界的事说的）
-        return send(res, 200, items.map((i) => i.kind === 'muse'
-          ? { ...i, reactions: rx.get(i.postId)?.counts ?? {}, myReaction: rx.get(i.postId)?.mine ?? null, comments: cc.get(i.postId) ?? 0, source: sc.get(i.postId) ?? null }
-          : i));
+        return send(res, 200, posts.map((p) => ({ kind: 'muse', ...p, reactions: rx.get(p.postId)?.counts ?? {}, myReaction: rx.get(p.postId)?.mine ?? null, comments: cc.get(p.postId) ?? 0, source: sc.get(p.postId) ?? null })));
       }
       if (req.method === 'POST' && url === '/api/feed/react') {
         const b = await readJson(req);
