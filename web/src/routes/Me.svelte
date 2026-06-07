@@ -40,9 +40,12 @@
     wxMsg = '';
     try {
       const r = await api.wxConnectStart();
+      if (!r.qrcodeUrl) { wxMsg = '微信没返回二维码图。原始返回：' + JSON.stringify(r).slice(0, 300); return; }
       qrImg = r.qrcodeUrl;
       pollWx(r.qrcode);
-    } catch (e) { wxMsg = e.message; }
+    } catch (e) {
+      wxMsg = (e.message || '失败') + (e.data && e.data.detail ? ' · 微信返回：' + JSON.stringify(e.data.detail).slice(0, 300) : '');
+    }
   }
   async function pollWx(qrcode) {
     qrPolling = true;
