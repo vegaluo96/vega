@@ -73,3 +73,4 @@ export { generateVapidKeys, sendPush, type VapidKeys, type PushSubscription } fr
 export { createSettingsStore, type SettingsStore, type ModelOverride, type SocialConfig, type WorldConfig } from './platform/settings.ts';
 export { createFeedStore, type FeedStore, type FeedComment } from './platform/feed.ts';
 export { createWorldFeed, parseRss, parsePolymarket, type WorldFeed, type WorldItem } from './world/sources.ts';
+export { createIlink, type IlinkConfig, type QrStatus, type IncomingMsg } from './platform/ilink.ts';

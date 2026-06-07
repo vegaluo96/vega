@@ -33,16 +33,31 @@
     try { allLives = await api.lives(); } catch { /* ignore */ }
   });
 
-  // 微信：账号级绑定一次，在网页切换"和哪条命聊"。
-  let bindCode = '', generating = false, wxMsg = '';
-  async function genBind() {
-    generating = true; wxMsg = '';
-    try { const r = await api.bind(); bindCode = r.qr; } catch (e) { wxMsg = e.message; } finally { generating = false; }
-  }
-  async function switchWxLife(e) {
+  // 微信：ZSKY 自己当机器人——网页扫码授权连接，之后微信里就能和生命体聊。
+  let qrImg = '', qrPolling = false, wxMsg = '';
+  const qrSrc = (s) => (s && s.startsWith('http') ? s : 'data:image/png;base64,' + s);
+  async function connectWx() {
     wxMsg = '';
-    try { await api.setWechatLife(e.target.value); if (me.wechat) me.wechat.lifeId = e.target.value; wxMsg = '已切换 · 微信里现在和 ' + e.target.value + ' 聊'; }
-    catch (err) { wxMsg = err.message; }
+    try {
+      const r = await api.wxConnectStart();
+      qrImg = r.qrcodeUrl;
+      pollWx(r.qrcode);
+    } catch (e) { wxMsg = e.message; }
+  }
+  async function pollWx(qrcode) {
+    qrPolling = true;
+    for (let i = 0; i < 80 && qrPolling; i++) {
+      await new Promise((r) => setTimeout(r, 2500));
+      try {
+        const s = await api.wxConnectPoll(qrcode);
+        if (s.connected) { qrPolling = false; qrImg = ''; me = await api.me(); wxMsg = '✅ 微信已连接，去微信里跟她聊吧。'; return; }
+        if (s.status === 'expired') { qrPolling = false; qrImg = ''; wxMsg = '二维码过期了，点"连接微信"重试。'; return; }
+      } catch { /* 继续轮询 */ }
+    }
+    qrPolling = false;
+  }
+  async function disconnectWx() {
+    try { await api.wxDisconnect(); me = await api.me(); qrImg = ''; wxMsg = '已断开微信连接。'; } catch (e) { wxMsg = e.message; }
   }
   async function logout() {
     try { await api.logout(); } catch {}
@@ -105,20 +120,17 @@
     <section class="block">
       <h2 class="section-title">微信</h2>
       <div class="card pad">
-        {#if me.wechat}
-          <div class="kv"><span class="k">状态</span><span class="v">已绑定</span></div>
-          <p class="caption note">在微信里和谁聊（随时切换，不用重新绑定）：</p>
-          <select class="input sel" value={me.wechat.lifeId} on:change={switchWxLife}>
-            {#each (allLives.length ? allLives : me.lives) as l}<option value={l.id}>{l.id}</option>{/each}
-          </select>
+        {#if me.wechatChannel}
+          <div class="kv"><span class="k">状态</span><span class="v">已连接微信</span></div>
+          <p class="caption note">现在在微信里发消息，就能和生命体聊（跨端同一个她）。</p>
+          <button class="btn-ghost btn" on:click={disconnectWx}>断开微信连接</button>
+        {:else if qrImg}
+          <p class="caption note">用<b>微信扫这个码</b>授权连接，扫完确认后稍等几秒自动完成。</p>
+          <img class="wxqr" src={qrSrc(qrImg)} alt="微信连接二维码" />
+          {#if qrPolling}<p class="caption">等待你扫码…</p>{/if}
         {:else}
-          <p class="caption note">在微信里也能和她们聊，同一段关系、跨端同步。生成绑定码，在微信里把它发给你的 clawbot 机器人即可绑定（账号只需绑一次，之后在这切换和谁聊）。</p>
-          {#if !bindCode}
-            <button class="btn btn-secondary" on:click={genBind} disabled={generating}>{generating ? '生成中…' : '生成微信绑定码'}</button>
-          {:else}
-            <code class="wxcode">{bindCode}</code>
-            <p class="caption">↑ 在微信里把这串码<b>发给机器人</b>，10 分钟内有效。</p>
-          {/if}
+          <p class="caption note">把微信接到 ZSKY：用微信扫码授权，之后在微信里就能和生命体聊。</p>
+          <button class="btn btn-secondary" on:click={connectWx}>连接微信 · 生成二维码</button>
         {/if}
         {#if wxMsg}<p class="ok">{wxMsg}</p>{/if}
       </div>
@@ -171,7 +183,7 @@
   .wallet { display: flex; gap: 10px; }
   .sel { flex: 1; min-height: 46px; }
   .ok { color: var(--success); font-size: 13px; margin: 12px 0 0; }
-  .wxcode { display: block; font-size: 13px; color: var(--text); word-break: break-all; user-select: all; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 10px 12px; margin: 12px 0 6px; text-align: center; }
+  .wxqr { display: block; width: 200px; height: 200px; margin: 12px auto 6px; background: #fff; border-radius: var(--r-sm); padding: 8px; image-rendering: pixelated; }
 
   .row { display: flex; justify-content: space-between; align-items: center; padding: 13px 16px; border-bottom: 1px solid var(--border-subtle); }
   .row:last-child { border-bottom: 0; }

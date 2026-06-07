@@ -80,6 +80,12 @@ export interface AccountStore {
   wechatBindingFor(userId: string): { lifeId: string } | null;
   // 零绑定：微信用户首次发消息即自动建立身份（个人号没有扫码上报 openid 的能力，发消息才认得出人）。
   ensureWechatUser(openid: string, lifeId: string): { userId: string; lifeId: string };
+  // 微信 iLink 通道（ZSKY 自己当机器人）：扫码登录后存 bot_token，后台收发消息用。
+  saveChannel(userId: string, ilinkUserId: string, botToken: string, baseurl: string): void;
+  channelFor(userId: string): { ilinkUserId: string; botToken: string; baseurl: string; buf: string } | null;
+  listChannels(): Array<{ userId: string; ilinkUserId: string; botToken: string; baseurl: string; buf: string }>;
+  updateChannelBuf(userId: string, buf: string): void;
+  removeChannel(userId: string): void;
   // Web Push 订阅（PWA）
   addPushSub(userId: string, endpoint: string, p256dh: string, auth: string): void;
   getPushSubs(userId: string): Array<{ endpoint: string; keys: { p256dh: string; auth: string } }>;
@@ -107,6 +113,7 @@ export function createAccountStore(path = ':memory:', opts: AccountStoreOptions 
     CREATE TABLE IF NOT EXISTS email_verifications(token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS bind_tokens(token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, life_id TEXT NOT NULL, expires_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS wechat_bindings(openid TEXT PRIMARY KEY, user_id TEXT NOT NULL, life_id TEXT NOT NULL, bound_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS wechat_channels(user_id TEXT PRIMARY KEY, ilink_user_id TEXT, bot_token TEXT NOT NULL, baseurl TEXT, updates_buf TEXT NOT NULL DEFAULT '', connected_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS push_subscriptions(endpoint TEXT PRIMARY KEY, user_id TEXT NOT NULL, p256dh TEXT NOT NULL, auth TEXT NOT NULL, created_at TEXT NOT NULL);
   `);
 
@@ -291,6 +298,24 @@ export function createAccountStore(path = ':memory:', opts: AccountStoreOptions 
       if (starter > 0) credit(id, starter, 'starter_grant');
       db.prepare('INSERT INTO wechat_bindings(openid,user_id,life_id,bound_at) VALUES(?,?,?,?)').run(openid, id, lifeId, t);
       return { userId: id, lifeId };
+    },
+    saveChannel(userId, ilinkUserId, botToken, baseurl) {
+      db.prepare('INSERT INTO wechat_channels(user_id,ilink_user_id,bot_token,baseurl,updates_buf,connected_at) VALUES(?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET ilink_user_id=excluded.ilink_user_id, bot_token=excluded.bot_token, baseurl=excluded.baseurl, connected_at=excluded.connected_at')
+        .run(userId, ilinkUserId, botToken, baseurl, '', now());
+    },
+    channelFor(userId) {
+      const r = db.prepare('SELECT ilink_user_id,bot_token,baseurl,updates_buf FROM wechat_channels WHERE user_id=?').get(userId) as { ilink_user_id: string; bot_token: string; baseurl: string; updates_buf: string } | undefined;
+      return r ? { ilinkUserId: r.ilink_user_id, botToken: r.bot_token, baseurl: r.baseurl, buf: r.updates_buf } : null;
+    },
+    listChannels() {
+      const rows = db.prepare('SELECT user_id,ilink_user_id,bot_token,baseurl,updates_buf FROM wechat_channels').all() as Array<{ user_id: string; ilink_user_id: string; bot_token: string; baseurl: string; updates_buf: string }>;
+      return rows.map((r) => ({ userId: r.user_id, ilinkUserId: r.ilink_user_id, botToken: r.bot_token, baseurl: r.baseurl, buf: r.updates_buf }));
+    },
+    updateChannelBuf(userId, buf) {
+      db.prepare('UPDATE wechat_channels SET updates_buf=? WHERE user_id=?').run(buf, userId);
+    },
+    removeChannel(userId) {
+      db.prepare('DELETE FROM wechat_channels WHERE user_id=?').run(userId);
     },
     addPushSub(userId, endpoint, p256dh, auth) {
       db.prepare('INSERT INTO push_subscriptions(endpoint,user_id,p256dh,auth,created_at) VALUES(?,?,?,?,?) ON CONFLICT(endpoint) DO UPDATE SET user_id=excluded.user_id, p256dh=excluded.p256dh, auth=excluded.auth')

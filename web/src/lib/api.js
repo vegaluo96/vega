@@ -39,6 +39,9 @@ export const api = {
   recharge: (amount) => req('POST', '/api/recharge', { amount }),
   bind: (lifeId) => req('POST', '/api/bindings', lifeId ? { lifeId } : {}),
   setWechatLife: (lifeId) => req('POST', '/api/wechat/active-life', { lifeId }),
+  wxConnectStart: () => req('POST', '/api/wechat/connect/start'),
+  wxConnectPoll: (qrcode) => req('POST', '/api/wechat/connect/poll', { qrcode }),
+  wxDisconnect: () => req('POST', '/api/wechat/disconnect'),
   pushKey: () => req('GET', '/api/push/key'),
   pushSubscribe: (subscription) => req('POST', '/api/push/subscribe', { subscription }),
 };

@@ -20,6 +20,7 @@ import {
   createSettingsStore,
   createFeedStore,
   createWorldFeed,
+  createIlink,
   createEventBus,
   createSerializer,
   createTemplateMouth,
@@ -87,6 +88,12 @@ const WORLD_RSS = (process.env.VEGA_WORLD_RSS ?? '').split(',').map((s) => s.tri
 const WORLD_POLYMARKET = process.env.VEGA_WORLD_POLYMARKET === '1';
 const WORLD_MS = Number(process.env.VEGA_WORLD_EVERY_MS ?? 1_800_000); // 多久"读一遍世界"（默认 30min）
 const worldFeed = (WORLD_RSS.length > 0 || WORLD_POLYMARKET) ? createWorldFeed({ rss: WORLD_RSS, polymarket: WORLD_POLYMARKET }) : null;
+// 微信 iLink（ZSKY 自己当机器人，无需 OpenClaw）：网页扫码登录 + 后台收发消息。base 可用 VEGA_ILINK_BASE 覆盖。
+const ilink = createIlink({ base: process.env.VEGA_ILINK_BASE });
+const WECHAT_LIFE = process.env.VEGA_WECHAT_LIFE || ''; // 微信通道默认对应哪条命；空=第一条
+const pendingQr = new Map<string, string>(); // qrcode → 发起连接的 userId
+const channelRunning = new Set<string>();
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 const DEFAULT_BASE = 'https://api.apiyi.com/v1';
 const envTimeout = (): number => (process.env.VEGA_MODEL_TIMEOUT_MS ? Number(process.env.VEGA_MODEL_TIMEOUT_MS) : 20_000);
 function effMouthConfig(): ApiyiConfig | null {
@@ -250,6 +257,34 @@ async function respondAsUser(life: Life, me: Account, content: string, channel: 
     if (charge && r.verdict === 'accepted') accounts.debit(me.id, charge, 'model', life.id);
     return { utterance: r.utterance, verdict: r.verdict, emotion: r.snapshot.emotion, balance: accounts.balance(me.id), voice: useMouth.id === 'template' ? 'plain' : 'rich' };
   });
+}
+
+// 微信 iLink 通道收发循环：长轮询取消息 → 路由到生命体 → 回复发回微信。每个发信人各自身份与关系。
+async function runChannel(userId: string): Promise<void> {
+  if (channelRunning.has(userId)) return;
+  channelRunning.add(userId);
+  try {
+    while (channelRunning.has(userId)) {
+      const ch = accounts.channelFor(userId);
+      if (!ch) break;
+      const lifeId = WECHAT_LIFE && lifeById(WECHAT_LIFE) ? WECHAT_LIFE : (lives[0]?.id ?? '');
+      try {
+        const { msgs, buf } = await ilink.getUpdates(ch.baseurl, ch.botToken, ch.buf);
+        if (buf !== ch.buf) accounts.updateChannelBuf(userId, buf);
+        for (const m of msgs) {
+          try {
+            const who = accounts.ensureWechatUser(m.fromUserId, lifeId); // 每个发信人各自身份+连续关系
+            const lf = lifeById(who.lifeId);
+            const ac = accounts.getAccount(who.userId);
+            if (!lf || !ac) continue;
+            const reply = snapOf(lf).awake ? String((await respondAsUser(lf, ac, m.text, 'wechat')).utterance ?? '…') : '她在更深的睡眠里，等会儿再来找我吧。';
+            await ilink.sendMessage(ch.baseurl, ch.botToken, m.fromUserId, m.contextToken, reply);
+          } catch (e) { console.log('[wechat] 回消息失败:', (e as Error).message); }
+        }
+        if (msgs.length === 0) await sleep(1500); // getupdates 多为长轮询会自阻塞；空转稍歇兜底
+      } catch (e) { console.log(`[wechat] channel ${userId} 轮询出错:`, (e as Error).message); await sleep(3000); }
+    }
+  } finally { channelRunning.delete(userId); }
 }
 
 // 微信侧统一应答：没绑定→把消息当绑定码试；已绑定→正常聊天。webhook 与 OpenAI 兼容入口共用。
@@ -834,7 +869,7 @@ const server = createServer(async (req, res) => {
       const me = sessionAccount(req);
       if (!me) return send(res, 401, { error: 'unauthorized' });
       if (req.method === 'POST' && url === '/api/auth/logout') { accounts.logout(bearer(req)); return send(res, 200, { ok: true }); }
-      if (req.method === 'GET' && url === '/api/me') return send(res, 200, { account: publicAccount(me), balance: accounts.balance(me.id), lives: livesMetBy(me), wechat: accounts.wechatBindingFor(me.id) });
+      if (req.method === 'GET' && url === '/api/me') return send(res, 200, { account: publicAccount(me), balance: accounts.balance(me.id), lives: livesMetBy(me), wechat: accounts.wechatBindingFor(me.id), wechatChannel: !!accounts.channelFor(me.id) });
       // SSE 实时流：公开动态（广场/醒睡）+ 只属于我的（她想我了）。绝不推别人的私密事件（visibleTo 作用域）。
       if (req.method === 'GET' && url === '/api/stream') {
         const rel = accounts.relIdFor(me.id);
@@ -862,6 +897,30 @@ const server = createServer(async (req, res) => {
         if (!accounts.wechatBindingFor(me.id)) return send(res, 400, { error: '尚未绑定微信' });
         accounts.setWechatLife(me.id, lifeId);
         return send(res, 200, { ok: true, lifeId });
+      }
+      // 微信扫码连接（ZSKY 自己当机器人）：① 取登录二维码 ② 轮询状态，confirmed 即绑定+起收发循环。
+      if (req.method === 'POST' && url === '/api/wechat/connect/start') {
+        const r = await ilink.getQrcode();
+        console.log('[wechat] getQrcode ->', JSON.stringify(r.raw).slice(0, 400));
+        if (!r.ok || !r.qr) return send(res, 502, { error: 'iLink 取二维码失败（看服务器日志）', detail: r.raw });
+        pendingQr.set(r.qr.qrcode, me.id);
+        return send(res, 200, { qrcode: r.qr.qrcode, qrcodeUrl: r.qr.qrcodeUrl });
+      }
+      if (req.method === 'POST' && url === '/api/wechat/connect/poll') {
+        const b = await readJson(req);
+        const st = await ilink.getStatus(String(b.qrcode ?? ''));
+        console.log('[wechat] status ->', st.status, JSON.stringify(st.raw).slice(0, 400));
+        if (st.status === 'confirmed' && st.botToken) {
+          accounts.saveChannel(me.id, st.ilinkUserId ?? '', st.botToken, st.baseurl ?? ilink.base);
+          runChannel(me.id);
+          return send(res, 200, { status: 'confirmed', connected: true });
+        }
+        return send(res, 200, { status: st.status });
+      }
+      if (req.method === 'POST' && url === '/api/wechat/disconnect') {
+        channelRunning.delete(me.id);
+        accounts.removeChannel(me.id);
+        return send(res, 200, { ok: true });
       }
       // 生命体公开主页（§8.1）：她的公开自我——气质/年龄/此刻状态/同类朋友/公开心声。
       // 【严格脱敏】：绝不含任何人类用户的关系/私聊（socialWorld 只含 peer；不暴露 narrative/chapters，那些会带用户名）。
@@ -1372,6 +1431,9 @@ function shutdown(sig: string): void {
 }
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
+
+// 重启后恢复已连接的微信通道（继续收发）。
+for (const ch of accounts.listChannels()) runChannel(ch.userId);
 
 server.listen(PORT, HOST, () => {
   console.log(`[vega] 醒着，活在 http://${HOST}:${PORT}   生命体：${lives.map((l) => l.id).join(', ')}   嘴=${mouth.id}   心跳 ${TICK_MS}ms`);
