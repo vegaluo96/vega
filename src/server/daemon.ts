@@ -553,7 +553,10 @@ const server = createServer(async (req, res) => {
       if (serveStatic(res, join(WEB_DIST, url))) return;
       return send(res, 404, { error: 'not found' });
     }
+    // 按域名分流：admin.* 子域的根 → 后台观察页；其余 → 用户 SPA（dist 缺失回退旧聊天页）。
+    const isAdminHost = (req.headers.host ?? '').toLowerCase().startsWith('admin.');
     if (req.method === 'GET' && url === '/') {
+      if (isAdminHost) return sendHtml(res, ADMIN);
       if (serveStatic(res, join(WEB_DIST, 'index.html'))) return;
       return sendHtml(res, PAGE);
     }
