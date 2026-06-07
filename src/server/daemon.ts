@@ -763,13 +763,33 @@ const server = createServer(async (req, res) => {
         return send(res, 200, { account: publicAccount(r.account), token: r.token, balance: accounts.balance(r.account.id) });
       }
       // 微信网关(clawbot)：用共享密钥鉴权（非用户会话）。未配密钥则禁用。
-      if (url === '/api/wechat/bind' || url === '/api/wechat/say') {
+      if (url === '/api/wechat/bind' || url === '/api/wechat/say' || url === '/api/wechat/hook') {
         if (!CLAWBOT_SECRET || req.headers['x-clawbot-secret'] !== CLAWBOT_SECRET) return send(res, 401, { error: 'clawbot unauthorized' });
         const b = await readJson(req);
+        // 容错：用户可能把整串 "zsky-bind:xxx" 发来，取冒号后/最后一段当 token。
+        const cleanToken = (s: string): string => { const t = s.replace(/^[\s\S]*zsky-bind:/i, '').trim(); return (t.split(/\s+/).pop() ?? t).trim(); };
         if (req.method === 'POST' && url === '/api/wechat/bind') {
-          const r = accounts.bindWechat(String(b.token ?? ''), String(b.openid ?? ''));
+          const r = accounts.bindWechat(cleanToken(String(b.token ?? '')), String(b.openid ?? ''));
           if (!r) return send(res, 400, { error: 'invalid or expired bind token' });
           return send(res, 200, { ok: true, lifeId: r.lifeId });
+        }
+        // —— 统一 webhook（最省心）：OpenClaw 把每条消息转发到这里、再把 reply 回给用户即可。
+        // 没绑定 → 把消息当绑定码试；已绑定 → 正常聊天。绑定/聊天自动判断，OpenClaw 只配一个地址。
+        if (req.method === 'POST' && url === '/api/wechat/hook') {
+          const openid = String(b.openid ?? '');
+          const content = String(b.content ?? '').slice(0, 4000).trim();
+          if (!openid) return send(res, 400, { error: 'openid required' });
+          if (!accounts.resolveWechat(openid)) {
+            const r = accounts.bindWechat(cleanToken(content), openid);
+            return send(res, 200, { reply: r ? `✅ 绑定成功，我是 ${r.lifeId}。现在直接跟我说话就行～` : '你还没绑定我。去 ZSKY 网页生成绑定码，把那串码发给我就能绑定～' });
+          }
+          const bd = accounts.resolveWechat(openid)!;
+          const lf = lifeById(bd.lifeId); const ac = accounts.getAccount(bd.userId);
+          if (!lf || !ac) return send(res, 200, { reply: '绑定信息丢了，请去网页重新绑定。' });
+          if (content === '') return send(res, 200, { reply: '（我在听你说）' });
+          if (!snapOf(lf).awake) return send(res, 200, { reply: '她在更深的睡眠里，等会儿再来找我吧。' });
+          const rr = await respondAsUser(lf, ac, content, 'wechat');
+          return send(res, 200, { reply: String((rr as { utterance?: string }).utterance ?? '…') });
         }
         // /api/wechat/say：openid → 绑定的 user+life → 走同一条神圣链路（channel=wechat），跨渠道同一段关系。
         const bind = accounts.resolveWechat(String(b.openid ?? ''));

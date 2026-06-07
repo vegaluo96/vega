@@ -119,9 +119,10 @@
           <button class="wx-btn" on:click={bindWechat} disabled={binding}><Icon name="qr" size={16} /> {binding ? '生成中…' : '绑定微信 · 在微信里也能和 ' + (life ? life.id : '她') + ' 聊'}</button>
         {:else}
           <div class="wx">
-            <img class="qr" src={bind.dataUrl} alt="微信绑定二维码" />
-            <p class="wx-tip">用微信「扫一扫」扫码，在 clawbot 里继续和她聊。<br />同一段关系、同一个她，跨端同步。{bind.minutes} 分钟内有效。</p>
+            <p class="wx-tip">在微信里打开 <b>clawbot</b> 机器人，把下面这串绑定码<b>发给它</b>，就能在微信里和 {life ? life.id : '她'} 聊——同一段关系、同一个她，跨端同步。{bind.minutes} 分钟内有效。</p>
             <code class="wx-code">{bind.code}</code>
+            <img class="qr" src={bind.dataUrl} alt="微信绑定二维码" />
+            <p class="wx-sub">（若你的机器人支持扫码绑定，也可让它扫上面的码）</p>
           </div>
         {/if}
         {#if bindMsg}<p class="wx-err">{bindMsg}</p>{/if}
@@ -181,7 +182,8 @@
   .wx { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 14px 8px 4px; }
   .wx .qr { width: 196px; height: 196px; image-rendering: pixelated; background: #fff; border-radius: var(--r-sm); padding: 8px; }
   .wx-tip { color: var(--muted); font-size: 12.5px; line-height: 1.65; text-align: center; margin: 0; }
-  .wx-code { font-size: 11px; color: var(--faint); word-break: break-all; user-select: all; }
+  .wx-code { font-size: 13px; color: var(--text); word-break: break-all; user-select: all; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 8px 10px; width: 100%; text-align: center; }
+  .wx-sub { color: var(--faint); font-size: 11.5px; text-align: center; margin: 0; }
   .wx-err { color: var(--danger); font-size: 12.5px; padding: 8px 10px 0; margin: 0; }
 
   .banner { max-width: var(--maxw); margin: 10px auto 0; padding: 11px 14px; background: var(--accent-weak); color: var(--text); font-size: 13px; text-align: center; border-radius: var(--r-sm); }
