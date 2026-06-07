@@ -29,6 +29,9 @@ export const api = {
   testModel: () => req('POST', '/admin/model-config/test'),
   socialConfig: () => req('GET', '/admin/social-config'),
   saveSocialConfig: (patch) => req('POST', '/admin/social-config', patch),
+  worldConfig: () => req('GET', '/admin/world-config'),
+  saveWorldConfig: (patch) => req('POST', '/admin/world-config', patch),
+  testWorld: () => req('POST', '/admin/world-config/test'),
 };
 export const setSession = (t) => session.set(t || '');
 export const clearSession = () => session.set('');

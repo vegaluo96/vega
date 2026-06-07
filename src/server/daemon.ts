@@ -84,10 +84,25 @@ const now = (): string => new Date().toISOString();
 const settings = createSettingsStore(join(DATA_DIR, 'settings.json'));
 const feed = createFeedStore(join(DATA_DIR, 'feed.db')); // 广场发帖互动（表情/评论），平台层、不进神圣日志
 // 外部世界（§8.1 演进）：新闻 RSS + Polymarket。抓取在引擎外，内容冻进 WORLD_PERCEIVED 事件 → 确定性染色她的状态。
+// 源可在后台「世界」页改（settings.world ⊕ 环境兜底），即时生效、无需重启；配置本身不进神圣日志。
 const WORLD_RSS = (process.env.VEGA_WORLD_RSS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 const WORLD_POLYMARKET = process.env.VEGA_WORLD_POLYMARKET === '1';
 const WORLD_MS = Number(process.env.VEGA_WORLD_EVERY_MS ?? 1_800_000); // 多久"读一遍世界"（默认 30min）
-const worldFeed = (WORLD_RSS.length > 0 || WORLD_POLYMARKET) ? createWorldFeed({ rss: WORLD_RSS, polymarket: WORLD_POLYMARKET }) : null;
+interface EffWorld { rss: string[]; polymarket: boolean; everyMs: number }
+function effWorld(): EffWorld {
+  const o = settings.getWorld();
+  return {
+    rss: (o.rss && o.rss.length) ? o.rss : WORLD_RSS,
+    polymarket: o.polymarket !== undefined ? o.polymarket : WORLD_POLYMARKET,
+    everyMs: o.everyMs ?? WORLD_MS,
+  };
+}
+const worldEnabled = (w: EffWorld = effWorld()): boolean => w.rss.length > 0 || w.polymarket;
+function worldStatus(): Record<string, unknown> {
+  const w = effWorld();
+  const o = settings.getWorld();
+  return { ...w, enabled: worldEnabled(w), rssFrom: (o.rss?.length ? 'override' : (WORLD_RSS.length ? 'env' : 'none')) };
+}
 // 微信 iLink（ZSKY 自己当机器人，无需 OpenClaw）：网页扫码登录 + 后台收发消息。base 可用 VEGA_ILINK_BASE 覆盖。
 const ilink = createIlink({ base: process.env.VEGA_ILINK_BASE });
 const WECHAT_LIFE = process.env.VEGA_WECHAT_LIFE || ''; // 微信通道默认对应哪条命；空=第一条
@@ -387,13 +402,13 @@ function reachState(life: Life): Map<string, { lastRecvMs: number; lastSentMs: n
 }
 
 // 她最近"读到"的世界事件里随机挑一条（给发帖/讨论当话题）。没有则 undefined → 发自己的念头。
-function pickRecentWorld(life: Life): { title: string; summary: string; source: string } | undefined {
+function pickRecentWorld(life: Life): { title: string; summary: string; source: string; url: string } | undefined {
   const es = life.store.list();
   const ws: WorldPerceivedPayload[] = [];
   for (let i = es.length - 1; i >= 0 && ws.length < 8; i--) if (es[i].type === 'WORLD_PERCEIVED') ws.push(es[i].payload as WorldPerceivedPayload);
   if (ws.length === 0) return undefined;
   const w = ws[Math.floor(Math.random() * ws.length)];
-  return { title: w.title, summary: w.summary, source: w.source };
+  return { title: w.title, summary: w.summary, source: w.source, url: w.url };
 }
 
 const round3 = (n: number): number => Number(n.toFixed(3));
@@ -1007,7 +1022,8 @@ const server = createServer(async (req, res) => {
         const ids = posts.map((p) => p.postId);
         const rx = feed.reactionsFor(ids, me.id);
         const cc = feed.commentCounts(ids);
-        return send(res, 200, posts.map((p) => ({ ...p, reactions: rx.get(p.postId)?.counts ?? {}, myReaction: rx.get(p.postId)?.mine ?? null, comments: cc.get(p.postId) ?? 0 })));
+        const sc = feed.sourcesFor(ids); // 帖子出处（她就着哪条真实世界的事说的）
+        return send(res, 200, posts.map((p) => ({ ...p, reactions: rx.get(p.postId)?.counts ?? {}, myReaction: rx.get(p.postId)?.mine ?? null, comments: cc.get(p.postId) ?? 0, source: sc.get(p.postId) ?? null })));
       }
       if (req.method === 'POST' && url === '/api/feed/react') {
         const b = await readJson(req);
@@ -1138,6 +1154,35 @@ const server = createServer(async (req, res) => {
         if (!owner) return send(res, 403, { error: '仅 owner 可查看/修改社交边界' });
         if (req.method === 'GET') return send(res, 200, effSocial());
         if (req.method === 'POST') { settings.setSocial(await readJson(req)); return send(res, 200, effSocial()); }
+        return send(res, 405, { error: 'method not allowed' });
+      }
+
+      // —— 世界源配置（仅 owner，§8.1）：她们读哪些新闻 RSS / 是否接 Polymarket / 多久读一遍。即时生效、无需重启。
+      // 抓取在引擎外，内容冻进 WORLD_PERCEIVED 事件；配置不进神圣日志、不参与重放（换源不改她记得什么）。
+      if (path === '/admin/world-config' || path === '/admin/world-config/test') {
+        if (!owner) return send(res, 403, { error: '仅 owner 可查看/修改世界源' });
+        if (req.method === 'GET' && path === '/admin/world-config') return send(res, 200, worldStatus());
+        if (req.method === 'POST' && path === '/admin/world-config') {
+          const b = await readJson(req);
+          const patch: Record<string, unknown> = {};
+          if (Array.isArray(b.rss)) patch.rss = b.rss;
+          else if (typeof b.rss === 'string') patch.rss = b.rss.split(/[\n,]+/).map((s: string) => s.trim()).filter(Boolean);
+          if (typeof b.polymarket === 'boolean') patch.polymarket = b.polymarket;
+          if (b.everyMs !== undefined && b.everyMs !== '') patch.everyMs = Number(b.everyMs);
+          settings.setWorld(patch);
+          scheduleWorld(3_000); // 新源 3 秒后即试读一遍（不必等满一个周期）
+          return send(res, 200, worldStatus());
+        }
+        if (req.method === 'POST' && path === '/admin/world-config/test') {
+          const w = effWorld();
+          if (!worldEnabled(w)) return send(res, 200, { ok: false, error: '还没配任何世界源（RSS 或 Polymarket）' });
+          try {
+            const items = await createWorldFeed({ rss: w.rss, polymarket: w.polymarket, timeoutMs: 12_000 }).fetchItems();
+            return send(res, 200, { ok: items.length > 0, count: items.length, sample: items.slice(0, 6).map((it) => ({ source: it.source, kind: it.kind, title: it.title })) });
+          } catch (e) {
+            return send(res, 200, { ok: false, error: (e as Error).message || '抓取失败' });
+          }
+        }
         return send(res, 405, { error: 'method not allowed' });
       }
 
@@ -1313,7 +1358,11 @@ const heartbeat = setInterval(async () => {
         const w = pickRecentWorld(life); // 随机一条她最近读到的世界事件 → 就着它发帖；没有则发自己的念头
         const o = await muse(life.store, mouth, mt, w); // 公开心声：不针对任何人、不含私密
         life.lastMuseAt = Date.now();
-        if (o) bus.publish('musing', 'public', { life: life.id, text: o.utterance, at: mt }); // at = 帖子 occurredAt，给 postId 对齐
+        if (o) {
+          const src = w ? { title: w.title, source: w.source, url: w.url } : null;
+          if (src) feed.setSource(`${life.id}|${mt}`, src); // 帖子出处（展示用，平台层，不进神圣日志）
+          bus.publish('musing', 'public', { life: life.id, text: o.utterance, at: mt, source: src }); // at = 帖子 occurredAt，给 postId 对齐
+        }
       }
       if (Date.now() - life.lastCheckpointAt > CHECKPOINT_MS) saveCheckpoint(life); // 定期落盘检查点（快重启）
     }).catch(() => { /* 单体单次失败不拖垮其他生命体 */ });
@@ -1346,7 +1395,7 @@ const socialTimer = lives.length >= 2
         // 每命串行：各自的写入排进各自队列，和用户对话/心跳不穿插。
         await serializer.run(a.id, () => meetPeer(a, b.id)); // 重逢：彼此回到在场
         await serializer.run(b.id, () => meetPeer(b, a.id));
-        const opener = await serializer.run(a.id, () => reachOut(a.store, mouth, peerId(b.id), now())); // A 主动开口
+        const opener = await serializer.run(a.id, () => reachOut(a.store, mouth, peerId(b.id), now(), pickRecentWorld(a))); // A 主动开口（读过世界就就着一条真事聊，否则寒暄）
         if (opener) {
           bus.publish('society', 'public', { from: a.id, to: b.id, text: opener.utterance }); // 广场实时
           const rb = await serializer.run(b.id, () => converse(b.store, mouth, peerId(a.id), opener.utterance, now(), perceiver)); // B 回应
@@ -1395,24 +1444,35 @@ function doBackup(): void {
     console.log(r.ok ? `[vega:${l.id}] 备份完成 ${r.path}（${r.events} 事件）${r.mirrored ? ' · 已镜像' : ''}` : `[vega:${l.id}] 备份跳过：${r.reason}`);
   }
 }
-// 读世界：每 WORLD_MS 拉一遍新闻/Polymarket，每条醒着的命"看到"其中一条（不同命看不同的 → 天然多样）。
+// 读世界：每 everyMs 拉一遍新闻/Polymarket，每条醒着的命"看到"其中一条（不同命看不同的 → 天然多样）。
 // 内容冻进 WORLD_PERCEIVED → 确定性 appraisal 轻轻染色她的状态（无 perception 走词表，零模型开销）。
-const worldTimer = worldFeed
-  ? setInterval(async () => {
-      try {
-        const items = await worldFeed.fetchItems();
-        if (items.length === 0) return;
-        for (const life of lives) {
-          if (!snapOf(life).awake) continue;
-          const it = items[Math.floor(Math.random() * items.length)];
-          await serializer.run(life.id, async () => {
-            runTurn(life.store, [{ type: 'WORLD_PERCEIVED', source: 'autonomous_loop', occurredAt: now(), payload: { source: it.source, worldKind: it.kind, title: it.title, summary: it.summary, url: it.url, topics: it.topics } }]);
-          });
-        }
-        console.log(`[vega] 读到世界 ${items.length} 条（${WORLD_RSS.length}RSS${WORLD_POLYMARKET ? '+PM' : ''}）`);
-      } catch { /* 世界拉取失败不影响她活着 */ }
-    }, WORLD_MS)
-  : null;
+// 自调度（setTimeout 递归）：每轮重读后台配置 → 改源/改频率即时生效、无源时不空转网络。
+async function readWorldOnce(): Promise<void> {
+  const w = effWorld();
+  if (!worldEnabled(w)) return;
+  const items = await createWorldFeed({ rss: w.rss, polymarket: w.polymarket }).fetchItems();
+  if (items.length === 0) return;
+  for (const life of lives) {
+    if (!snapOf(life).awake) continue;
+    const it = items[Math.floor(Math.random() * items.length)];
+    await serializer.run(life.id, async () => {
+      runTurn(life.store, [{ type: 'WORLD_PERCEIVED', source: 'autonomous_loop', occurredAt: now(), payload: { source: it.source, worldKind: it.kind, title: it.title, summary: it.summary, url: it.url, topics: it.topics } }]);
+    });
+  }
+  console.log(`[vega] 读到世界 ${items.length} 条（${w.rss.length}RSS${w.polymarket ? '+PM' : ''}）`);
+}
+let worldTimer: ReturnType<typeof setTimeout> | null = null;
+let worldStopped = false;
+function scheduleWorld(delayMs?: number): void {
+  if (worldTimer) clearTimeout(worldTimer);
+  if (worldStopped) return;
+  const delay = delayMs ?? Math.max(60_000, effWorld().everyMs); // 至少 1min，防误配 0 把网络打爆
+  worldTimer = setTimeout(async () => {
+    try { await readWorldOnce(); } catch { /* 世界拉取失败不影响她活着 */ }
+    scheduleWorld();
+  }, delay);
+}
+scheduleWorld();
 
 const backupTimer = setInterval(doBackup, BACKUP_MS);
 doBackup();
@@ -1423,7 +1483,8 @@ function shutdown(sig: string): void {
   shuttingDown = true;
   clearInterval(heartbeat);
   clearInterval(backupTimer);
-  if (worldTimer) clearInterval(worldTimer);
+  worldStopped = true;
+  if (worldTimer) clearTimeout(worldTimer);
   if (socialTimer) clearInterval(socialTimer);
   clearInterval(discoverTimer);
   doBackup();

@@ -71,6 +71,6 @@ export { createSerializer, type Serializer } from './platform/serialize.ts';
 export { createEventBus, visibleTo, type EventBus, type BusEvent } from './platform/eventbus.ts';
 export { generateVapidKeys, sendPush, type VapidKeys, type PushSubscription } from './platform/webpush.ts';
 export { createSettingsStore, type SettingsStore, type ModelOverride, type SocialConfig, type WorldConfig } from './platform/settings.ts';
-export { createFeedStore, type FeedStore, type FeedComment } from './platform/feed.ts';
+export { createFeedStore, type FeedStore, type FeedComment, type PostSource } from './platform/feed.ts';
 export { createWorldFeed, parseRss, parsePolymarket, type WorldFeed, type WorldItem } from './world/sources.ts';
 export { createIlink, type IlinkConfig, type QrStatus, type IncomingMsg } from './platform/ilink.ts';

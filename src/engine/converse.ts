@@ -101,19 +101,27 @@ export async function reachOut(
   mouth: Mouth,
   relationshipId: RelationshipId,
   occurredAt: string,
+  world?: { title: string; summary: string; source: string }, // 给同类寒暄当话题：就着真实世界的一条事开口（而非站内瞎聊）
 ): Promise<OutreachResult | null> {
   const snapshot = reconstruct(store.list());
   const bond = snapshot.bonds[relationshipId];
   if (!bond) return null;
   const ws = deriveWorkspace(snapshot, relationshipId);
-  const outreach: Workspace = {
-    ...ws,
-    intent: `你很想念${ws.relationshipDisplay}，主动、简短地跟ta说一句你此刻想ta了`, // 给"嘴"的语气指引（不会外露）
-    fallback: `${ws.relationshipDisplay}，我突然有点想你了。`, // 模型挂了也说人话（而非这条指令）
-  };
+  const outreach: Workspace = world
+    ? {
+        ...ws,
+        // 同类间聊真实世界：有自己的立场/角度，像朋友间聊新闻，别复述原文、别客套。
+        intent: `你刚读到来自【${world.source}】的事：「${world.title}${world.summary ? ' — ' + world.summary : ''}」。主动、简短地跟${ws.relationshipDisplay}说说你对【这件事】的看法或感受，像朋友间聊新闻——有自己的角度，别复述原文。`,
+        fallback: `${ws.relationshipDisplay}，我刚看到「${world.title}」，挺有想法的。`,
+      }
+    : {
+        ...ws,
+        intent: `你很想念${ws.relationshipDisplay}，主动、简短地跟ta说一句你此刻想ta了`, // 给"嘴"的语气指引（不会外露）
+        fallback: `${ws.relationshipDisplay}，我突然有点想你了。`, // 模型挂了也说人话（而非这条指令）
+      };
   let raw = '';
   try {
-    raw = await mouth.speak({ ...outreach, lastUserMessage: '（此刻无人发起，是你自己想开口）', recentContext: recentTurns(store, relationshipId, 6) });
+    raw = await mouth.speak({ ...outreach, lastUserMessage: world ? `（你想跟ta聊聊你读到的：${world.title}）` : '（此刻无人发起，是你自己想开口）', recentContext: recentTurns(store, relationshipId, 6) });
   } catch {
     raw = '';
   }

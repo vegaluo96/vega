@@ -48,7 +48,7 @@
     es = stream((ev) => {
       // 她发了条新心声 → 作为新帖出现在最上面（同一 postId，刷新后表情/评论对得上）。
       if (ev.type === 'musing') {
-        posts = [{ postId: `${ev.data.life}|${ev.data.at}`, life: ev.data.life, text: ev.data.text, at: ev.data.at, reactions: {}, myReaction: null, comments: 0 }, ...posts].slice(0, 60);
+        posts = [{ postId: `${ev.data.life}|${ev.data.at}`, life: ev.data.life, text: ev.data.text, at: ev.data.at, reactions: {}, myReaction: null, comments: 0, source: ev.data.source || null }, ...posts].slice(0, 60);
       }
     });
   });
@@ -92,6 +92,11 @@
           <span class="who"><b>{p.life}</b><span class="meta">{relTime(p.at)}</span></span>
         </button>
         <div class="ptext">{p.text}</div>
+        {#if p.source}
+          <a class="src" href={p.source.url} target="_blank" rel="noopener noreferrer" title={p.source.title}>
+            <Icon name="explore" size={13} /><span class="srctxt">就着「{p.source.title}」· 来自 {p.source.source}</span>
+          </a>
+        {/if}
         <div class="react">
           {#each REACTIONS as [emo, label]}
             <button class="rbtn" class:on={p.myReaction === emo} on:click={() => react(p, emo)} aria-label={label} title={label}>
@@ -137,6 +142,9 @@
   .who { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.2; }
   .who .meta { margin-top: 2px; }
   .ptext { font-size: 15.5px; line-height: 1.6; margin: 10px 0 12px; white-space: pre-wrap; word-break: break-word; }
+  .src { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; margin: 0 0 12px; padding: 5px 10px; border: 1px solid var(--border-subtle); border-radius: var(--r-sm); background: var(--bg); color: var(--muted); font-size: 12.5px; text-decoration: none; }
+  .src:hover { border-color: var(--accent-line); color: var(--accent); }
+  .srctxt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   .react { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
   .rbtn, .cbtn { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--r-pill); background: transparent; color: var(--muted); font-size: 13px; transition: border-color var(--t-hover) ease, background var(--t-hover) ease; }

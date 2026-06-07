@@ -4,6 +4,8 @@
 import { DatabaseSync } from 'node:sqlite';
 
 export interface FeedComment { id: number; userId: string; handle: string; text: string; at: string }
+// 帖子"出处"（§8.1）：她这条心声是就着真实世界的哪条事说的。展示用，平台层，【绝不进神圣日志】。
+export interface PostSource { title: string; source: string; url: string }
 
 export interface FeedStore {
   toggleReaction(postId: string, userId: string, emoji: string): void;
@@ -11,6 +13,8 @@ export interface FeedStore {
   addComment(postId: string, userId: string, handle: string, text: string): FeedComment;
   commentsFor(postId: string, limit: number): FeedComment[];
   commentCounts(postIds: string[]): Map<string, number>;
+  setSource(postId: string, src: PostSource): void;
+  sourcesFor(postIds: string[]): Map<string, PostSource>;
 }
 
 export function createFeedStore(path: string): FeedStore {
@@ -19,6 +23,7 @@ export function createFeedStore(path: string): FeedStore {
     CREATE TABLE IF NOT EXISTS post_reactions(post_id TEXT NOT NULL, user_id TEXT NOT NULL, emoji TEXT NOT NULL, at TEXT NOT NULL, PRIMARY KEY(post_id,user_id));
     CREATE TABLE IF NOT EXISTS post_comments(id INTEGER PRIMARY KEY AUTOINCREMENT, post_id TEXT NOT NULL, user_id TEXT NOT NULL, handle TEXT NOT NULL, text TEXT NOT NULL, at TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS idx_comments_post ON post_comments(post_id);
+    CREATE TABLE IF NOT EXISTS post_sources(post_id TEXT PRIMARY KEY, title TEXT NOT NULL, source TEXT NOT NULL, url TEXT NOT NULL, at TEXT NOT NULL);
   `);
   const now = (): string => new Date().toISOString();
   const ph = (n: number): string => Array.from({ length: n }, () => '?').join(',');
@@ -53,6 +58,16 @@ export function createFeedStore(path: string): FeedStore {
       if (postIds.length === 0) return out;
       const rows = db.prepare(`SELECT post_id,COUNT(*) c FROM post_comments WHERE post_id IN (${ph(postIds.length)}) GROUP BY post_id`).all(...postIds) as Array<{ post_id: string; c: number }>;
       for (const r of rows) out.set(r.post_id, Number(r.c));
+      return out;
+    },
+    setSource(postId, src) {
+      db.prepare('INSERT OR REPLACE INTO post_sources(post_id,title,source,url,at) VALUES(?,?,?,?,?)').run(postId, src.title, src.source, src.url, now());
+    },
+    sourcesFor(postIds) {
+      const out = new Map<string, PostSource>();
+      if (postIds.length === 0) return out;
+      const rows = db.prepare(`SELECT post_id,title,source,url FROM post_sources WHERE post_id IN (${ph(postIds.length)})`).all(...postIds) as Array<{ post_id: string; title: string; source: string; url: string }>;
+      for (const r of rows) out.set(r.post_id, { title: r.title, source: r.source, url: r.url });
       return out;
     },
   };

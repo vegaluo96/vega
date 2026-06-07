@@ -13,13 +13,15 @@
   let lastLoaded = 0;
 
   const TABS = [['overview', '总览'], ['activity', '活动流'], ['recharges', '充值'], ['users', '用户']];
-  const TAB_LABEL = { overview: '总览', activity: '活动流', recharges: '充值审批', users: '用户', life: '生命详情', model: '模型配置', social: '社交边界' };
+  const TAB_LABEL = { overview: '总览', activity: '活动流', recharges: '充值审批', users: '用户', life: '生命详情', model: '模型配置', social: '社交边界', world: '世界源' };
 
   // 模型配置（仅 owner）表单状态
   let mform = { baseUrl: '', model: '', apiKey: '', timeoutMs: 20000, perceive: false, perceiveModel: '' };
   let saveMsg = '', testMsg = '', saving = false, testing = false;
   // 社交边界（仅 owner）表单状态
   let sform = {}; let socialMsg = '', savingSocial = false;
+  // 世界源（仅 owner）表单状态
+  let wform = { rss: '', polymarket: false, everyMin: 30 }; let worldMsg = '', worldTestMsg = '', savingWorld = false, testingWorld = false;
 
   async function load() {
     error = '';
@@ -44,6 +46,12 @@
           intimateHr: +(s.intimateEveryMs / 3600000).toFixed(1), friendHr: +(s.friendEveryMs / 3600000).toFixed(1), acquaintHr: +(s.acquaintEveryMs / 3600000).toFixed(1),
         };
         socialMsg = '';
+      }
+      else if (tab === 'world') {
+        const w = await api.worldConfig();
+        data = { world: w };
+        wform = { rss: (w.rss || []).join('\n'), polymarket: !!w.polymarket, everyMin: Math.max(1, Math.round((w.everyMs || 1800000) / 60000)) };
+        worldMsg = ''; worldTestMsg = '';
       }
       lastLoaded = Date.now();
     } catch (e) {
@@ -82,6 +90,18 @@
       data = { social: s }; socialMsg = '已保存 · 即时生效（无需重启）';
     } catch (e) { socialMsg = '✗ ' + e.message; } finally { savingSocial = false; }
   }
+  async function saveWorld() {
+    savingWorld = true; worldMsg = ''; worldTestMsg = '';
+    try {
+      const w = await api.saveWorldConfig({ rss: wform.rss, polymarket: wform.polymarket, everyMs: Math.max(1, Number(wform.everyMin)) * 60000 });
+      data = { world: w }; worldMsg = '已保存 · 几秒后自动试读一遍（无需重启）';
+    } catch (e) { worldMsg = '✗ ' + e.message; } finally { savingWorld = false; }
+  }
+  async function testWorld() {
+    testingWorld = true; worldTestMsg = '抓取中…';
+    try { const r = await api.testWorld(); worldTestMsg = r.ok ? `✓ 抓到 ${r.count} 条：${(r.sample || []).map((x) => x.title).slice(0, 3).join(' / ')}` : `✗ ${r.error}`; }
+    catch (e) { worldTestMsg = '✗ ' + e.message; } finally { testingWorld = false; }
+  }
   function go(t) { tab = t; data = {}; load(); }
   function openLife(id) { curLife = id; tab = 'life'; data = {}; load(); }
   function ago(ts) { if (!ts) return '—'; const s = Math.round((Date.now() - ts) / 1000); return s < 60 ? s + '秒前' : s < 3600 ? Math.round(s / 60) + '分前' : Math.round(s / 3600) + '时前'; }
@@ -107,6 +127,7 @@
       {/each}
       {#if role === 'owner'}<button class="navi" class:on={tab === 'model'} on:click={() => go('model')}>模型</button>{/if}
       {#if role === 'owner'}<button class="navi" class:on={tab === 'social'} on:click={() => go('social')}>社交</button>{/if}
+      {#if role === 'owner'}<button class="navi" class:on={tab === 'world'} on:click={() => go('world')}>世界</button>{/if}
     </nav>
     <button class="navi logout" on:click={clearSession}>登出</button>
   </aside>
@@ -265,6 +286,27 @@
             <div class="mrow"><button class="abtn" on:click={saveSocial} disabled={savingSocial}>{savingSocial ? '保存中…' : '保存'}</button></div>
             {#if socialMsg}<p class="msg" class:bad={socialMsg.startsWith('✗')}>{socialMsg}</p>{/if}
             <p class="hint">第一性原理：人只有<b>一份</b>社交容量，按亲疏分层——同类(永生)和人类(必朽)<b>共享</b>这份容量，种类只决定会不会失去/哀悼。任何人来找她她都回应(用户付费)；只有"主动想你/主动找同类"受这份边界约束，所以 token 随生命体数、不随用户数爆炸。</p>
+          </div>
+        </AdminSection>
+      {/if}
+
+      {#if tab === 'world' && data.world}
+        {@const w = data.world}
+        <AdminSection title="世界源" subtitle="她们读的「真实世界」——新闻 / 预测市场。读到的事会轻轻染色她的状态，也成为同类讨论与发帖的话题。即时生效，无需重启。">
+          <span slot="action" class="tag {w.enabled ? 'ok' : 'sensitive'}">{w.enabled ? '已接入 · ' + w.rss.length + ' RSS' + (w.polymarket ? ' + Polymarket' : '') : '未接世界（站内自处）'}</span>
+          <div class="panel pad mform">
+            <label class="fld"><span class="flab">新闻 RSS 地址（每行一个，可多个）</span>
+              <textarea class="ainput wta" rows="5" bind:value={wform.rss} placeholder={"https://feeds.bbci.co.uk/news/world/rss.xml\nhttps://www.zhihu.com/rss"}></textarea></label>
+            <label class="chk"><input type="checkbox" bind:checked={wform.polymarket} /> 接入 <b>Polymarket</b> 预测市场（当下最火的押注 + 量化赔率）</label>
+            <label class="fld"><span class="flab">多久读一遍世界（分钟）</span>
+              <input class="ainput" type="number" min="1" bind:value={wform.everyMin} /></label>
+            <div class="mrow">
+              <button class="abtn" on:click={saveWorld} disabled={savingWorld}>{savingWorld ? '保存中…' : '保存'}</button>
+              <button class="abtn abtn-ghost" on:click={testWorld} disabled={testingWorld}>试抓一次</button>
+            </div>
+            {#if worldMsg}<p class="msg" class:bad={worldMsg.startsWith('✗')}>{worldMsg}</p>{/if}
+            {#if worldTestMsg}<p class="msg" class:bad={worldTestMsg.startsWith('✗')}>{worldTestMsg}</p>{/if}
+            <p class="hint">抓取在<b>引擎外</b>跑、零依赖：抓到的标题/摘要会冻进 <code>WORLD_PERCEIVED</code> 事件（ground truth），她对世界的反应才能确定性重放。换源/换频率<b>不改她记得什么</b>，配置也不进神圣日志。RSS 留空且不接 Polymarket＝她只过站内生活。当前来源：{w.rssFrom === 'override' ? '后台配置' : w.rssFrom === 'env' ? '环境变量' : '未配置'}。</p>
           </div>
         </AdminSection>
       {/if}
@@ -449,6 +491,7 @@
   .msg.bad { color: var(--danger); }
   .hint { font-size: 12px; color: var(--faint-c); line-height: 1.7; margin: 8px 0 0; }
   .hint code { background: var(--panel-2); border: 1px solid var(--border-subtle); border-radius: 4px; padding: 1px 5px; font-size: 11.5px; }
+  .wta { resize: vertical; font-family: var(--mono, ui-monospace, monospace); line-height: 1.5; min-height: 96px; padding: 9px 12px; font-size: 12.5px; }
 
   /* —— 平板/手机降级：侧栏转顶部，表格可横向滚动 —— */
   @media (max-width: 760px) {
