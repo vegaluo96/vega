@@ -30,7 +30,7 @@
 
   <div class="grid">
     {#each shown as l}
-      <button class="card" on:click={() => navigate('chat', { id: l.id })}>
+      <button class="card" on:click={() => navigate('profile', { id: l.id })}>
         <div class="avatar" style="{avatarStyle(l.id)};box-shadow:0 0 0 2px {moodRing(l.emotion)}">{l.id[0].toUpperCase()}</div>
         <div class="name">{l.id} <span class="dot" class:awake={l.awake}></span></div>
         <div class="temp">{l.temperament || ''}</div>

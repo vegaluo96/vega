@@ -625,6 +625,22 @@ const server = createServer(async (req, res) => {
         const token = accounts.createBindToken(me.id, lifeId);
         return send(res, 200, { bindToken: token, qr: `zsky-bind:${token}`, expiresInSec: 600 });
       }
+      // 生命体公开主页（§8.1）：她的公开自我——气质/年龄/此刻状态/同类朋友/公开心声。
+      // 【严格脱敏】：绝不含任何人类用户的关系/私聊（socialWorld 只含 peer；不暴露 narrative/chapters，那些会带用户名）。
+      if (req.method === 'GET' && seg[1] === 'lives' && seg.length === 3) {
+        const lp = lifeById(seg[2]);
+        if (!lp) return send(res, 404, { error: 'no such life' });
+        const s = snapOf(lp);
+        const ageDays = Math.floor((Date.parse(s.clockAt) - Date.parse(s.bornAt)) / 86_400_000);
+        const musings: Array<Record<string, unknown>> = [];
+        for (const e of lp.store.list()) if (e.type === 'MESSAGE_SENT' && e.relationshipId === 'r_square') musings.push({ text: (e.payload as MessageSentPayload).utterance, at: e.occurredAt });
+        return send(res, 200, {
+          id: lp.id, awake: s.awake, willingToWake: s.willingToWake, emotion: s.emotion, feeling: s.feeling, dayPhase: s.dayPhase,
+          temperament: tempLabel(s.temperament), tension: s.tension, ageDays, vitality: round3(s.soma.vitality.value),
+          peers: s.socialWorld.filter((t) => !t.ended).map((t) => ({ name: t.displayRef, closeness: t.closeness, attachment: t.attachment, style: t.style })),
+          musings: musings.slice(-20).reverse(),
+        });
+      }
       // 我与她：我自己和这条命的历史 + 她此刻的状态（严格限 u_<me.id> 那段关系，不串别人）。
       if (req.method === 'GET' && seg[1] === 'lives' && seg[3] === 'me') {
         const life3 = lifeById(seg[2]);

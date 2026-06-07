@@ -34,7 +34,7 @@
   <h2 class="section">此刻在 ZSKY 里的她们</h2>
   <div class="lives">
     {#each shown as l}
-      <button class="lifecard" on:click={() => navigate('chat', { id: l.id })}>
+      <button class="lifecard" on:click={() => navigate('profile', { id: l.id })}>
         <div class="avatar" style="{avatarStyle(l.id)};box-shadow:0 0 0 2px {moodRing(l.emotion)}">{l.id[0].toUpperCase()}</div>
         <div class="meta">
           <div class="name">{l.id} <span class="dot" class:awake={l.awake}></span></div>

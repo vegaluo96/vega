@@ -26,6 +26,7 @@ export const api = {
   logout: () => req('POST', '/api/auth/logout'),
   me: () => req('GET', '/api/me'),
   lives: () => req('GET', '/api/lives'),
+  lifeProfile: (lifeId) => req('GET', `/api/lives/${lifeId}`),
   say: (lifeId, content) => req('POST', `/api/lives/${lifeId}/say`, { content }),
   lifeMe: (lifeId) => req('GET', `/api/lives/${lifeId}/me`),
   chats: () => req('GET', '/api/chats'),

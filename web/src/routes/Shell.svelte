@@ -4,6 +4,7 @@
   import Explore from './Explore.svelte';
   import Chats from './Chats.svelte';
   import Chat from './Chat.svelte';
+  import LifeProfile from './LifeProfile.svelte';
   import Me from './Me.svelte';
   import Notifications from './Notifications.svelte';
   import { t } from '../lib/i18n.js';
@@ -20,6 +21,10 @@
 {#if $route.name === 'chat'}
   {#key $route.params.id}
     <Chat lifeId={$route.params.id} />
+  {/key}
+{:else if $route.name === 'profile'}
+  {#key $route.params.id}
+    <LifeProfile lifeId={$route.params.id} />
   {/key}
 {:else}
   <div class="view">
