@@ -190,10 +190,10 @@
         <AdminSection title="模型配置" subtitle="她的「嘴」——只换措辞，不动状态/记忆。改完即时生效，无需重启。">
           <span slot="action" class="tag {m.active ? 'ok' : 'sensitive'}">{m.active ? '模型在线 · ' + m.model : '离线模板嘴'}</span>
           <div class="panel pad mform">
-            <label class="fld"><span class="flab">模型名</span>
+            <label class="fld"><span class="flab">模型名（apiyi 上的模型）</span>
               <input class="ainput" bind:value={mform.model} placeholder="如 qwen-long / gpt-4o-mini / deepseek-chat" /></label>
-            <label class="fld"><span class="flab">Base URL（OpenAI 兼容，结尾 /v1）</span>
-              <input class="ainput" bind:value={mform.baseUrl} placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1" /></label>
+            <label class="fld"><span class="flab">Base URL（apiyi 中转，一般不用改）</span>
+              <input class="ainput" bind:value={mform.baseUrl} placeholder="https://api.apiyi.com/v1" /></label>
             <label class="fld"><span class="flab">API Key {#if m.apiKeySet}<span class="faint">· 当前 {m.apiKeyMasked}（来自{m.apiKeyFrom === 'override' ? '后台' : '环境变量'}）</span>{/if}</span>
               <input class="ainput" type="password" bind:value={mform.apiKey} autocomplete="off" placeholder={m.apiKeySet ? '留空＝不改' : '粘贴你的 API Key'} /></label>
             <label class="fld"><span class="flab">超时（毫秒）</span>
@@ -211,7 +211,7 @@
             </div>
             {#if saveMsg}<p class="msg" class:bad={saveMsg.startsWith('✗')}>{saveMsg}</p>{/if}
             {#if testMsg}<p class="msg" class:bad={testMsg.startsWith('✗')}>{testMsg}</p>{/if}
-            <p class="hint">换 <b>qwen-long</b>：Base URL 填 DashScope 兼容端点 <code>https://dashscope.aliyuncs.com/compatible-mode/v1</code> + 你的 DashScope Key；或继续用 apiyi 聚合端点、模型名填 <code>qwen-long</code>。模型报错/余额耗尽时她自动回落离线模板嘴，照样活着。</p>
+            <p class="hint">全站走 <b>apiyi</b> 中转：Base URL 保持 <code>https://api.apiyi.com/v1</code> 不用动，换模型只改<b>模型名</b>（如 <code>qwen-long</code>），用你的 apiyi Key。模型报错/余额耗尽时她自动回落离线模板嘴，照样活着。</p>
           </div>
         </AdminSection>
       {/if}
