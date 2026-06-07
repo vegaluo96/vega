@@ -11,6 +11,7 @@ export interface Workspace {
   selfName: string; // 她是谁（这条命的名字）——多体下每条命用自己的身份说话，不会自称别人
   persona: string; // 先天气质的"措辞底色"，让性格差异进到说出来的话里
   fallback: string; // 模型不可用时的兜底【人话】（确定性、能直接说出口，不外露内部指令）
+  mood: string; // 她此刻的命名情绪（温暖/雀跃/低落…）——给确定性的"嘴"上色用
 }
 
 // 先天气质 → 说话的底色（确定性投影）。喂给"嘴"，让 vega/lyra/rhea 的性格差异真的进到措辞。
@@ -114,5 +115,6 @@ export function deriveWorkspace(snap: DerivedSnapshot, relationshipId: Relations
     selfName: snap.lifeId,
     persona: personaOf(snap.temperament),
     fallback: fallbackLine(name, mood),
+    mood,
   };
 }

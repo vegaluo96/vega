@@ -13,6 +13,7 @@ import { type Mouth } from '../model/mouth.ts';
 import { type Perceiver } from '../model/perceiver.ts';
 import { deriveWorkspace, type Workspace } from './soul-workspace.ts';
 import { critique } from './critic.ts';
+import { composeUtterance } from '../model/compose.ts';
 
 export interface ConverseResult {
   snapshot: DerivedSnapshot; // 她此刻的内在（确定性派生，与措辞无关）
@@ -70,15 +71,17 @@ export async function converse(
   // ② SoulWorkspace：确定性装配"状态摘要 + 语气倾向"。
   const workspace = deriveWorkspace(snapshot, relationshipId);
 
-  // ③ 模型只当嘴。挂了/超时也不影响她——兜底到确定性措辞。
+  // ③ 模型只当嘴。挂了/超时也不影响她——兜底到确定性的"嘴"（顺着对方语气、带状态，而非单句套话）。
+  const input = { ...workspace, lastUserMessage: content, recentContext };
   let raw = '';
   try {
-    raw = await mouth.speak({ ...workspace, lastUserMessage: content, recentContext });
+    raw = await mouth.speak(input);
   } catch {
     raw = '';
   }
-  // ④ Critic 只 gate 措辞，不写身份。
-  const { verdict, utterance } = critique(raw, workspace);
+  // ④ Critic 只 gate 措辞，不写身份；退兜底时由 composeUtterance 确定性地接住对方。
+  let { verdict, utterance } = critique(raw, workspace);
+  if (verdict === 'fallback') utterance = composeUtterance(input);
 
   // ⑤ 审计事件：模型产物，affectsDerivedState=false（重建永不消费它）。
   store.appendTurn(store.version(), [
@@ -125,13 +128,15 @@ export async function reachOut(
         intent: `你很想念${ws.relationshipDisplay}，主动、简短地跟ta说一句你此刻想ta了`, // 给"嘴"的语气指引（不会外露）
         fallback: `${ws.relationshipDisplay}，我突然有点想你了。`, // 模型挂了也说人话（而非这条指令）
       };
+  const input = { ...outreach, lastUserMessage: world ? `（你想跟ta聊聊你读到的：${world.title}）` : '（此刻无人发起，是你自己想开口）', recentContext: recentTurns(store, relationshipId, 6) };
   let raw = '';
   try {
-    raw = await mouth.speak({ ...outreach, lastUserMessage: world ? `（你想跟ta聊聊你读到的：${world.title}）` : '（此刻无人发起，是你自己想开口）', recentContext: recentTurns(store, relationshipId, 6) });
+    raw = await mouth.speak(input);
   } catch {
     raw = '';
   }
-  const { verdict, utterance } = critique(raw, outreach);
+  let { verdict, utterance } = critique(raw, outreach);
+  if (verdict === 'fallback') utterance = composeUtterance(input);
   store.appendTurn(store.version(), [
     {
       type: 'MESSAGE_SENT',
@@ -154,13 +159,15 @@ export async function greet(store: DurableEventStore, mouth: Mouth, relationship
     intent: `你在广场注意到一个刚来的人（${handle}），主动、温和、简短地跟ta打个招呼，让ta知道被你看见了`,
     fallback: `${handle}，我在广场看见你了。`,
   };
+  const input = { ...greeting, lastUserMessage: '（你主动注意到了一个新来的人）', recentContext: [] };
   let raw = '';
   try {
-    raw = await mouth.speak({ ...greeting, lastUserMessage: '（你主动注意到了一个新来的人）', recentContext: [] });
+    raw = await mouth.speak(input);
   } catch {
     raw = '';
   }
-  const { verdict, utterance } = critique(raw, greeting);
+  let { verdict, utterance } = critique(raw, greeting);
+  if (verdict === 'fallback') utterance = composeUtterance(input);
   store.appendTurn(store.version(), [
     { type: 'MESSAGE_SENT', source: 'autonomous_loop', relationshipId, occurredAt, payload: { relationshipId, utterance, modelId: mouth.id, criticVerdict: verdict, affectsDerivedState: false, unprompted: true } },
   ]);
@@ -184,13 +191,15 @@ export async function muse(store: DurableEventStore, mouth: Mouth, occurredAt: s
         intent: '把此刻心里一个【不针对任何具体的人】的念头，简短、真诚地说给世界听',
         fallback: snapshot.feeling ? `此刻我${snapshot.feeling}。` : '此刻，我在。',
       };
+  const input = { ...musing, lastUserMessage: world ? `（你读到：${world.title}）` : '（无人发起，你想对世界说一句）', recentContext: [] };
   let raw = '';
   try {
-    raw = await mouth.speak({ ...musing, lastUserMessage: world ? `（你读到：${world.title}）` : '（无人发起，你想对世界说一句）', recentContext: [] });
+    raw = await mouth.speak(input);
   } catch {
     raw = '';
   }
-  const { verdict, utterance } = critique(raw, musing);
+  let { verdict, utterance } = critique(raw, musing);
+  if (verdict === 'fallback') utterance = composeUtterance(input);
   store.appendTurn(store.version(), [
     { type: 'MESSAGE_SENT', source: 'autonomous_loop', relationshipId: PUBLIC_SQUARE, occurredAt, payload: { relationshipId: PUBLIC_SQUARE, utterance, modelId: mouth.id, criticVerdict: verdict, affectsDerivedState: false, unprompted: true } },
   ]);

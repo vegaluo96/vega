@@ -54,6 +54,7 @@ export {
   type ApiyiConfig,
 } from './model/mouth.ts';
 export { createPerceiver, createDynamicPerceiver, createApiyiPerceiver, type Perceiver, type PerceiverConfig } from './model/perceiver.ts';
+export { composeUtterance } from './model/compose.ts';
 // 平台边缘层（非内核）：身份/账号 + 多用户对话。
 export {
   createAccountStore,
