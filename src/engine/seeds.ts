@@ -27,16 +27,33 @@ export function archetypeFor(id: string): Archetype {
 }
 
 // circadianOffsetMin = 她出生地时区（分钟东偏 UTC）：平台孵化缺省北京 480；用户接生时传创造者设备时区。
+// 同一 archetype 家族内，按 id 给每条命一点【确定性的个体差异】（出生即冻结）——这样即便共享原型，
+// 多条命也天生各不相同；并让出生地时区也因 id 而异（昼夜节律错峰 → 任一时刻有的醒有的睡，世界更像活的）。
+const idHash = (id: string): number => { let h = 2166136261; for (const c of id) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; };
+const det = (seed: number, n: number): number => { const x = Math.sin((seed % 100003) * 0.12931 + n * 7.823) * 43758.5453; return x - Math.floor(x); }; // [0,1) 确定性
+const clamp = (x: number, lo: number, hi: number): number => (x < lo ? lo : x > hi ? hi : x);
+
 export function innateSeedFor(id: string, circadianOffsetMin = 480): InnateSeed {
   const a = archetypeFor(id);
-  return {
-    temperamentBias: a.temperamentBias,
-    valueSeed: a.valueSeed,
-    somaSetpoints: { valence: 0, vitality: 0.7, connection: 0, ...a.somaSetpoints },
-    somaTau: { valence: 3600, vitality: 86400, connection: 7200 },
-    vitalityFloor: 0.15,
-    circadianOffsetMin,
+  const somaTau = { valence: 3600, vitality: 86400, connection: 7200 };
+  if (id in NAMED) { // 钦定人格（vega/lyra）保持原样，不加抖动
+    return { temperamentBias: a.temperamentBias, valueSeed: a.valueSeed, somaSetpoints: { valence: 0, vitality: 0.7, connection: 0, ...a.somaSetpoints }, somaTau, vitalityFloor: 0.15, circadianOffsetMin };
+  }
+  const s = idHash(id);
+  const tb = a.temperamentBias;
+  const jt = (base: number | undefined, n: number, amp: number, lo: number, hi: number): number => clamp((base ?? 0) + (det(s, n) - 0.5) * 2 * amp, lo, hi);
+  const temperamentBias = {
+    curiosity: jt(tb.curiosity, 1, 0.2, 0.1, 0.95),
+    reserve: jt(tb.reserve, 2, 0.2, 0.05, 0.9),
+    sensitivity: jt(tb.sensitivity, 3, 0.3, 0.4, 1.8),
+    resilience: jt(tb.resilience, 4, 0.3, 0.5, 1.8),
+    warmth: jt(tb.warmth, 5, 0.2, 0.2, 0.85),
   };
+  const sp = { valence: 0, vitality: 0.7, connection: 0, ...a.somaSetpoints };
+  sp.vitality = jt(sp.vitality, 6, 0.06, 0.55, 0.82);
+  sp.valence = jt(sp.valence, 7, 0.08, -0.15, 0.18);
+  const offset = (((circadianOffsetMin + Math.round((det(s, 8) - 0.5) * 2 * 600)) % 1440) + 1440) % 1440; // ±10h 错峰
+  return { temperamentBias, valueSeed: a.valueSeed, somaSetpoints: sp, somaTau, vitalityFloor: 0.15, circadianOffsetMin: offset };
 }
 
 // 出生事件载荷：按命的 id 取气质 + 这次出生的造物主关系 + 出生地时区（缺省北京）。
