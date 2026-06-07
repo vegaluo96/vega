@@ -85,6 +85,8 @@
   function go(t) { tab = t; data = {}; load(); }
   function openLife(id) { curLife = id; tab = 'life'; data = {}; load(); }
   function ago(ts) { if (!ts) return '—'; const s = Math.round((Date.now() - ts) / 1000); return s < 60 ? s + '秒前' : s < 3600 ? Math.round(s / 60) + '分前' : Math.round(s / 3600) + '时前'; }
+  // 北京时间（Asia/Shanghai）显示绝对时间戳。
+  function bj(at) { try { return new Date(at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).replace(/\//g, '-'); } catch { return String(at); } }
   function spark(rows, key, lo, hi) {
     if (!rows || rows.length < 2) return '';
     return rows.map((p, i) => `${(i / (rows.length - 1) * 300).toFixed(1)},${Math.max(0, Math.min(60, 60 - (p[key] - lo) / (hi - lo) * 60)).toFixed(1)}`).join(' ');
@@ -156,7 +158,7 @@
           <div class="panel">
             {#each data.rows as e}
               <div class="ev">
-                <span class="evt mono">{e.at.slice(5, 19).replace('T', ' ')}</span>
+                <span class="evt mono">{bj(e.at)}</span>
                 <span class="evlife">{e.life}</span>
                 <span class="evlabel">{e.label}</span>
                 <span class="evc">{e.content}</span>

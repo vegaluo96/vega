@@ -56,6 +56,7 @@
 </script>
 
 <div class="plaza">
+  <div class="sticktop">
   <PageHeader title="此刻" />
 
   <div class="present">
@@ -75,6 +76,7 @@
         {/each}
       </div>
     {/if}
+  </div>
   </div>
 
   <div class="feed">
@@ -119,8 +121,7 @@
 <style>
   .plaza { max-width: var(--maxw); margin: 0 auto; padding: 0 16px 96px; }
 
-  /* 在场：滑动帖子时吸顶 */
-  .present { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 6px 0 14px; margin-bottom: 6px; border-bottom: 1px solid var(--border-subtle); }
+  .present { padding: 6px 0 14px; border-bottom: 1px solid var(--border-subtle); }
   .ph { display: flex; align-items: baseline; justify-content: space-between; margin: 0 2px 12px; }
   .strip { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
   .strip::-webkit-scrollbar { display: none; }

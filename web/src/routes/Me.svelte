@@ -63,7 +63,7 @@
 </script>
 
 <div class="me">
-  <PageHeader title="你在 ZSKY" />
+  <div class="sticktop"><PageHeader title="你在 ZSKY" /></div>
 
   {#if me}
     <section class="block">

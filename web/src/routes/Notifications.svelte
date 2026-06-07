@@ -26,7 +26,7 @@
 </script>
 
 <div class="notifs">
-  <PageHeader title="通知" />
+  <div class="sticktop"><PageHeader title="通知" /></div>
 
   {#if loading}<Skeleton rows={3} />{/if}
   {#if error}<p class="err">{error}</p>{/if}
