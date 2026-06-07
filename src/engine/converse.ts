@@ -40,6 +40,7 @@ export async function converse(
   content: string,
   occurredAt: string,
   perceiver?: Perceiver,
+  channel = 'chat',
 ): Promise<ConverseResult> {
   // 之前的对话（不含本条），给"嘴"做上下文。
   const recentContext = recentTurns(store, relationshipId, 6);
@@ -56,7 +57,7 @@ export async function converse(
 
   // ① 输入事件（事务化）。状态变化在此由确定性 appraisal 产生——【在模型开口之前】。
   store.appendTurn(store.version(), [
-    { type: 'MESSAGE_RECEIVED', source: 'external_user', relationshipId, occurredAt, payload: { relationshipId, content, channel: 'chat', ...(perception ? { perception } : {}) } },
+    { type: 'MESSAGE_RECEIVED', source: 'external_user', relationshipId, occurredAt, payload: { relationshipId, content, channel, ...(perception ? { perception } : {}) } },
   ]);
   const snapshot = reconstruct(store.list());
 

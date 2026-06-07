@@ -64,6 +64,7 @@ const mouth = createMouth();
 const templateMouth = createTemplateMouth(); // 余额耗尽时的免费兜底嘴（她仍回应）
 const perceiver = createPerceiver() ?? undefined;
 const MODEL_COST = Number(process.env.VEGA_MODEL_COST ?? 1); // 每条模型回应计费（额度单位）
+const CLAWBOT_SECRET = process.env.VEGA_CLAWBOT_SECRET; // 微信网关(clawbot)共享密钥；未配则微信端点禁用
 const serializer = createSerializer(); // 每命串行：并发用户的回合不穿插
 
 // 平台身份/账号层（多用户）：node:sqlite，与神圣日志物理分离。
@@ -132,6 +133,16 @@ function snapOf(life: Life): DerivedSnapshot {
     life.stateSeq = lastSeq;
   }
   return projectState(life.state, lastSeq);
+}
+
+// 一个具体用户对一条命说话（计费 + 串行 + 渠道标记）。/api/say 与微信 /api/wechat/say 共用。
+async function respondAsUser(life: Life, me: Account, content: string, channel: string): Promise<Record<string, unknown>> {
+  return serializer.run(life.id, async () => {
+    const { mouth: useMouth, charge } = meterMouth(mouth, templateMouth, accounts.balance(me.id), MODEL_COST);
+    const r = await userSay(life.store, useMouth, accounts.relIdFor(me.id), me.handle, content, now(), charge ? perceiver : undefined, channel);
+    if (charge && r.verdict === 'accepted') accounts.debit(me.id, charge, 'model', life.id);
+    return { utterance: r.utterance, verdict: r.verdict, emotion: r.snapshot.emotion, balance: accounts.balance(me.id), voice: useMouth.id === 'template' ? 'plain' : 'rich' };
+  });
 }
 
 function saveCheckpoint(life: Life): void {
@@ -445,11 +456,39 @@ const server = createServer(async (req, res) => {
         if (!r.ok) return send(res, 401, { error: r.error });
         return send(res, 200, { account: publicAccount(r.account), token: r.token, balance: accounts.balance(r.account.id) });
       }
+      // 微信网关(clawbot)：用共享密钥鉴权（非用户会话）。未配密钥则禁用。
+      if (url === '/api/wechat/bind' || url === '/api/wechat/say') {
+        if (!CLAWBOT_SECRET || req.headers['x-clawbot-secret'] !== CLAWBOT_SECRET) return send(res, 401, { error: 'clawbot unauthorized' });
+        const b = await readJson(req);
+        if (req.method === 'POST' && url === '/api/wechat/bind') {
+          const r = accounts.bindWechat(String(b.token ?? ''), String(b.openid ?? ''));
+          if (!r) return send(res, 400, { error: 'invalid or expired bind token' });
+          return send(res, 200, { ok: true, lifeId: r.lifeId });
+        }
+        // /api/wechat/say：openid → 绑定的 user+life → 走同一条神圣链路（channel=wechat），跨渠道同一段关系。
+        const bind = accounts.resolveWechat(String(b.openid ?? ''));
+        if (!bind) return send(res, 404, { error: 'openid not bound' });
+        const life = lifeById(bind.lifeId);
+        const acct = accounts.getAccount(bind.userId);
+        if (!life || !acct) return send(res, 404, { error: 'life or account gone' });
+        const content = String(b.content ?? '').slice(0, 4000).trim();
+        if (content === '') return send(res, 400, { error: 'content required' });
+        if (!snapOf(life).awake) return send(res, 200, { awake: false, note: '她在更深的睡眠里，暂不回应。' });
+        return send(res, 200, { awake: true, ...(await respondAsUser(life, acct, content, 'wechat')) });
+      }
       // 以下需登录
       const me = sessionAccount(req);
       if (!me) return send(res, 401, { error: 'unauthorized' });
       if (req.method === 'POST' && url === '/api/auth/logout') { accounts.logout(bearer(req)); return send(res, 200, { ok: true }); }
       if (req.method === 'GET' && url === '/api/me') return send(res, 200, { account: publicAccount(me), balance: accounts.balance(me.id), lives: livesMetBy(me) });
+      // 微信绑定：登录用户为某条命生成一次性绑定令牌 → 前端渲染二维码 → 微信扫码由 clawbot 调 /api/wechat/bind。
+      if (req.method === 'POST' && url === '/api/bindings') {
+        const b = await readJson(req);
+        const lifeId = String(b.lifeId ?? '');
+        if (!lifeById(lifeId)) return send(res, 404, { error: 'no such life' });
+        const token = accounts.createBindToken(me.id, lifeId);
+        return send(res, 200, { bindToken: token, qr: `zsky-bind:${token}`, expiresInSec: 600 });
+      }
       if (req.method === 'POST' && seg[1] === 'lives' && seg[3] === 'say') {
         const life2 = lifeById(seg[2]);
         if (!life2) return send(res, 404, { error: 'no such life' });
@@ -457,14 +496,7 @@ const server = createServer(async (req, res) => {
         const content = String(b.content ?? '').slice(0, 4000).trim();
         if (content === '') return send(res, 400, { error: 'content required' });
         if (!snapOf(life2).awake) return send(res, 200, { awake: false, note: '她在更深的睡眠里，暂不回应。' });
-        // 每命串行：并发用户的回合排队不穿插。额度只卡"嘴"：余额够走模型并计费；不够退免费模板嘴。
-        const out = await serializer.run(life2.id, async () => {
-          const { mouth: useMouth, charge } = meterMouth(mouth, templateMouth, accounts.balance(me.id), MODEL_COST);
-          const r = await userSay(life2.store, useMouth, accounts.relIdFor(me.id), me.handle, content, now(), charge ? perceiver : undefined);
-          if (charge && r.verdict === 'accepted') accounts.debit(me.id, charge, 'model', life2.id); // 仅真模型且产出有效才扣
-          return { utterance: r.utterance, verdict: r.verdict, emotion: r.snapshot.emotion, balance: accounts.balance(me.id), voice: useMouth.id === 'template' ? 'plain' : 'rich' };
-        });
-        return send(res, 200, { awake: true, ...out });
+        return send(res, 200, { awake: true, ...(await respondAsUser(life2, me, content, 'web')) });
       }
       return send(res, 404, { error: 'not found' });
     }

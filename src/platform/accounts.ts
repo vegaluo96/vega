@@ -67,6 +67,11 @@ export interface AccountStore {
   issueEmailVerification(userId: string): string;
   verifyEmail(token: string): boolean;
   setStatus(userId: string, status: AccountStatus): void;
+  // 微信绑定（§12）：二维码一次性令牌 → openid↔user↔life。openid 等 PII 只在账号层，绝不进神圣日志。
+  createBindToken(userId: string, lifeId: string): string;
+  bindWechat(token: string, openid: string): { userId: string; lifeId: string } | null;
+  resolveWechat(openid: string): { userId: string; lifeId: string } | null;
+  unbindWechat(openid: string): void;
   close(): void;
 }
 
@@ -88,6 +93,8 @@ export function createAccountStore(path = ':memory:', opts: AccountStoreOptions 
       id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL, amount INTEGER NOT NULL,
       status TEXT NOT NULL DEFAULT 'pending', requested_at TEXT NOT NULL, decided_by TEXT, decided_at TEXT);
     CREATE TABLE IF NOT EXISTS email_verifications(token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS bind_tokens(token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, life_id TEXT NOT NULL, expires_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS wechat_bindings(openid TEXT PRIMARY KEY, user_id TEXT NOT NULL, life_id TEXT NOT NULL, bound_at TEXT NOT NULL);
   `);
 
   const owners = new Set((opts.owners ?? []).map(norm));
@@ -206,6 +213,27 @@ export function createAccountStore(path = ':memory:', opts: AccountStoreOptions 
     setStatus(userId, status) {
       db.prepare('UPDATE users SET status=? WHERE id=?').run(status, userId);
       if (status === 'blocked') db.prepare('DELETE FROM sessions WHERE user_id=?').run(userId); // 封禁即踢下线
+    },
+    createBindToken(userId, lifeId) {
+      const token = genToken();
+      db.prepare('INSERT INTO bind_tokens(token_hash,user_id,life_id,expires_at) VALUES(?,?,?,?)')
+        .run(sha256(token), userId, lifeId, new Date(Date.now() + 600_000).toISOString()); // 10 分钟有效
+      return token;
+    },
+    bindWechat(token, openid) {
+      const row = db.prepare('SELECT user_id,life_id,expires_at FROM bind_tokens WHERE token_hash=?').get(sha256(token)) as { user_id: string; life_id: string; expires_at: string } | undefined;
+      if (!row || row.expires_at < now()) return null;
+      db.prepare('DELETE FROM bind_tokens WHERE token_hash=?').run(sha256(token)); // 一次性
+      db.prepare('INSERT INTO wechat_bindings(openid,user_id,life_id,bound_at) VALUES(?,?,?,?) ON CONFLICT(openid) DO UPDATE SET user_id=excluded.user_id, life_id=excluded.life_id, bound_at=excluded.bound_at')
+        .run(openid, row.user_id, row.life_id, now());
+      return { userId: row.user_id, lifeId: row.life_id };
+    },
+    resolveWechat(openid) {
+      const row = db.prepare('SELECT user_id,life_id FROM wechat_bindings WHERE openid=?').get(openid) as { user_id: string; life_id: string } | undefined;
+      return row ? { userId: row.user_id, lifeId: row.life_id } : null;
+    },
+    unbindWechat(openid) {
+      db.prepare('DELETE FROM wechat_bindings WHERE openid=?').run(openid);
     },
     close() {
       db.close();

@@ -34,7 +34,8 @@ export async function userSay(
   content: string,
   occurredAt: string,
   perceiver?: Perceiver,
+  channel = 'chat',
 ): Promise<ConverseResult> {
   ensureUserRelationship(store, relId, handle, occurredAt);
-  return converse(store, mouth, relId, content, occurredAt, perceiver);
+  return converse(store, mouth, relId, content, occurredAt, perceiver, channel);
 }
