@@ -140,6 +140,8 @@ function view(life: Life, s: DerivedSnapshot): Record<string, unknown> {
     bondTrust: b ? round3(b.trust) : null,
     repairNeed: b ? round3(b.repairNeed) : null,
     emotion: s.emotion,
+    feeling: s.feeling,
+    dayPhase: s.dayPhase,
     goals: s.goals.slice(0, 3).map((g) => g.intent),
     memories: s.memory.filter((m) => m.lineage.isCurrent).length,
     peers: life.peers,
@@ -154,8 +156,12 @@ function innerView(life: Life, s: DerivedSnapshot): Record<string, unknown> {
     id: life.id,
     awake: s.awake,
     emotion: s.emotion,
+    feeling: s.feeling,
+    dayPhase: s.dayPhase,
+    tension: s.tension,
     narrative: s.narrative,
     innerLife: s.innerLife,
+    chapters: s.chapters,
     temperament: { label: tempLabel(s.temperament), ...s.temperament },
     soma: {
       valence: round3(s.soma.valence.value),
@@ -274,6 +280,7 @@ const PANEL = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
  <h1>vega · 内在生活 <select id="life" onchange="life=this.value;load()"></select></h1><div class="sub" id="nar">…</div>
  <div class="sub" id="temp" style="color:#d2a8ff">先天气质…</div>
  <div class="card"><h2>内在独白（没说出口的 / 内外两层之"内"）</h2><div id="inner" class="mem dim" style="border:0">…</div></div>
+ <div class="card"><h2>人生篇章（叙事身份 / 按转折点重讲）</h2><div id="chapters"></div></div>
  <div class="card"><h2>内稳态 SOMA</h2><div id="soma"></div></div>
  <div class="card"><h2>价值（因你而变）</h2><div id="vals"></div></div>
  <div class="card"><h2>记忆（当前态）</h2><div id="mems"></div></div>
@@ -290,9 +297,10 @@ const PANEL = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
  async function start(){try{var r=await fetch('/lives',{headers:H()});if(r.status===401){document.getElementById('nar').textContent='需要令牌 🔑';return;}var ls=await r.json();var sel=document.getElementById('life');sel.innerHTML=ls.map(function(l){return '<option value="'+l.id+'">'+l.id+'</option>';}).join('');if(!life)life=ls[0]?ls[0].id:'';sel.value=life;load();}catch(e){document.getElementById('nar').textContent='离线';}}
  async function load(){if(!life)return;
   try{var r=await fetch('/'+life+'/inner',{headers:H()});if(r.status===401){document.getElementById('nar').textContent='需要令牌 🔑';return;}var s=await r.json();var m=s.soma;
-   document.getElementById('nar').textContent=s.narrative+'　·　'+(s.awake?'醒着':'休眠');
-   document.getElementById('temp').textContent='先天气质：'+(s.temperament?s.temperament.label:'');
+   document.getElementById('nar').textContent=s.narrative+'　·　'+(s.awake?'醒着':'休眠')+'　·　'+(s.dayPhase||'')+(s.feeling?'　·　'+s.feeling:'');
+   document.getElementById('temp').textContent='先天气质：'+(s.temperament?s.temperament.label:'')+(s.tension?'　｜内在拉扯：'+s.tension:'');
    document.getElementById('inner').textContent=s.innerLife||'…';
+   document.getElementById('chapters').innerHTML=(s.chapters||[]).map(function(c,i){return '<div class="mem"><span class="dim">'+(i+1)+'.</span> '+esc(c)+'</div>';}).join('')||'<span class=dim>人生才刚开始…</span>';
    document.getElementById('soma').innerHTML=bar('效价',m.valence,-1,1)+bar('唤醒',m.arousal,0,1)+bar('灵性',m.vitality,0,1)+bar('精力',m.energy,0,1)+bar('平静',m.calm,0,1)+bar('联结',m.connection,-1,1)+bar('安全',m.safety,0,1);
    document.getElementById('vals').innerHTML=s.values.map(function(v){return '<div class="row"><span class="lbl">'+esc(v.key)+'</span><span class="bar"><span class="fill" style="width:'+Math.round(v.weight*100)+'%"></span></span><span class="num">'+v.weight.toFixed(2)+'</span><span class="dim">　'+v.status+(v.drifts?' ·漂移'+v.drifts+'次':'')+'</span></div>';}).join('')||'<span class=dim>暂无</span>';
    document.getElementById('mems').innerHTML=s.memories.map(function(x){return '<div class="mem" style="opacity:'+(x.vivid?1:0.45)+'"><span class="'+(x.affect<0?'dim':'tag')+'">['+x.affect.toFixed(2)+']</span> '+esc(x.content)+(x.vivid?'':' <span class=dim>·已淡</span>')+'</div>';}).join('')||'<span class=dim>还没有记忆</span>';

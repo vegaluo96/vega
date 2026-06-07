@@ -99,9 +99,13 @@ export interface DerivedSnapshot {
   bornAt: string; // 出生时刻（genesis 的 occurredAt）
   clockAt: string; // 她内在时钟的此刻（最后一条事件的 occurredAt）
   temperament: Temperament; // 先天气质：终生不变的底色（每条命天生不同）
+  dayPhase: string; // 昼夜节律：她内在时钟此刻处于一天的哪一段（清晨/白天/黄昏/深夜）
   emotion: string; // 命名情绪：由核心情感+内稳态确定性投影的"廉价语义标签"（Barrett）
+  feeling: string; // 混合情绪：在主情绪上叠加次要色彩的一句自然描述（又暖又有点孤单…）
+  tension: string; // 价值张力：相反价值同时被拉高时的"内在拉扯"（确定性派生，纯只读）
   narrative: string; // 自传叙事：确定性投影、只读，绝不回写身份（契约③）
   innerLife: string; // 内外两层之"内"：没说出口的私密心声（确定性投影、只读，绝不外发）
+  chapters: string[]; // 叙事身份：把人生按转折点确定性切成"篇章"（renarrate 的产物，纯只读，不污染身份）
   soma: Soma;
   memory: MemoryEntry[];
   semanticMemory: SemanticMemory[]; // 经历压缩成的"理解"（遗忘即抽象，纯派生）

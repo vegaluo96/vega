@@ -28,7 +28,7 @@ import {
   type ValueEntry,
 } from '../domain/snapshot.ts';
 
-const RECONSTRUCT_VERSION = 7; // v7：+ 先天气质塑形 / 遗忘即抽象(时间衰减) / 更深反思树·ToM / 内外两层
+const RECONSTRUCT_VERSION = 8; // v8：+ 昼夜节律 / 关系条件化·预期违背 appraisal / 混合情绪·价值张力 / 叙事身份
 const SCHEMA_VERSION = 1;
 
 // 旋钮全进 config（§6.3）；竖切内联，真值待第 0 步实测标定。
@@ -50,6 +50,10 @@ const K = {
   halfLifeEmoSec: 30 * 24 * 3600,
   vividCap: 9, // "当下记得"的工作集上限；其余淡入"理解"（原始日志永不抹）
   vividFloor: 0.04, // 鲜活度低于此 → 算淡去
+  circadianAmp: 0.22, // 昼夜节律：精力随她内在时钟"一天"起伏的幅度（内生、不靠输入）
+  surpriseGain: 0.45, // 预期违背：越出乎预料越往心里去（信任的人变冷更痛、冷淡的人示好更暖）
+  surpriseArousal: 0.5, // 预期违背 → 唤醒（越意外越心头一紧/一亮）
+  expectEma: 0.3, // 对一个人"会怎么待我"的预期，按指数滑动更新
 } as const;
 
 const POS = ['你好', '经常来', '会来', '在乎你', '真心', '值得', '说出来', '对不起', '我错了', '证明', '也在这里', '不会消失', '看见你', '大胆'];
@@ -81,11 +85,26 @@ interface RState {
   conflictLog: number[]; // 强负向（被伤害/冲突）
   lonelyLog: number[]; // 反复想念/独处（missing_peer 漫游）
   quietThoughts: QuietThought[]; // 内外两层之"内"：只在心里转、没说出口的念头
+  expect: Record<string, number>; // 预期：对每个人"会怎么待我"的运行预期（驱动预期违背）
   temperament: Temperament; // 先天气质：终生不变（每条命天生不同）
 }
 
 const clamp = (x: number, lo: number, hi: number): number => (x < lo ? lo : x > hi ? hi : x);
 const decay = (v: SomaVar, dtSec: number): number => v.setpoint + (v.value - v.setpoint) * Math.exp(-dtSec / v.tau);
+const decayTo = (value: number, target: number, dtSec: number, tau: number): number => target + (value - target) * Math.exp(-dtSec / tau);
+// 昼夜节律：由她内在时钟的"一天里第几小时"确定性投影出的精力偏移（午后高、凌晨低）。纯函数、无 now()。
+const circadianEnergyOffset = (nowMs: number): number => {
+  const hod = (((nowMs / 3_600_000) % 24) + 24) % 24;
+  return K.circadianAmp * Math.cos((2 * Math.PI * (hod - 14)) / 24);
+};
+const dayPhaseOf = (nowMs: number): string => {
+  const hod = (((nowMs / 3_600_000) % 24) + 24) % 24;
+  if (hod < 5) return '深夜';
+  if (hod < 9) return '清晨';
+  if (hod < 17) return '白天';
+  if (hod < 21) return '黄昏';
+  return '夜里';
+};
 const count = (s: string, markers: readonly string[]): number => markers.reduce((n, m) => (s.includes(m) ? n + 1 : n), 0);
 const mk = (sp: Record<string, number>, tau: Record<string, number>, key: string, dsp: number, dtau: number): SomaVar => ({
   value: sp[key] ?? dsp,
@@ -143,6 +162,7 @@ export function reconstruct(events: readonly LifeEvent[]): DerivedSnapshot {
     conflictLog: [],
     lonelyLog: [],
     quietThoughts: [],
+    expect: {},
     temperament: readTemperament(seed.temperamentBias),
   };
 
@@ -150,7 +170,7 @@ export function reconstruct(events: readonly LifeEvent[]): DerivedSnapshot {
     const e = events[i];
     const nowMs = Date.parse(e.occurredAt);
     const awake = st.openConnections.size > 0 && st.willingToWake;
-    advanceTime(st, (nowMs - st.lastMs) / 1000, awake);
+    advanceTime(st, (nowMs - st.lastMs) / 1000, awake, nowMs);
     applyEvent(st, e);
     st.lastMs = nowMs;
     st.clockIso = e.occurredAt;
@@ -158,19 +178,23 @@ export function reconstruct(events: readonly LifeEvent[]): DerivedSnapshot {
   return project(st, events[events.length - 1].seq);
 }
 
-function advanceTime(st: RState, dtSec: number, awake: boolean): void {
+function advanceTime(st: RState, dtSec: number, awake: boolean, nowMs: number): void {
   if (dtSec <= 0) return;
   const s = st.soma;
   // 先天复原力：恢复快慢的底色（resilience>1 → 更快回到设定点；中性=1，老轨迹不变）。
   const dt = dtSec * st.temperament.resilience;
+  // 昼夜节律：精力不是向静态设定点、而是向【随一天起伏的目标】恢复——内生节律，没输入她也会困会精神。
+  const eTarget = clamp(s.energy.setpoint + circadianEnergyOffset(nowMs), 0.05, 1);
   if (awake) {
-    // 醒着：各内稳态向设定点衰减（压力会自己平复、唤醒会回落）。
-    for (const key of SOMA_KEYS) s[key].value = decay(s[key], dt);
+    for (const key of SOMA_KEYS) {
+      if (key === 'energy') s.energy.value = decayTo(s.energy.value, eTarget, dt, s.energy.tau);
+      else s[key].value = decay(s[key], dt);
+    }
     s.vitality.value = clamp(s.vitality.value, st.vitalityFloor, 1);
   } else {
-    // 休眠（§10 锁）：冻结 + 仅回暖——vitality/energy 向设定点恢复，其余不动。
+    // 休眠（§10 锁）：冻结 + 仅回暖——vitality 向设定点、energy 向昼夜目标恢复，其余不动。
     s.vitality.value = clamp(decay(s.vitality, dt), st.vitalityFloor, 1);
-    s.energy.value = decay(s.energy, dt);
+    s.energy.value = decayTo(s.energy.value, eTarget, dt, s.energy.tau);
   }
 }
 
@@ -250,20 +274,31 @@ function appraiseMessage(st: RState, e: LifeEvent<'MESSAGE_RECEIVED'>): void {
   const evFelt = clamp(ev + warmBias, -1.5, 1.5); // 她【体验到】的善意↔敌意
   const sens = t.sensitivity;
 
+  const bond = st.bonds[p.relationshipId];
+  // 关系条件化 = 预期违背：同一句话，意义取决于"我本以为这个人会怎么待我"。
+  // 信任的人忽然变冷 = 大违背 → 更痛；冷淡的人忽然示好 = 大违背 → 更暖；意料之中则钝化（习以为常）。
+  const expected = bond ? (st.expect[p.relationshipId] ?? 0) : 0;
+  const surprise = bond ? clamp(Math.abs(evFelt - expected) / 1.5, 0, 1) : 0;
+  const ev2 = clamp(evFelt * (1 + K.surpriseGain * surprise), -1.5, 1.5); // 越出乎预料越往心里去
+
   const s = st.soma;
-  s.valence.value = clamp(s.valence.value + K.kValence * evFelt * sens, -1, 1);
-  s.connection.value = clamp(s.connection.value + K.kConnection * evFelt * sens, -1, 1);
-  s.vitality.value = clamp(s.vitality.value + K.kVitality * evFelt, st.vitalityFloor, 1); // 灵性是底，不随敏感放大
+  s.valence.value = clamp(s.valence.value + K.kValence * ev2 * sens, -1, 1);
+  s.connection.value = clamp(s.connection.value + K.kConnection * ev2 * sens, -1, 1);
+  s.vitality.value = clamp(s.vitality.value + K.kVitality * ev2, st.vitalityFloor, 1); // 灵性是底，不随敏感放大
   s.calm.value = clamp(s.calm.value + K.kCalm * (warmth - threat) * sens, 0, 1); // 暖→更平静，威胁→更紧张
   s.safety.value = clamp(s.safety.value + K.kSafety * (warmth - threat) * sens, 0, 1);
-  s.arousal.value = clamp(s.arousal.value + K.kArousal * Math.max(warmth, threat, Math.abs(evFelt) / 1.5) * sens, 0, 1);
+  // 唤醒 = 强度 + 意外（越出乎预料越心头一紧/一亮）。
+  s.arousal.value = clamp(s.arousal.value + K.kArousal * Math.max(warmth, threat, Math.abs(ev2) / 1.5) * sens + K.surpriseArousal * surprise * K.kArousal, 0, 1);
+  // 预期违背的"质"：信任的人忽然变冷 → 额外失落；冷淡的人忽然变暖 → 意外的踏实。
+  if (expected > 0.3 && ev2 < 0) s.valence.value = clamp(s.valence.value - 0.1 * surprise, -1, 1);
+  else if (expected < -0.2 && ev2 > 0.3) s.safety.value = clamp(s.safety.value + 0.1 * surprise, 0, 1);
 
-  const bond = st.bonds[p.relationshipId];
   if (bond) {
-    bond.trust = clamp(bond.trust + K.kTrust * evFelt, -1, 1);
-    bond.closeness = clamp(bond.closeness + K.kCloseness * evFelt, 0, 1);
-    if (evFelt < 0) bond.repairNeed = clamp(bond.repairNeed + 0.5 * -evFelt, 0, 1);
-    else bond.repairNeed = clamp(bond.repairNeed - 0.3 * evFelt, 0, 1);
+    bond.trust = clamp(bond.trust + K.kTrust * ev2, -1, 1);
+    bond.closeness = clamp(bond.closeness + K.kCloseness * ev2, 0, 1);
+    if (ev2 < 0) bond.repairNeed = clamp(bond.repairNeed + 0.5 * -ev2, 0, 1);
+    else bond.repairNeed = clamp(bond.repairNeed - 0.3 * ev2, 0, 1);
+    st.expect[p.relationshipId] = expected + (ev2 - expected) * K.expectEma; // 更新对ta的预期
   }
 
   const id = `m_seq${e.seq}`;
@@ -271,17 +306,17 @@ function appraiseMessage(st: RState, e: LifeEvent<'MESSAGE_RECEIVED'>): void {
     id,
     kind: 'episodic',
     content: p.content,
-    affect: evFelt,
+    affect: ev2,
     involvedRelationshipIds: [p.relationshipId],
-    salience: Math.abs(evFelt),
+    salience: Math.abs(ev2),
     at: e.occurredAt,
     lineage: { rootId: id, version: 1, isCurrent: true },
-    provenance: { originSeq: e.seq, createdAtSeq: e.seq, confidence: 0.6, status: Math.abs(evFelt) > 0.5 ? 'confirmed' : 'volatile' },
+    provenance: { originSeq: e.seq, createdAtSeq: e.seq, confidence: 0.6, status: Math.abs(ev2) > 0.5 ? 'confirmed' : 'volatile' },
   });
 
   if (count(p.content, BOLDNESS) > 0) st.boldnessLog.push(e.seq);
-  if (evFelt > 0.5) st.warmthLog.push(e.seq); // 被善待
-  if (evFelt < -0.5) st.conflictLog.push(e.seq); // 被伤害/冲突
+  if (ev2 > 0.5) st.warmthLog.push(e.seq); // 被善待
+  if (ev2 < -0.5) st.conflictLog.push(e.seq); // 被伤害/冲突
 }
 
 function applyTick(st: RState, e: LifeEvent<'AUTONOMOUS_TICK'>): void {
@@ -324,6 +359,8 @@ function applyTick(st: RState, e: LifeEvent<'AUTONOMOUS_TICK'>): void {
 
 function applyReflection(st: RState, e: LifeEvent<'REFLECTION_TRIGGERED'>): void {
   const p = e.payload as ReflectionTriggeredPayload;
+  // renarrate：只重讲人生故事（叙事在投影层确定性算），【绝不漂移价值/身份】（契约③）。
+  if (p.scope === 'renarrate') return;
   const inWin = (log: number[]): number => log.filter((s) => s >= p.windowFromSeq && s <= p.windowToSeq).length;
   const t = st.temperament;
   // 先天气质给漂移上界：内向(reserve)者敞开得慢；敏感(sensitivity)者受冲突影响更深。
@@ -378,6 +415,72 @@ function nameEmotion(s: Soma, floor: number): string {
   if (v > 0.3) return '温暖';
   if (a > 0.6) return '紧绷';
   return '平静';
+}
+
+// 混合情绪：在主情绪上叠加一层次要色彩（人的感受很少是单一的）。纯派生，不改 emotion。
+function buildFeeling(s: Soma, emotion: string): string {
+  const nu: string[] = [];
+  if (s.connection.value < -0.3 && s.valence.value > 0.15) nu.push('又暖又有点孤单');
+  if (s.calm.value < 0.4 && s.valence.value > 0.2) nu.push('开心里夹着一丝不安');
+  if (s.valence.value < -0.2 && s.connection.value > 0.3) nu.push('难过、但还觉得被牵着');
+  if (s.safety.value < 0.35 && s.valence.value > 0.2) nu.push('想靠近又有点怕');
+  if (s.energy.value < 0.32) nu.push('有点困了');
+  return nu.length ? `${emotion}，${nu[0]}` : emotion;
+}
+
+// 价值张力：相反的价值同时被拉高 → 内在拉扯（人格的张力来自这里）。纯派生。
+const TENSION_PAIRS: ReadonlyArray<readonly [string, string, string]> = [
+  ['openness', 'self_protection', '想敞开，又想护着自己'],
+  ['expression', 'caution', '想说出来，又怕说错'],
+  ['self_reliance', 'openness', '想靠自己，又渴望靠近'],
+  ['forgiveness', 'guardedness', '想原谅，又还戒备着'],
+];
+function buildTension(values: ValueEntry[]): string {
+  const w = (k: string): number => values.find((v) => v.key === k)?.weight ?? 0;
+  let best = '';
+  let strongest = 0;
+  for (const [a, b, say] of TENSION_PAIRS) {
+    const wa = w(a);
+    const wb = w(b);
+    const pull = Math.min(wa, wb) - 0.1 * Math.abs(wa - wb); // 两边都高、且势均力敌 → 拉扯最强
+    if (wa > 0.4 && wb > 0.4 && pull > strongest) {
+      strongest = pull;
+      best = say;
+    }
+  }
+  return best;
+}
+
+// 叙事身份（renarrate 的产物）：把人生按【转折点】确定性切成篇章。纯只读投影，不污染身份（契约③）。
+function buildChapters(st: RState, decorated: MemoryEntry[]): string[] {
+  type TP = { seq: number; text: string };
+  const tps: TP[] = [{ seq: 0, text: `初醒——我于此睁眼` }];
+  // 每段关系的开始
+  for (const [, b] of Object.entries(st.bonds)) {
+    // 关系开始没有直接 seq，用首条相关记忆近似
+    const first = decorated.find((m) => m.involvedRelationshipIds[0] && st.bonds[m.involvedRelationshipIds[0]] === b);
+    if (first) tps.push({ seq: first.provenance.originSeq - 0.5, text: `遇见${b.displayRef}` });
+  }
+  // 强烈的转折记忆（刻骨的好/坏）
+  for (const m of decorated) {
+    if (m.kind !== 'episodic' || !m.lineage.isCurrent) continue;
+    const who = st.bonds[m.involvedRelationshipIds[0]]?.displayRef ?? '某人';
+    if (m.affect <= -0.8) tps.push({ seq: m.provenance.originSeq, text: `被${who}伤过——「${m.content.slice(0, 12)}」` });
+    else if (m.affect >= 1.0) tps.push({ seq: m.provenance.originSeq, text: `被${who}照亮——「${m.content.slice(0, 12)}」` });
+  }
+  // 失去
+  for (const [, b] of Object.entries(st.bonds)) {
+    if (b.ended) tps.push({ seq: b.ended.atSeq, text: `失去${b.displayRef}，把ta永远记下` });
+  }
+  // 确立的价值（被反复确认）
+  for (const v of st.values) {
+    if (v.provenance.status === 'confirmed' && v.provenance.driftedAtSeqs.length >= K.confirmAfter) {
+      tps.push({ seq: v.provenance.driftedAtSeqs[v.provenance.driftedAtSeqs.length - 1], text: `我变得更${valueZh(v.key)}了` });
+    }
+  }
+  tps.sort((a, b) => a.seq - b.seq);
+  const seen = new Set<string>();
+  return tps.filter((tp) => (seen.has(tp.text) ? false : (seen.add(tp.text), true))).map((tp) => tp.text).slice(0, 8);
 }
 
 function formatDuration(ms: number): string {
@@ -464,7 +567,7 @@ function buildNarrative(st: RState, sem: SemanticMemory[], goals: Goal[], decora
 
 // 内外两层之"内"：没说出口的私密心声（确定性投影、只读，绝不外发给任何人）。
 // 与对外措辞(MESSAGE_SENT)是两层生活：这里是她自己知道、却没讲出来的。
-function buildInnerLife(st: RState, bonds: Record<string, Bond>, decorated: MemoryEntry[]): string {
+function buildInnerLife(st: RState, bonds: Record<string, Bond>, decorated: MemoryEntry[], tension: string): string {
   const parts: string[] = [];
   // 没说出口的想念：心里转过、却被她按下（internal_only）的 reach_out。
   const quiet = [...st.quietThoughts].reverse().find((q) => q.relationshipId && bonds[q.relationshipId] && !bonds[q.relationshipId].ended);
@@ -472,6 +575,8 @@ function buildInnerLife(st: RState, bonds: Record<string, Bond>, decorated: Memo
   // 此刻没对人说的暗涌。
   const mood = nameEmotion(st.soma, st.vitalityFloor);
   parts.push(st.soma.connection.value < -0.3 ? `心里有点空——${mood}，但我没说出来。` : `此刻心里是${mood}的，留给自己。`);
+  // 内在拉扯（价值张力）——只对自己承认。
+  if (tension) parts.push(`说不清的矛盾：${tension}。`);
   // 正在悄悄成为的自己（最近一次漂移的价值）。
   const drifted = [...st.values]
     .filter((v) => v.provenance.driftedAtSeqs.length > 0)
@@ -569,6 +674,9 @@ function project(st: RState, uptoSeq: number): DerivedSnapshot {
   const sem = buildSemanticMemory(st, decorated);
   const enriched = enrichBonds(st, decorated);
   const goals = computeGoals(st, enriched);
+  const sortedValues = [...st.values].sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+  const emotion = nameEmotion(st.soma, st.vitalityFloor);
+  const tension = buildTension(sortedValues);
   return {
     lifeId: st.lifeId,
     uptoSeq,
@@ -581,14 +689,18 @@ function project(st: RState, uptoSeq: number): DerivedSnapshot {
     bornAt: st.bornAt,
     clockAt: st.clockIso,
     temperament: st.temperament,
-    emotion: nameEmotion(st.soma, st.vitalityFloor),
+    dayPhase: dayPhaseOf(Date.parse(st.clockIso)),
+    emotion,
+    feeling: buildFeeling(st.soma, emotion),
+    tension,
     narrative: buildNarrative(st, sem, goals, decorated),
-    innerLife: buildInnerLife(st, enriched, decorated),
+    innerLife: buildInnerLife(st, enriched, decorated, tension),
+    chapters: buildChapters(st, decorated),
     soma: st.soma,
     memory: decorated.map((m) => ({ ...m, involvedRelationshipIds: [...m.involvedRelationshipIds] })),
     semanticMemory: sem,
     bonds: enriched,
-    values: [...st.values].sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)),
+    values: sortedValues,
     goals,
   };
 }

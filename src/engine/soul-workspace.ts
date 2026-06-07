@@ -63,17 +63,27 @@ export function deriveWorkspace(snap: DerivedSnapshot, relationshipId: Relations
     intent = '平静、如实';
   }
 
+  // 联想回忆：和这个人有关、此刻最鲜活（且非刚刚发生）的一段往事浮上来，给"嘴"做 grounding。
+  // 不是喂"最近6轮"（那是短时上下文），而是"这让我想起…"——确定性挑选，纯只读。
+  const recalled = snap.memory
+    .filter((m) => m.kind === 'episodic' && m.lineage.isCurrent && m.involvedRelationshipIds[0] === relationshipId)
+    .sort((x, y) => (y.vividness ?? 0) - (x.vividness ?? 0))
+    .slice(1, 2)[0]; // 跳过最新那条，取次鲜活的"旧事"
+  const selfFacts = recalled
+    ? `${snap.narrative}\n（此刻不由想起和${name}的一段：「${recalled.content.slice(0, 28)}」）`
+    : snap.narrative;
+
   const stateSummary =
     `效价 ${val.toFixed(2)}，灵性 ${vit.toFixed(2)}，` +
     (bond ? `对${name}的信任 ${bond.trust.toFixed(2)}、亲密 ${bond.closeness.toFixed(2)}、待修复 ${bond.repairNeed.toFixed(2)}，` : '') +
-    `心情：${mood}` +
+    `心情：${snap.feeling}` +
     (bond ? `；我读${name}是「${bond.theoryOfMind.style}」，和ta在一起时我${bond.relationalSelf.stance}` : '');
 
   return {
     intent,
     stateSummary,
     relationshipDisplay: name,
-    selfFacts: snap.narrative,
+    selfFacts,
     selfName: snap.lifeId,
     persona: personaOf(snap.temperament),
     fallback: fallbackLine(name, mood),
