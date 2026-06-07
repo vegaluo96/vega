@@ -326,7 +326,16 @@ async function runChannel(userId: string): Promise<void> {
             }
             const ac = accounts.getAccount(acctId);
             if (!ac) continue;
-            const reply = snapOf(lf).awake ? String((await respondAsUser(lf, ac, m.text, 'wechat')).utterance ?? '…') : '她在更深的睡眠里，等会儿再来找我吧。';
+            let reply: string;
+            if (snapOf(lf).awake) {
+              const resp = await respondAsUser(lf, ac, m.text, 'wechat');
+              // 诊断"没连上模型"：voice=plain＝没走模型（无 key 或余额<1，看余额判别）；
+              // voice=rich+verdict=fallback＝配了模型但调用失败（key 被禁/超时/网络）。
+              console.log(`[wechat] 回 ${ac.handle}(${acctId.slice(0, 6)}) voice=${(resp as { voice?: string }).voice} verdict=${(resp as { verdict?: string }).verdict} 余额=${(resp as { balance?: number }).balance} 嘴=${mouth.id}`);
+              reply = String((resp as { utterance?: string }).utterance ?? '…');
+            } else {
+              reply = '她在更深的睡眠里，等会儿再来找我吧。';
+            }
             await ilink.sendMessage(ch.baseurl, ch.botToken, m.fromUserId, m.contextToken, reply);
           } catch (e) { console.log('[wechat] 回消息失败:', (e as Error).message); }
         }
