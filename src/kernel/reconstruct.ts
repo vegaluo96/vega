@@ -28,10 +28,10 @@ import {
   type ValueEntry,
 } from '../domain/snapshot.ts';
 
-const RECONSTRUCT_VERSION = 9; // v9：昼夜节律锚到北京时间（她是一个身体、只有一个昼夜）
-// 她活在北京时间（UTC+8）：单一、确定性的时区常量（不取 OS/用户时区，否则破 V2 可复现）。
-// 她是一个身体、只有一个昼夜——不能对不同时区的用户各有各的作息。
-const CIRCADIAN_OFFSET_MIN = 480;
+const RECONSTRUCT_VERSION = 10; // v10：昼夜节律时区改为【出生地】属性（出生那刻创造者的设备时区，冻结进 genesis）
+// 她活在出生地的时区：分钟东偏 UTC，【出生即冻结进 LIFE_GENESIS、终生不变】（不取 OS/用户时区，故 V2 可复现）。
+// 她是一个身体、只有一个昼夜。平台孵化的命缺省=北京 480；将来用户接生的命取创造者设备时区。
+const CIRCADIAN_OFFSET_MIN_DEFAULT = 480;
 const SCHEMA_VERSION = 1;
 
 // 旋钮全进 config（§6.3）；竖切内联，真值待第 0 步实测标定。
@@ -90,17 +90,18 @@ interface RState {
   quietThoughts: QuietThought[]; // 内外两层之"内"：只在心里转、没说出口的念头
   expect: Record<string, number>; // 预期：对每个人"会怎么待我"的运行预期（驱动预期违背）
   temperament: Temperament; // 先天气质：终生不变（每条命天生不同）
+  circadianOffsetMin: number; // 出生地时区（分钟东偏 UTC）：她昼夜节律的锚，出生即冻结
 }
 
 const clamp = (x: number, lo: number, hi: number): number => (x < lo ? lo : x > hi ? hi : x);
 const decay = (v: SomaVar, dtSec: number): number => v.setpoint + (v.value - v.setpoint) * Math.exp(-dtSec / v.tau);
 const decayTo = (value: number, target: number, dtSec: number, tau: number): number => target + (value - target) * Math.exp(-dtSec / tau);
-// 她在北京时间下的"一天里第几小时"（确定性）。
-const hourOfDay = (nowMs: number): number => (((nowMs / 3_600_000 + CIRCADIAN_OFFSET_MIN / 60) % 24) + 24) % 24;
+// 她在【出生地时区】下的"一天里第几小时"（确定性；offsetMin 来自冻结的出生属性）。
+const hourOfDay = (nowMs: number, offsetMin: number): number => (((nowMs / 3_600_000 + offsetMin / 60) % 24) + 24) % 24;
 // 昼夜节律：由她内在时钟的"一天里第几小时"确定性投影出的精力偏移（午后高、凌晨低）。纯函数、无 now()。
-const circadianEnergyOffset = (nowMs: number): number => K.circadianAmp * Math.cos((2 * Math.PI * (hourOfDay(nowMs) - 14)) / 24);
-const dayPhaseOf = (nowMs: number): string => {
-  const hod = hourOfDay(nowMs);
+const circadianEnergyOffset = (nowMs: number, offsetMin: number): number => K.circadianAmp * Math.cos((2 * Math.PI * (hourOfDay(nowMs, offsetMin) - 14)) / 24);
+const dayPhaseOf = (nowMs: number, offsetMin: number): string => {
+  const hod = hourOfDay(nowMs, offsetMin);
   if (hod < 5) return '深夜';
   if (hod < 9) return '清晨';
   if (hod < 17) return '白天';
@@ -162,6 +163,7 @@ function initState(genesis: LifeEvent<'LIFE_GENESIS'>): RState {
     quietThoughts: [],
     expect: {},
     temperament: readTemperament(seed.temperamentBias),
+    circadianOffsetMin: seed.circadianOffsetMin ?? CIRCADIAN_OFFSET_MIN_DEFAULT,
   };
 }
 
@@ -239,7 +241,7 @@ function advanceTime(st: RState, dtSec: number, awake: boolean, nowMs: number): 
   // 先天复原力：恢复快慢的底色（resilience>1 → 更快回到设定点；中性=1，老轨迹不变）。
   const dt = dtSec * st.temperament.resilience;
   // 昼夜节律：精力不是向静态设定点、而是向【随一天起伏的目标】恢复——内生节律，没输入她也会困会精神。
-  const eTarget = clamp(s.energy.setpoint + circadianEnergyOffset(nowMs), 0.05, 1);
+  const eTarget = clamp(s.energy.setpoint + circadianEnergyOffset(nowMs, st.circadianOffsetMin), 0.05, 1);
   if (awake) {
     for (const key of SOMA_KEYS) {
       if (key === 'energy') s.energy.value = decayTo(s.energy.value, eTarget, dt, s.energy.tau);
@@ -749,7 +751,7 @@ function project(st: RState, uptoSeq: number): DerivedSnapshot {
     bornAt: st.bornAt,
     clockAt: st.clockIso,
     temperament: st.temperament,
-    dayPhase: dayPhaseOf(Date.parse(st.clockIso)),
+    dayPhase: dayPhaseOf(Date.parse(st.clockIso), st.circadianOffsetMin),
     emotion,
     feeling: buildFeeling(st.soma, emotion),
     tension,

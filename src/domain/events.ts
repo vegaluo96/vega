@@ -28,6 +28,7 @@ export interface InnateSeed {
   somaSetpoints: Record<string, number>;
   somaTau: Record<string, number>;
   vitalityFloor: number;
+  circadianOffsetMin?: number; // 她昼夜节律锚定的时区（出生地，分钟东偏 UTC）。出生即冻结、终生不变；缺省=北京 480
 }
 export interface GenesisPayload {
   innateSeed: InnateSeed;

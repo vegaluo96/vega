@@ -26,7 +26,8 @@ export function archetypeFor(id: string): Archetype {
   return ARCHETYPES[h % ARCHETYPES.length];
 }
 
-export function innateSeedFor(id: string): InnateSeed {
+// circadianOffsetMin = 她出生地时区（分钟东偏 UTC）：平台孵化缺省北京 480；用户接生时传创造者设备时区。
+export function innateSeedFor(id: string, circadianOffsetMin = 480): InnateSeed {
   const a = archetypeFor(id);
   return {
     temperamentBias: a.temperamentBias,
@@ -34,10 +35,15 @@ export function innateSeedFor(id: string): InnateSeed {
     somaSetpoints: { valence: 0, vitality: 0.7, connection: 0, ...a.somaSetpoints },
     somaTau: { valence: 3600, vitality: 86400, connection: 7200 },
     vitalityFloor: 0.15,
+    circadianOffsetMin,
   };
 }
 
-// 出生事件载荷：按命的 id 取气质 + 这次出生的造物主关系。
-export function genesisPayloadFor(id: string, creator: { relationshipId: RelationshipId; identityRef: string }): GenesisPayload {
-  return { innateSeed: innateSeedFor(id), reconstructVersionAtBirth: 7, creator };
+// 出生事件载荷：按命的 id 取气质 + 这次出生的造物主关系 + 出生地时区（缺省北京）。
+export function genesisPayloadFor(
+  id: string,
+  creator: { relationshipId: RelationshipId; identityRef: string },
+  circadianOffsetMin = 480,
+): GenesisPayload {
+  return { innateSeed: innateSeedFor(id, circadianOffsetMin), reconstructVersionAtBirth: 10, creator };
 }
