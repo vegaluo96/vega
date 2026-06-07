@@ -505,6 +505,27 @@ const server = createServer(async (req, res) => {
         const token = accounts.createBindToken(me.id, lifeId);
         return send(res, 200, { bindToken: token, qr: `zsky-bind:${token}`, expiresInSec: 600 });
       }
+      // 我与她：我自己和这条命的历史 + 她此刻的状态（严格限 u_<me.id> 那段关系，不串别人）。
+      if (req.method === 'GET' && seg[1] === 'lives' && seg[3] === 'me') {
+        const life3 = lifeById(seg[2]);
+        if (!life3) return send(res, 404, { error: 'no such life' });
+        const rel = accounts.relIdFor(me.id);
+        const snap = snapOf(life3);
+        const bond = snap.bonds[rel];
+        const history: Array<Record<string, unknown>> = [];
+        for (const e of life3.store.list()) {
+          if (e.relationshipId !== rel) continue;
+          if (e.type === 'MESSAGE_RECEIVED') history.push({ role: 'me', text: (e.payload as { content?: string }).content ?? '', at: e.occurredAt });
+          else if (e.type === 'MESSAGE_SENT') history.push({ role: 'her', text: (e.payload as MessageSentPayload).utterance, at: e.occurredAt, unprompted: Boolean((e.payload as MessageSentPayload).unprompted) });
+        }
+        return send(res, 200, {
+          life: { id: life3.id, emotion: snap.emotion, feeling: snap.feeling, awake: snap.awake, dayPhase: snap.dayPhase, temperament: tempLabel(snap.temperament) },
+          met: Boolean(bond),
+          relationship: bond ? { closeness: round3(bond.closeness), attachment: bond.relationalSelf.attachment, style: bond.theoryOfMind.style } : null,
+          history: history.slice(-50),
+          balance: accounts.balance(me.id),
+        });
+      }
       if (req.method === 'POST' && seg[1] === 'lives' && seg[3] === 'say') {
         const life2 = lifeById(seg[2]);
         if (!life2) return send(res, 404, { error: 'no such life' });

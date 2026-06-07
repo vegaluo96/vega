@@ -27,6 +27,7 @@ export const api = {
   me: () => req('GET', '/api/me'),
   lives: () => req('GET', '/api/lives'),
   say: (lifeId, content) => req('POST', `/api/lives/${lifeId}/say`, { content }),
+  lifeMe: (lifeId) => req('GET', `/api/lives/${lifeId}/me`),
   bind: (lifeId) => req('POST', '/api/bindings', { lifeId }),
 };
 
