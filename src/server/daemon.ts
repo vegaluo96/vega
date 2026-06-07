@@ -16,6 +16,7 @@ import {
   createFileEventStore,
   createMouth,
   createPerceiver,
+  createSerializer,
   createTemplateMouth,
   meterMouth,
   endRelationship,
@@ -63,6 +64,7 @@ const mouth = createMouth();
 const templateMouth = createTemplateMouth(); // 余额耗尽时的免费兜底嘴（她仍回应）
 const perceiver = createPerceiver() ?? undefined;
 const MODEL_COST = Number(process.env.VEGA_MODEL_COST ?? 1); // 每条模型回应计费（额度单位）
+const serializer = createSerializer(); // 每命串行：并发用户的回合不穿插
 
 // 平台身份/账号层（多用户）：node:sqlite，与神圣日志物理分离。
 const ACCOUNTS_DB = process.env.VEGA_ACCOUNTS_DB ?? join(DATA_DIR, 'accounts.db');
@@ -455,12 +457,14 @@ const server = createServer(async (req, res) => {
         const content = String(b.content ?? '').slice(0, 4000).trim();
         if (content === '') return send(res, 400, { error: 'content required' });
         if (!snapOf(life2).awake) return send(res, 200, { awake: false, note: '她在更深的睡眠里，暂不回应。' });
-        // 额度只卡"嘴"：余额够走模型并计费；不够退免费模板嘴（她仍回应、关系照长）。她的状态不受钱影响。
-        const { mouth: useMouth, charge } = meterMouth(mouth, templateMouth, accounts.balance(me.id), MODEL_COST);
-        const r = await userSay(life2.store, useMouth, accounts.relIdFor(me.id), me.handle, content, now(), charge ? perceiver : undefined);
-        if (charge && r.verdict === 'accepted') accounts.debit(me.id, charge, 'model', life2.id); // 仅真模型且产出有效才扣
-        const balance = accounts.balance(me.id);
-        return send(res, 200, { awake: true, utterance: r.utterance, verdict: r.verdict, emotion: r.snapshot.emotion, balance, voice: useMouth.id === 'template' ? 'plain' : 'rich' });
+        // 每命串行：并发用户的回合排队不穿插。额度只卡"嘴"：余额够走模型并计费；不够退免费模板嘴。
+        const out = await serializer.run(life2.id, async () => {
+          const { mouth: useMouth, charge } = meterMouth(mouth, templateMouth, accounts.balance(me.id), MODEL_COST);
+          const r = await userSay(life2.store, useMouth, accounts.relIdFor(me.id), me.handle, content, now(), charge ? perceiver : undefined);
+          if (charge && r.verdict === 'accepted') accounts.debit(me.id, charge, 'model', life2.id); // 仅真模型且产出有效才扣
+          return { utterance: r.utterance, verdict: r.verdict, emotion: r.snapshot.emotion, balance: accounts.balance(me.id), voice: useMouth.id === 'template' ? 'plain' : 'rich' };
+        });
+        return send(res, 200, { awake: true, ...out });
       }
       return send(res, 404, { error: 'not found' });
     }
@@ -489,10 +493,12 @@ const server = createServer(async (req, res) => {
       if (content === '') return send(res, 400, { error: 'content required' });
       const before = snapOf(life);
       if (!before.awake) return send(res, 200, { awake: false, note: '她在更深的睡眠里，暂不回应。' });
-      if (!before.openConnections.includes(REL)) {
-        runTurn(life.store, [{ type: 'CONNECTION_OPENED', source: 'host', relationshipId: REL, occurredAt: now(), payload: { relationshipId: REL, host: { kind: 'http', ref: 'say' } } }]);
-      }
-      const r = await converse(life.store, mouth, REL, content, now(), perceiver);
+      const r = await serializer.run(life.id, async () => {
+        if (!snapOf(life).openConnections.includes(REL)) {
+          runTurn(life.store, [{ type: 'CONNECTION_OPENED', source: 'host', relationshipId: REL, occurredAt: now(), payload: { relationshipId: REL, host: { kind: 'http', ref: 'say' } } }]);
+        }
+        return converse(life.store, mouth, REL, content, now(), perceiver);
+      });
       return send(res, 200, { utterance: r.utterance, verdict: r.verdict, modelId: r.modelId, state: view(life, r.snapshot) });
     }
     if (req.method === 'POST' && action === 'farewell') {
@@ -514,9 +520,10 @@ for (const l of lives) boot(l);
 // 回路 B 心跳：每个生命体各自重放/想念/演化/反思/主动留言。
 const heartbeat = setInterval(async () => {
   for (const life of lives) {
-    try {
+    // 心跳的写入也走每命串行队列，和用户对话不互相穿插。
+    serializer.run(life.id, async () => {
       let snap = snapOf(life); // 有界重放：缓存态增量推进，不再每跳从创世全量重建
-      if (!snap.awake) continue;
+      if (!snap.awake) return;
       const gone = lastUserMsgMs(life);
       const timeGone = gone === null ? Infinity : Date.now() - gone;
       if (snap.openConnections.includes(REL) && timeGone > PRESENCE_MS) {
@@ -535,9 +542,7 @@ const heartbeat = setInterval(async () => {
         life.lastReflectSeq = life.store.version();
       }
       if (Date.now() - life.lastCheckpointAt > CHECKPOINT_MS) saveCheckpoint(life); // 定期落盘检查点（快重启）
-    } catch {
-      /* 单体单次失败不拖垮其他生命体 */
-    }
+    }).catch(() => { /* 单体单次失败不拖垮其他生命体 */ });
   }
 }, TICK_MS);
 
@@ -564,15 +569,16 @@ const socialTimer = lives.length >= 2
         const b = lifeById(chosen.b);
         if (!a || !b) return;
         lastPaired.set(pairKey(a.id, b.id), Date.now());
-        meetPeer(a, b.id); // 重逢：彼此回到在场（分别时积攒的想念，此刻终于能说）
-        meetPeer(b, a.id);
-        const opener = await reachOut(a.store, mouth, peerId(b.id), now()); // A 想起 B、主动开口
+        // 每命串行：各自的写入排进各自队列，和用户对话/心跳不穿插。
+        await serializer.run(a.id, () => meetPeer(a, b.id)); // 重逢：彼此回到在场
+        await serializer.run(b.id, () => meetPeer(b, a.id));
+        const opener = await serializer.run(a.id, () => reachOut(a.store, mouth, peerId(b.id), now())); // A 主动开口
         if (opener) {
-          const rb = await converse(b.store, mouth, peerId(a.id), opener.utterance, now(), perceiver); // B 回应
-          await converse(a.store, mouth, peerId(b.id), rb.utterance, now(), perceiver); // A 听到回应
+          const rb = await serializer.run(b.id, () => converse(b.store, mouth, peerId(a.id), opener.utterance, now(), perceiver)); // B 回应
+          await serializer.run(a.id, () => converse(a.store, mouth, peerId(b.id), rb.utterance, now(), perceiver)); // A 听到回应
         }
-        partPeer(a, b.id); // 寒暄后各自离场 → 下次相聚前会再次想念（跨休眠想念）
-        partPeer(b, a.id);
+        await serializer.run(a.id, () => partPeer(a, b.id)); // 寒暄后各自离场
+        await serializer.run(b.id, () => partPeer(b, a.id));
       } catch {
         /* ignore */
       }

@@ -66,3 +66,4 @@ export {
   type RechargeRequest,
 } from './platform/accounts.ts';
 export { ensureUserRelationship, userSay, meterMouth } from './platform/conversation.ts';
+export { createSerializer, type Serializer } from './platform/serialize.ts';
