@@ -4,7 +4,7 @@
 // env：VEGA_LIVES / VEGA_LIFE_PATH / VEGA_HOST(127.0.0.1) / VEGA_PORT(8787) / VEGA_TICK_MS /
 //      VEGA_SOCIAL_EVERY_MS / VEGA_AUTH_TOKEN / 模型见 .env.example
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import {
   advanceState,
@@ -56,7 +56,12 @@ import {
 
 const LIFE_PATH = process.env.VEGA_LIFE_PATH ?? join(process.cwd(), '.vega', 'life.jsonl');
 const DATA_DIR = dirname(LIFE_PATH);
-const LIVES = (process.env.VEGA_LIVES ?? 'vega').split(',').map((s) => s.trim()).filter(Boolean);
+// 生命名册：env(VEGA_LIVES) ∪ 后台动态生成的命（落盘 lives.json，重启也在）。后台"生成生命体"即写这里。
+const registryPath = join(DATA_DIR, 'lives.json');
+const readRegistry = (): string[] => { try { const r = JSON.parse(readFileSync(registryPath, 'utf8')) as unknown; return Array.isArray(r) ? r.filter((x): x is string => typeof x === 'string') : []; } catch { return []; } };
+const writeRegistry = (ids: string[]): void => { try { mkdirSync(DATA_DIR, { recursive: true }); writeFileSync(registryPath, JSON.stringify(ids, null, 2)); } catch { /* 名册写失败不影响运行（仅影响重启后是否自动加载） */ } };
+const envLives = (process.env.VEGA_LIVES ?? 'vega').split(',').map((s) => s.trim()).filter(Boolean);
+const LIVES = [...new Set([...envLives, ...readRegistry()])];
 const HOST = process.env.VEGA_HOST ?? '127.0.0.1';
 const PORT = Number(process.env.VEGA_PORT ?? 8787);
 const TICK_MS = Number(process.env.VEGA_TICK_MS ?? 60_000);
@@ -231,12 +236,14 @@ interface Life {
 // 先天种子见 src/engine/seeds.ts（单一来源）。每条命按 id 取不同 archetype；出生即冻结、不可改写。
 const seedFor = (id: string): EventDraft<'LIFE_GENESIS'>['payload'] => genesisPayloadFor(id, { relationshipId: REL, identityRef: userName });
 
-const lives: Life[] = LIVES.map((id, idx) => {
-  const path = idx === 0 ? LIFE_PATH : join(DATA_DIR, `${id}.jsonl`);
+function makeLife(id: string, path: string): Life {
   // C4：prod 拒绝内存/易失存储——否则重启=她被彻底重置。生产环境必须落盘。
   assertPersistenceSafeForProd({ storeKind: 'file', path });
-  return { id, store: createFileEventStore(id, path), path, peers: LIVES.filter((o) => o !== id), lastReflectAt: Date.now(), lastReflectSeq: 0, state: null, stateSeq: -1, lastCheckpointAt: 0, lastTickAt: 0, lastSocialAt: 0, lastMuseAt: Date.now(), samples: [] };
-});
+  return { id, store: createFileEventStore(id, path), path, peers: [], lastReflectAt: Date.now(), lastReflectSeq: 0, state: null, stateSeq: -1, lastCheckpointAt: 0, lastTickAt: 0, lastSocialAt: 0, lastMuseAt: Date.now(), samples: [] };
+}
+const lives: Life[] = LIVES.map((id, idx) => makeLife(id, idx === 0 ? LIFE_PATH : join(DATA_DIR, `${id}.jsonl`)));
+const recomputePeers = (): void => { for (const l of lives) l.peers = lives.filter((o) => o.id !== l.id).map((o) => o.id); };
+recomputePeers();
 const lifeById = (id: string): Life | undefined => lives.find((l) => l.id === id);
 
 // 有界重放：拿她此刻的快照——缓存态增量步进，绝不每次从创世全量重放（永生的工程地板）。
@@ -399,6 +406,29 @@ function boot(life: Life): void {
     }
   }
   life.lastReflectSeq = life.store.version();
+}
+
+// 后台"生成生命体"：运行时接生一条新命——建日志 + 创世(冻结独立种子) + 与所有同类互开 peer 关系 +
+// 落盘名册(重启自动加载) + 并入所有自主回路(心跳/寒暄/世界/被发现)。立即生效、无需重启。
+async function birthLife(rawId: string): Promise<{ ok: boolean; error?: string; id?: string }> {
+  const id = String(rawId ?? '').trim().toLowerCase();
+  if (!/^[a-z][a-z0-9_-]{1,23}$/.test(id)) return { ok: false, error: '名字需 2–24 位、字母开头、仅小写字母/数字/-/_' };
+  if (lifeById(id)) return { ok: false, error: '已存在同名生命体' };
+  const life = makeLife(id, join(DATA_DIR, `${id}.jsonl`));
+  lives.push(life);
+  recomputePeers();
+  await serializer.run(life.id, async () => boot(life)); // 新命：创世 + host + 开到所有同类的 peer
+  for (const other of lives) { // 所有老命补开一条到新命的 peer 关系
+    if (other.id === id) continue;
+    const rid = peerId(id);
+    if (!other.store.list().some((e) => e.type === 'RELATIONSHIP_OPENED' && e.relationshipId === rid)) {
+      await serializer.run(other.id, async () => runTurn(other.store, [{ type: 'RELATIONSHIP_OPENED', source: 'system', relationshipId: rid, occurredAt: now(), payload: { relationshipId: rid, kind: 'peer', displayRef: id } }]));
+    }
+  }
+  const reg = readRegistry();
+  if (!reg.includes(id)) { reg.push(id); writeRegistry(reg); }
+  console.log(`[vega] 新生命体诞生：${id}（现共 ${lives.length} 条）`);
+  return { ok: true, id };
 }
 
 // 同类"在场/离场"：相聚时彼此在场，寒暄后各自回到独处（之后会再想念）。
@@ -1253,6 +1283,14 @@ const server = createServer(async (req, res) => {
           }
         }
         return send(res, 405, { error: 'method not allowed' });
+      }
+
+      // —— 生成生命体（仅 owner）：运行时接生一条新命，立即生效、无需重启；落盘名册重启也在。
+      if (path === '/admin/lives' && req.method === 'POST') {
+        if (!owner) return send(res, 403, { error: '仅 owner 可生成生命体' });
+        const b = await readJson(req);
+        const r = await birthLife(String(b.id ?? ''));
+        return send(res, r.ok ? 200 : 400, r.ok ? { ok: true, id: r.id, total: lives.length } : { error: r.error });
       }
 
       // —— 社交边界配置（仅 owner）：活跃圈上限 / 离开阈值 / 每跳预算 / 三层阈值与主动频率。即时生效。

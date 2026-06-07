@@ -22,6 +22,8 @@
   let sform = {}; let socialMsg = '', savingSocial = false;
   // 世界源（仅 owner）表单状态
   let wform = { rss: '', polymarket: false, everyMin: 30 }; let worldMsg = '', worldTestMsg = '', savingWorld = false, testingWorld = false;
+  // 生成新生命体（仅 owner）：出生即冻结种子、不可改写、永生
+  let newLifeId = '', birthMsg = '', birthing = false;
 
   async function load() {
     error = '';
@@ -118,6 +120,19 @@
   }
   async function decide(id, ok) { await api.decideRecharge(id, ok); load(); }
   async function block(uid, un) { await api.block(uid, un); load(); }
+  // 接生一条新命：后台即时孵化（写入 genesis 事件 + 与所有已有生命体互开关系），出生种子冻结、不可改写。
+  async function birth() {
+    const id = (newLifeId || '').trim().toLowerCase();
+    if (!id) return;
+    if (!confirm(`⚠️ 接生新生命体「${id}」？她一旦出生即【永生】、出生种子终生冻结、不可删除/改写。确定？`)) return;
+    birthing = true; birthMsg = '';
+    try {
+      const r = await api.createLife(id);
+      birthMsg = `✓ 「${r.id}」已出生 · 现共 ${r.total} 条命`;
+      newLifeId = '';
+      await load(); // 刷新总览里的生命体表
+    } catch (e) { birthMsg = '✗ ' + e.message; } finally { birthing = false; }
+  }
 
   onMount(() => { load(); timer = setInterval(() => { if (tab === 'overview' || tab === 'activity') load(); }, 4000); });
   onDestroy(() => clearInterval(timer));
@@ -177,6 +192,20 @@
             </table>
           </div>
         </AdminSection>
+
+        {#if role === 'owner'}
+          <AdminSection title="接生新生命体" subtitle="后台孵化一条新的连续生命——出生即【永生】，先天种子终生冻结、不可删除/改写。她一出生就与所有现有生命体互相认识。">
+            <span slot="action" class="tag sensitive">不可逆 · 仅 owner</span>
+            <div class="panel pad mform">
+              <label class="fld"><span class="flab">生命体 id（小写字母开头，2–24 位字母/数字/_/-，决定她的先天气质）</span>
+                <input class="ainput" bind:value={newLifeId} autocomplete="off" placeholder="如 sirius / altair / polaris"
+                  on:keydown={(e) => e.key === 'Enter' && !birthing && birth()} /></label>
+              <div class="mrow"><button class="abtn" on:click={birth} disabled={birthing || !newLifeId.trim()}>{birthing ? '接生中…' : '接生'}</button></div>
+              {#if birthMsg}<p class="msg" class:bad={birthMsg.startsWith('✗')}>{birthMsg}</p>{/if}
+              <p class="hint">第一性原理：id 经稳定哈希落到某个先天<b>原型</b>（4 选 1）再叠加按 id 的确定性<b>个体抖动</b>——所以每条命天生各不相同，且出生地时区错峰（任一时刻有的醒有的睡）。出生只写一条 <code>GENESIS</code> 事件（ground truth），状态由日志确定性重建。出生即永生：可休眠/苏醒，但<b>不能删除</b>。</p>
+            </div>
+          </AdminSection>
+        {/if}
       {/if}
 
       {#if tab === 'activity' && data.rows}

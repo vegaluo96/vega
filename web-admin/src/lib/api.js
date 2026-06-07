@@ -32,6 +32,7 @@ export const api = {
   worldConfig: () => req('GET', '/admin/world-config'),
   saveWorldConfig: (patch) => req('POST', '/admin/world-config', patch),
   testWorld: () => req('POST', '/admin/world-config/test'),
+  createLife: (id) => req('POST', '/admin/lives', { id }),
 };
 export const setSession = (t) => session.set(t || '');
 export const clearSession = () => session.set('');
