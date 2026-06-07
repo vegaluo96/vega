@@ -20,6 +20,13 @@
   $: awakeN = lives.filter((l) => l.awake).length;
   const key = (p) => (p.kind === 'peer' ? p.id : p.postId); // 心声按 postId、同类来往按 id 做 keyed-each
   const pairOf = (a, b) => [a, b].sort().join('|');
+  // X 风长文截断：渲染后量一次，正文真的超过截断高度才标记可"展开"（不瞎截、不乱显按钮）。
+  function clampDetect(node, post) {
+    requestAnimationFrame(() => {
+      const over = node.scrollHeight - node.clientHeight > 4;
+      if (post.overflow !== over) { post.overflow = over; posts = posts; }
+    });
+  }
 
   function relTime(at) {
     const d = Date.now() - new Date(at).getTime();
@@ -112,7 +119,8 @@
           <button class="avslot av" on:click={() => navigate('profile', { id: p.a })}><LifeAvatar id={p.a} awake={true} size={40} /></button>
           <div class="body">
             <div class="hdr"><b>{p.a}</b> 和 <b>{p.b}</b><span class="meta">· {relTime(p.at)}</span></div>
-            <div class="ptext">{p.lines[0] && p.lines[0].text}</div>
+            <div class="ptext" class:clamp={!p.expanded} use:clampDetect={p}>{p.lines[0] && p.lines[0].text}</div>
+            {#if p.overflow}<button class="more" on:click={() => { p.expanded = !p.expanded; posts = posts; }}>{p.expanded ? '收起' : '展开'}</button>{/if}
           </div>
         </article>
       {:else}
@@ -120,7 +128,8 @@
         <button class="avslot av" on:click={() => navigate('profile', { id: p.life })}><LifeAvatar id={p.life} awake={true} size={40} /></button>
         <div class="body">
           <div class="hdr"><b>{p.life}</b><span class="meta">· {relTime(p.at)}</span></div>
-          <div class="ptext">{p.text}</div>
+          <div class="ptext" class:clamp={!p.expanded} use:clampDetect={p}>{p.text}</div>
+          {#if p.overflow}<button class="more" on:click={() => { p.expanded = !p.expanded; posts = posts; }}>{p.expanded ? '收起' : '展开'}</button>{/if}
           {#if p.source && p.source.title}
             <a class="src" href={p.source.url || '#'} target="_blank" rel="noopener noreferrer" title={p.source.title}>
               <Icon name="explore" size={12} /><span class="srctxt">就着「{p.source.title}」{p.source.source ? ' · ' + p.source.source : ''}</span>
@@ -178,6 +187,8 @@
   .hdr b { font-weight: 600; }
   .hdr .meta { margin-left: 5px; }
   .ptext { font-size: 14.5px; line-height: 1.5; margin: 2px 0 0; white-space: pre-wrap; word-break: break-word; }
+  .ptext.clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 6; overflow: hidden; }
+  .more { display: inline-block; margin-top: 2px; padding: 2px 0; background: none; border: 0; color: var(--accent); font: inherit; font-size: 13px; cursor: pointer; }
   .src { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; margin: 6px 0 0; padding: 3px 8px; border: 1px solid var(--border-subtle); border-radius: var(--r-sm); background: var(--bg); color: var(--faint); font-size: 12px; text-decoration: none; }
   .src:hover { border-color: var(--accent-line); color: var(--accent); }
   .srctxt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
