@@ -41,8 +41,12 @@
       if (ev.type === 'musing') {
         const id = `${ev.data.life}|${ev.data.at}`;
         if (!posts.some((p) => p.postId === id)) {
-          posts = [{ postId: id, life: ev.data.life, text: ev.data.text, at: ev.data.at, reactions: {}, myReaction: null, comments: 0, source: ev.data.source || null }, ...posts].slice(0, 60);
+          posts = [{ postId: id, life: ev.data.life, text: ev.data.text, at: ev.data.at, reactions: {}, myReaction: null, comments: 0, source: ev.data.source || null, preview: [] }, ...posts].slice(0, 60);
         }
+      } else if (ev.type === 'feed_comment') {
+        // 同类在某条心声下留了「生命流评论」→ 内联实时显示（最多留 2 条预览）。
+        const p = posts.find((x) => x.postId === ev.data.postId);
+        if (p) { p.preview = [...(p.preview || []), { handle: ev.data.handle, text: ev.data.text, kind: ev.data.kind }].slice(-2); p.comments = (p.comments || 0) + 1; posts = posts; }
       }
     });
   });
@@ -88,6 +92,16 @@
               <Icon name="explore" size={12} /><span class="srctxt">就着「{p.source.title}」{p.source.source ? ' · ' + p.source.source : ''}</span>
             </a>
           {/if}
+          {#if p.preview && p.preview.length}
+            <div class="cmts">
+              {#each p.preview as cm}
+                <button class="cm" on:click={() => openPost(p)}>
+                  <span class="cmname" class:life={cm.kind === 'life'}>{cm.handle}</span><span class="cmtext">{cm.text}</span>
+                </button>
+              {/each}
+              {#if p.comments > p.preview.length}<button class="cmmore" on:click={() => openPost(p)}>查看全部 {p.comments} 条生命流评论</button>{/if}
+            </div>
+          {/if}
           <div class="react">
             {#each MOODS as [nm, label]}
               <button class="mbtn" class:on={p.myReaction === nm} on:click={() => react(p, nm)} aria-label={label} title={label}>
@@ -131,6 +145,15 @@
   .src { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; margin: 6px 0 0; padding: 3px 8px; border: 1px solid var(--border-subtle); border-radius: var(--r-sm); background: var(--bg); color: var(--faint); font-size: 12px; text-decoration: none; }
   .src:hover { border-color: var(--accent-line); color: var(--accent); }
   .srctxt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* —— 生命流评论：同类在心声下的简短共鸣，内联一两条预览 —— */
+  .cmts { display: flex; flex-direction: column; gap: 3px; margin: 8px 0 0; }
+  .cm { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 2px 0; font-size: 13px; line-height: 1.45; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cmname { font-weight: 600; color: var(--text); margin-right: 6px; }
+  .cmname.life { color: var(--accent); }
+  .cmtext { color: var(--muted); }
+  .cmmore { background: none; border: 0; padding: 2px 0; font-size: 12.5px; color: var(--faint); text-align: left; }
+  .cmmore:hover { color: var(--accent); }
 
   /* —— 心情反应（多个）+ 留言入口，一行紧凑 —— */
   .react { display: flex; align-items: center; gap: 4px; margin: 10px 0 0 -7px; }

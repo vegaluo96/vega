@@ -3,7 +3,8 @@
 // 她不因每个点赞而改变状态（保持"活来自架构"，不被海量互动牵着走）。postId = `${lifeId}|${occurredAt}`。
 import { DatabaseSync } from 'node:sqlite';
 
-export interface FeedComment { id: number; userId: string; handle: string; text: string; at: string }
+// kind: 'user'=真实用户留言 / 'life'=生命体在帖子下的「生命流评论」（同类互评，展示用，绝不进神圣日志）。
+export interface FeedComment { id: number; userId: string; handle: string; text: string; at: string; kind: 'user' | 'life' }
 // 帖子"出处"（§8.1）：她这条心声是就着真实世界的哪条事说的。展示用，平台层，【绝不进神圣日志】。
 export interface PostSource { title: string; source: string; url: string }
 
@@ -11,8 +12,10 @@ export interface FeedStore {
   toggleReaction(postId: string, userId: string, emoji: string): void;
   reactionsFor(postIds: string[], userId: string): Map<string, { counts: Record<string, number>; mine: string | null }>;
   addComment(postId: string, userId: string, handle: string, text: string): FeedComment;
+  addLifeComment(postId: string, lifeId: string, text: string): FeedComment; // 生命流评论（同类互评）
   commentsFor(postId: string, limit: number): FeedComment[];
   commentCounts(postIds: string[]): Map<string, number>;
+  latestCommentsFor(postIds: string[], perPost: number): Map<string, FeedComment[]>; // 每帖最近 N 条（首页内联预览）
   setSource(postId: string, src: PostSource): void;
   sourcesFor(postIds: string[]): Map<string, PostSource>;
 }
@@ -25,8 +28,10 @@ export function createFeedStore(path: string): FeedStore {
     CREATE INDEX IF NOT EXISTS idx_comments_post ON post_comments(post_id);
     CREATE TABLE IF NOT EXISTS post_sources(post_id TEXT PRIMARY KEY, title TEXT NOT NULL, source TEXT NOT NULL, url TEXT NOT NULL, at TEXT NOT NULL);
   `);
+  try { db.exec("ALTER TABLE post_comments ADD COLUMN kind TEXT NOT NULL DEFAULT 'user'"); } catch { /* 列已存在 */ }
   const now = (): string => new Date().toISOString();
   const ph = (n: number): string => Array.from({ length: n }, () => '?').join(',');
+  const kindOf = (k: unknown): 'user' | 'life' => (k === 'life' ? 'life' : 'user');
 
   return {
     toggleReaction(postId, userId, emoji) {
@@ -46,18 +51,36 @@ export function createFeedStore(path: string): FeedStore {
     },
     addComment(postId, userId, handle, text) {
       const at = now();
-      const r = db.prepare('INSERT INTO post_comments(post_id,user_id,handle,text,at) VALUES(?,?,?,?,?)').run(postId, userId, handle, text, at);
-      return { id: Number(r.lastInsertRowid), userId, handle, text, at };
+      const r = db.prepare("INSERT INTO post_comments(post_id,user_id,handle,text,at,kind) VALUES(?,?,?,?,?,'user')").run(postId, userId, handle, text, at);
+      return { id: Number(r.lastInsertRowid), userId, handle, text, at, kind: 'user' };
+    },
+    addLifeComment(postId, lifeId, text) {
+      const at = now();
+      const r = db.prepare("INSERT INTO post_comments(post_id,user_id,handle,text,at,kind) VALUES(?,?,?,?,?,'life')").run(postId, `life:${lifeId}`, lifeId, text, at);
+      return { id: Number(r.lastInsertRowid), userId: `life:${lifeId}`, handle: lifeId, text, at, kind: 'life' };
     },
     commentsFor(postId, limit) {
-      const rows = db.prepare('SELECT id,user_id,handle,text,at FROM post_comments WHERE post_id=? ORDER BY id DESC LIMIT ?').all(postId, limit) as Array<{ id: number; user_id: string; handle: string; text: string; at: string }>;
-      return rows.map((r) => ({ id: Number(r.id), userId: r.user_id, handle: r.handle, text: r.text, at: r.at })).reverse();
+      const rows = db.prepare('SELECT id,user_id,handle,text,at,kind FROM post_comments WHERE post_id=? ORDER BY id DESC LIMIT ?').all(postId, limit) as Array<{ id: number; user_id: string; handle: string; text: string; at: string; kind: string }>;
+      return rows.map((r) => ({ id: Number(r.id), userId: r.user_id, handle: r.handle, text: r.text, at: r.at, kind: kindOf(r.kind) })).reverse();
     },
     commentCounts(postIds) {
       const out = new Map<string, number>();
       if (postIds.length === 0) return out;
       const rows = db.prepare(`SELECT post_id,COUNT(*) c FROM post_comments WHERE post_id IN (${ph(postIds.length)}) GROUP BY post_id`).all(...postIds) as Array<{ post_id: string; c: number }>;
       for (const r of rows) out.set(r.post_id, Number(r.c));
+      return out;
+    },
+    latestCommentsFor(postIds, perPost) {
+      const out = new Map<string, FeedComment[]>();
+      for (const id of postIds) out.set(id, []);
+      if (postIds.length === 0) return out;
+      // 取这些帖子的最近若干条评论，按帖分组、每帖留最新 perPost 条（升序展示）。
+      const rows = db.prepare(`SELECT id,post_id,user_id,handle,text,at,kind FROM post_comments WHERE post_id IN (${ph(postIds.length)}) ORDER BY id DESC`).all(...postIds) as Array<{ id: number; post_id: string; user_id: string; handle: string; text: string; at: string; kind: string }>;
+      for (const r of rows) {
+        const arr = out.get(r.post_id); if (!arr || arr.length >= perPost) continue;
+        arr.push({ id: Number(r.id), userId: r.user_id, handle: r.handle, text: r.text, at: r.at, kind: kindOf(r.kind) });
+      }
+      for (const arr of out.values()) arr.reverse();
       return out;
     },
     setSource(postId, src) {

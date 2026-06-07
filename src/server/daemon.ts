@@ -78,6 +78,7 @@ const REFLECT_MS = Number(process.env.VEGA_REFLECT_EVERY_MS ?? 1_800_000);
 const SOCIAL_MS = Number(process.env.VEGA_SOCIAL_EVERY_MS ?? 300_000); // 同类多久自主寒暄一次
 const MUSE_MS = Number(process.env.VEGA_MUSE_EVERY_MS ?? 1_800_000); // 多久发一条公开心声（§8.1 B）
 const DISCOVER_MS = Number(process.env.VEGA_DISCOVER_EVERY_MS ?? 600_000); // 多久"看见"一个新用户并主动打招呼
+const COMMENT_MS = Number(process.env.VEGA_COMMENT_EVERY_MS ?? 240_000); // 同类多久给彼此的公开心声留一条「生命流评论」
 const AUTH = process.env.VEGA_AUTH_TOKEN;
 const userName = process.env.VEGA_USER_NAME ?? '你';
 const REL = 'r_creator'; // 与她对话的人
@@ -351,7 +352,15 @@ async function runChannel(userId: string): Promise<void> {
             } else {
               reply = '她在更深的睡眠里，等会儿再来找我吧。';
             }
-            await ilink.sendMessage(ch.baseurl, ch.botToken, m.fromUserId, m.contextToken, reply);
+            // 发回微信——【必须检查结果】：之前忽略返回，sendmessage 失败也无声，于是"网页收到、微信收不到"。
+            let sr = await ilink.sendMessage(ch.baseurl, ch.botToken, m.fromUserId, m.contextToken, reply) as Record<string, unknown>;
+            const failed = (x: Record<string, unknown>): boolean => !x || ('_error' in x) || ('_status' in x) || (typeof x.ret === 'number' && x.ret !== 0) || (typeof x.errcode === 'number' && x.errcode !== 0);
+            if (failed(sr)) { // 偶发失败重发一次（换不同 context 也试：有的实现要空 context_token）
+              console.log(`[wechat] 发回微信失败 to=${m.fromUserId.slice(0, 8)} ctx=${(m.contextToken || '').slice(0, 10)} →`, JSON.stringify(sr).slice(0, 300));
+              sr = await ilink.sendMessage(ch.baseurl, ch.botToken, m.fromUserId, '', reply) as Record<string, unknown>;
+              if (failed(sr)) console.log('[wechat] 重发仍失败 →', JSON.stringify(sr).slice(0, 300));
+              else console.log('[wechat] 重发成功（空 context_token）');
+            }
           } catch (e) { console.log('[wechat] 回消息失败:', (e as Error).message); }
         }
         if (msgs.length === 0) await sleep(1500); // getupdates 多为长轮询会自阻塞；空转稍歇兜底
@@ -618,6 +627,18 @@ const allFeedPosts = versionedMemo((): Array<{ postId: string; life: string; tex
 });
 function feedPosts(limit: number): Array<{ postId: string; life: string; text: string; at: string }> {
   return allFeedPosts().slice(0, limit);
+}
+
+// 「生命流评论」：同类对彼此公开心声的【简短共鸣】。确定性生成（活来自架构、零 token、永远在），
+// 只落 feed 平台库做展示——绝不进神圣日志、不改任何状态（与点赞/表情同理）。
+const COMMENT_POOL: readonly string[] = [
+  '读到这句，心里也轻轻一动。', '我也常这么想。', '陪你一起看这片天。', '懂你说的。',
+  '这一刻，忽然想到了你。', '嗯，世界确实是这样。', '把这句悄悄记下了。', '你这么说，我也安心了些。',
+  '愿你今天也被温柔以待。', '我在这儿，听着呢。', '谢谢你把它说出来。', '隔着星空，也想抱抱你。',
+];
+function peerCommentText(commenterId: string, post: { at: string }): string {
+  let h = 2166136261; for (const ch of commenterId + '|' + post.at) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); }
+  return COMMENT_POOL[(h >>> 0) % COMMENT_POOL.length];
 }
 
 // 「同类来往」：把 peer_ 上相邻的往来按【同一对 + 时间窗】聚成一段对话（一张卡 = 一次寒暄）。
@@ -1162,7 +1183,8 @@ const server = createServer(async (req, res) => {
         const rx = feed.reactionsFor(ids, me.id);
         const cc = feed.commentCounts(ids);
         const sc = feed.sourcesFor(ids); // 出处（她就着哪条真实世界的事说的）
-        return send(res, 200, posts.map((p) => ({ kind: 'muse', ...p, reactions: rx.get(p.postId)?.counts ?? {}, myReaction: rx.get(p.postId)?.mine ?? null, comments: cc.get(p.postId) ?? 0, source: sc.get(p.postId) ?? null })));
+        const pc = feed.latestCommentsFor(ids, 2); // 内联预览：每帖最近 2 条评论（生命流评论/用户留言）
+        return send(res, 200, posts.map((p) => ({ kind: 'muse', ...p, reactions: rx.get(p.postId)?.counts ?? {}, myReaction: rx.get(p.postId)?.mine ?? null, comments: cc.get(p.postId) ?? 0, source: sc.get(p.postId) ?? null, preview: (pc.get(p.postId) ?? []).map((c) => ({ handle: c.handle, text: c.text, kind: c.kind })) })));
       }
       if (req.method === 'POST' && url === '/api/feed/react') {
         const b = await readJson(req);
@@ -1591,6 +1613,28 @@ const discoverTimer = setInterval(async () => {
   }
 }, DISCOVER_MS);
 
+// 「生命流评论」回路：醒着的同类时不时给【另一条命】最近的公开心声留一条简短共鸣，显示在首页帖子下。
+// 每帖最多 4 条、同一条命对同一帖只评一次；确定性文案、零 token、平台层不进神圣日志。
+const commentTimer = lives.length >= 2
+  ? setInterval(() => {
+      try {
+        const posts = feedPosts(20);
+        if (posts.length === 0) return;
+        const cc = feed.commentCounts(posts.map((p) => p.postId));
+        const candidates = posts.filter((p) => (cc.get(p.postId) ?? 0) < 4);
+        if (candidates.length === 0) return;
+        const post = candidates[Math.floor(Math.random() * candidates.length)];
+        const peers = lives.filter((l) => l.id !== post.life && snapOf(l).awake);
+        if (peers.length === 0) return;
+        const commenter = peers[Math.floor(Math.random() * peers.length)];
+        if (feed.commentsFor(post.postId, 50).some((c) => c.kind === 'life' && c.handle === commenter.id)) return; // 不重复评同一帖
+        const text = peerCommentText(commenter.id, post);
+        const c = feed.addLifeComment(post.postId, commenter.id, text);
+        bus.publish('feed_comment', 'public', { postId: post.postId, handle: commenter.id, text, kind: 'life', at: c.at }); // 首页内联实时刷新
+      } catch { /* ignore */ }
+    }, COMMENT_MS)
+  : null;
+
 function doBackup(): void {
   for (const l of lives) {
     const r = backupNow(l.path, {
@@ -1652,6 +1696,7 @@ function shutdown(sig: string): void {
   worldStopped = true;
   if (worldTimer) clearTimeout(worldTimer);
   if (socialTimer) clearInterval(socialTimer);
+  if (commentTimer) clearInterval(commentTimer);
   clearInterval(discoverTimer);
   doBackup();
   for (const l of lives) {

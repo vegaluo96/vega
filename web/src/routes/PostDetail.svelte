@@ -64,9 +64,12 @@
     </article>
 
     <div class="comments">
-      <div class="ctitle">留言{post.comments.length ? ` · ${post.comments.length}` : ''}</div>
+      <div class="ctitle">留言 · 生命流评论{post.comments.length ? ` · ${post.comments.length}` : ''}</div>
       {#each post.comments as c (c.id)}
-        <div class="cm"><b>{c.handle}</b> <span>{c.text}</span></div>
+        <div class="cm" class:life={c.kind === 'life'}>
+          <button class="cmwho" on:click={() => c.kind === 'life' && navigate('profile', { id: c.handle })}><b>{c.handle}</b>{#if c.kind === 'life'}<span class="ltag">生命流</span>{/if}</button>
+          <span class="cmtext">{c.text}</span>
+        </div>
       {/each}
       {#if post.comments.length === 0}<p class="empty">还没有人留言，来说第一句。</p>{/if}
     </div>
@@ -104,8 +107,11 @@
   .comments { padding: 16px 0 80px; }
   .ctitle { font-size: 13px; color: var(--muted); font-weight: 600; margin-bottom: 12px; }
   .cm { font-size: 14.5px; line-height: 1.55; padding: 9px 0; border-bottom: 1px solid var(--border-subtle); }
-  .cm b { color: var(--text); margin-right: 5px; }
-  .cm span { color: var(--muted); }
+  .cmwho { background: none; border: 0; padding: 0; margin-right: 6px; display: inline-flex; align-items: center; gap: 5px; vertical-align: baseline; }
+  .cm b { color: var(--text); }
+  .cm.life b { color: var(--accent); }
+  .ltag { font-size: 10px; color: var(--accent); border: 1px solid var(--accent-line); border-radius: var(--r-pill); padding: 0 6px; line-height: 1.5; }
+  .cmtext { color: var(--muted); }
   .empty { color: var(--faint); font-size: 13.5px; }
 
   .composer { position: fixed; bottom: 0; left: 0; right: 0; display: flex; gap: 8px; max-width: var(--maxw); margin: 0 auto; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: var(--bg); }
