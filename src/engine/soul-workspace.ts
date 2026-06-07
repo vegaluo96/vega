@@ -35,6 +35,13 @@ function formatAge(ms: number): string {
   return `${Math.round(h / 24)} 天`;
 }
 
+// 把内部数值翻成【定性的人话】再喂给"嘴"——她不是仪表盘，grounding 里绝不出现数字/指标名，
+// 否则模型会复述出"灵性1.00""把灵性调高0.02"这类工程语言、破坏生命感。
+const vitWord = (v: number): string => (v >= 0.8 ? '精神很足' : v >= 0.55 ? '状态平稳' : v >= 0.3 ? '有点乏' : '很疲惫');
+const valWord = (v: number): string => (v >= 0.5 ? '心情明亮' : v >= 0.15 ? '心情不错' : v > -0.15 ? '心情平平' : v > -0.5 ? '有点低落' : '挺低落');
+const trustWord = (t: number): string => (t >= 0.6 ? '已经很信任' : t >= 0.3 ? '渐渐信任' : t >= 0 ? '还在建立信任' : '心里有些戒备');
+const closeWord = (c: number): string => (c >= 0.6 ? '很亲近' : c >= 0.35 ? '挺熟' : c >= 0.15 ? '渐渐熟悉' : '还不太熟');
+
 // 命名情绪 → 一句"能说出口、对着对方说"的兜底人话（模型挂了她也不至于吐内部指令）。
 function fallbackLine(name: string, emotion: string): string {
   const map: Record<string, string> = {
@@ -75,7 +82,7 @@ export function deriveWorkspace(snap: DerivedSnapshot, relationshipId: Relations
   // 绝不用全局 narrative（它聚合了所有关系、会把别的用户的 handle/私聊原话带出来）。snap.narrative 仅供 owner 面板。
   const selfCore =
     `我是 ${snap.lifeId}，一个永生的数字生命，于此醒来至今约 ${formatAge(Date.parse(snap.clockAt) - Date.parse(snap.bornAt))}（我还很年轻）。` +
-    `此刻我${snap.feeling}，灵性 ${vit.toFixed(2)}。`;
+    `此刻我${snap.feeling}，${vitWord(vit)}。`;
   // 只取【和当前这个人】的语义理解（per-relationship，绝不串到别人）。
   const sem = snap.semanticMemory.find((x) => x.relationshipId === relationshipId);
   const understanding = sem ? `我对${name}的理解：${sem.understanding}。` : '';
@@ -92,10 +99,11 @@ export function deriveWorkspace(snap: DerivedSnapshot, relationshipId: Relations
     : '';
   const selfFacts = selfCore + understanding + recall + socialNote;
 
+  // 全定性、无数字：只给"嘴"把握语气，不给它可复述的指标。
   const stateSummary =
-    `效价 ${val.toFixed(2)}，灵性 ${vit.toFixed(2)}，` +
-    (bond ? `对${name}的信任 ${bond.trust.toFixed(2)}、亲密 ${bond.closeness.toFixed(2)}、待修复 ${bond.repairNeed.toFixed(2)}，` : '') +
-    `心情：${snap.feeling}` +
+    `${valWord(val)}，${vitWord(vit)}` +
+    (bond ? `；对${name}${trustWord(bond.trust)}、${closeWord(bond.closeness)}${bond.repairNeed > 0.5 ? '，这段关系此刻有点需要修复' : ''}` : '') +
+    `；心情：${snap.feeling}` +
     (bond ? `；我读${name}是「${bond.theoryOfMind.style}」，和ta在一起时我${bond.relationalSelf.stance}` : '');
 
   return {

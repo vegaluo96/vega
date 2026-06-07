@@ -29,7 +29,7 @@
     return true;
   }
   $: shown = lives.filter(match).filter((l) => !q || (l.id + ' ' + (l.temperament || '') + ' ' + (l.emotion || '')).toLowerCase().includes(q.toLowerCase()));
-  const stateLine = (l) => (l.awake ? `此刻${l.emotion}${l.dayPhase ? '，在' + l.dayPhase + '里' : ''}` : '在更深的睡眠里');
+  const stateLine = (l) => (l.awake ? `此刻${l.emotion}${l.dayPhase ? '，' + l.dayPhase : ''}` : '在更深的睡眠里');
 </script>
 
 <div class="explore">

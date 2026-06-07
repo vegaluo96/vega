@@ -60,7 +60,10 @@
     }
   }
 
+  // 全站生效的配置（模型/社交/世界）保存前二次确认——避免在线上误改影响所有真实用户与生命体。
+  const confirmGlobal = () => confirm('⚠️ 这是【全站生效】的配置，保存后立即影响所有真实用户与生命体（不可一键回滚）。确定保存？');
   async function saveModel() {
+    if (!confirmGlobal()) return;
     saving = true; saveMsg = ''; testMsg = '';
     try {
       const patch = { baseUrl: mform.baseUrl, model: mform.model, timeoutMs: Number(mform.timeoutMs), perceive: mform.perceive, perceiveModel: mform.perceiveModel };
@@ -80,6 +83,7 @@
     data = { model: m }; saveMsg = '已清除后台 Key 覆盖 · 回落到环境变量';
   }
   async function saveSocial() {
+    if (!confirmGlobal()) return;
     savingSocial = true; socialMsg = '';
     try {
       const s = await api.saveSocialConfig({
@@ -91,6 +95,7 @@
     } catch (e) { socialMsg = '✗ ' + e.message; } finally { savingSocial = false; }
   }
   async function saveWorld() {
+    if (!confirmGlobal()) return;
     savingWorld = true; worldMsg = ''; worldTestMsg = '';
     try {
       const w = await api.saveWorldConfig({ rss: wform.rss, polymarket: wform.polymarket, everyMs: Math.max(1, Number(wform.everyMin)) * 60000 });
@@ -374,7 +379,7 @@
         {/if}
 
         {#if v.memories && v.memories.length}
-          <AdminSection title="记忆" subtitle="含用户私聊"><span slot="action" class="tag sensitive">敏感 · 仅 owner</span>
+          <AdminSection title="记忆" subtitle="她记得的经历——都是【别人对她说的话/发生在她身上的事】；她自己的回话不入记忆"><span slot="action" class="tag sensitive">敏感 · 仅 owner</span>
             <div class="panel">
               {#each v.memories.slice().reverse() as m}
                 <div class="mem" style="opacity:{m.vivid ? 1 : 0.55}"><span class="maff">[{m.affect}]</span> {m.content}</div>
