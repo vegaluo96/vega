@@ -784,7 +784,7 @@ function project(st: RState, uptoSeq: number): DerivedSnapshot {
     vitalityFloor: st.vitalityFloor,
     bornAt: st.bornAt,
     clockAt: st.clockIso,
-    temperament: st.temperament,
+    temperament: { ...st.temperament }, // 副本：快照绝不别名长期缓存的 st（防消费方误改污染 life.state）
     dayPhase: dayPhaseOf(Date.parse(st.clockIso), st.circadianOffsetMin),
     emotion,
     feeling: buildFeeling(st.soma, emotion),
@@ -792,7 +792,7 @@ function project(st: RState, uptoSeq: number): DerivedSnapshot {
     narrative: buildNarrative(st, sem, goals, decorated),
     innerLife: buildInnerLife(st, enriched, decorated, tension),
     chapters: buildChapters(st, decorated),
-    soma: st.soma,
+    soma: structuredClone(st.soma), // 同上：每维 {value,…} 深拷一份，bounded-replay 缓存的 soma 不被外部改到
     memory: decorated.map((m) => ({ ...m, involvedRelationshipIds: [...m.involvedRelationshipIds] })),
     semanticMemory: sem,
     bonds: enriched,

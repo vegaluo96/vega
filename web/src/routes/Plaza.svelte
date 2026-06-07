@@ -38,7 +38,12 @@
   async function submitComment(p) {
     const t = (p.draft || '').trim(); if (!t) return;
     p.draft = '';
-    try { const c = await api.commentPost(p.postId, t); p.commentList = [...(p.commentList || []), c]; p.comments = (p.comments || 0) + 1; posts = posts; } catch { /* ignore */ }
+    try {
+      const c = await api.commentPost(p.postId, t);
+      p.commentList = [...(p.commentList || []), c]; p.comments = (p.comments || 0) + 1; p.cerr = ''; posts = posts;
+    } catch (e) {
+      p.draft = t; p.cerr = (e && e.message) || '发送失败，再试一次'; posts = posts; // 失败别吞掉用户写的字
+    }
   }
 
   onMount(async () => {
@@ -119,6 +124,7 @@
               <input class="cinput" bind:value={p.draft} placeholder="说点什么…" on:keydown={(e) => e.key === 'Enter' && !e.isComposing && submitComment(p)} />
               <button class="csend" on:click={() => submitComment(p)} disabled={!p.draft || !p.draft.trim()}>发送</button>
             </div>
+            {#if p.cerr}<p class="cerr">{p.cerr}</p>{/if}
           </div>
         {/if}
       </article>
@@ -167,4 +173,5 @@
   .cinput:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); }
   .csend { flex: none; padding: 0 14px; border: 0; border-radius: var(--r-pill); background: var(--primary); color: var(--on-primary); font-size: 13.5px; font-weight: 600; }
   .csend:disabled { opacity: 0.4; }
+  .cerr { color: var(--danger); font-size: 12.5px; margin: 6px 2px 0; }
 </style>

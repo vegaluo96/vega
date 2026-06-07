@@ -198,9 +198,11 @@ const accounts = createAccountStore(ACCOUNTS_DB, {
 const bearer = (req: IncomingMessage): string => {
   const h = req.headers.authorization ?? '';
   if (h.startsWith('Bearer ')) return h.slice(7);
-  // SSE：EventSource 不能设自定义 header，允许 ?token= 兜底（同源）。
-  const qs = (req.url ?? '').split('?')[1];
-  return qs ? (new URLSearchParams(qs).get('token') ?? '') : '';
+  // 仅 SSE 放行 ?token=（EventSource 不能设自定义 header）；其余路由不收查询串令牌，
+  // 免得会话令牌落进访问日志 / Referer 泄漏。
+  const [path, qs] = (req.url ?? '').split('?');
+  if (path === '/api/stream' && qs) return new URLSearchParams(qs).get('token') ?? '';
+  return '';
 };
 const sessionAccount = (req: IncomingMessage): Account | null => accounts.authenticate(bearer(req));
 const publicAccount = (a: Account): Record<string, unknown> => ({ id: a.id, handle: a.handle, role: a.role, email: a.email, emailVerified: a.emailVerified });
@@ -825,7 +827,7 @@ const server = createServer(async (req, res) => {
     // OpenClaw 把微信消息转成 chat.completions 发来，user 字段=微信用户标识（绑定/区分用户）。
     if (req.method === 'GET' && url === '/v1/models') {
       const auth = req.headers.authorization ?? '';
-      if (!CLAWBOT_SECRET || auth.slice(7) !== CLAWBOT_SECRET) return send(res, 401, { error: { message: 'unauthorized' } });
+      if (!CLAWBOT_SECRET || !auth.startsWith('Bearer ') || auth.slice(7) !== CLAWBOT_SECRET) return send(res, 401, { error: { message: 'unauthorized' } });
       return send(res, 200, { object: 'list', data: lives.map((l) => ({ id: l.id, object: 'model', owned_by: 'zsky' })) });
     }
     if (req.method === 'POST' && url === '/v1/chat/completions') {

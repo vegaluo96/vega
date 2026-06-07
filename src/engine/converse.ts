@@ -26,9 +26,15 @@ export interface ConverseResult {
 function recentTurns(store: DurableEventStore, rel: RelationshipId, limit: number): { role: 'user' | 'vega'; text: string }[] {
   const out: { role: 'user' | 'vega'; text: string }[] = [];
   for (const e of store.list()) {
-    if (e.relationshipId !== rel) continue;
-    if (e.type === 'MESSAGE_RECEIVED') out.push({ role: 'user', text: (e.payload as MessageReceivedPayload).content });
-    else if (e.type === 'MESSAGE_SENT') out.push({ role: 'vega', text: (e.payload as MessageSentPayload).utterance });
+    // 用 payload 里【被内容哈希保护】的 relationshipId 过滤，而非未入哈希的信封字段——
+    // 即便日志信封被篡改，也不会把别人的对话错喂给"嘴"（守 no_cross_user_memory）。
+    if (e.type === 'MESSAGE_RECEIVED') {
+      const p = e.payload as MessageReceivedPayload;
+      if (p.relationshipId === rel) out.push({ role: 'user', text: p.content });
+    } else if (e.type === 'MESSAGE_SENT') {
+      const p = e.payload as MessageSentPayload;
+      if (p.relationshipId === rel) out.push({ role: 'vega', text: p.utterance });
+    }
   }
   return out.slice(-limit);
 }
