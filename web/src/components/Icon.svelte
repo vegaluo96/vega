@@ -29,6 +29,14 @@
   {:else if name === 'search'}
     <circle cx="11" cy="11" r="6.4" />
     <path d="M19.8 19.8 15.5 15.5" />
+  {:else if name === 'spark'}
+    <!-- 共鸣：四角星芒（呼应 ZSKY 星空，纯描边） -->
+    <path d="M12 3.5q.6 6.9 8.5 8.5-7.9 1.6-8.5 8.5-.6-6.9-8.5-8.5 7.9-1.6 8.5-8.5Z" />
+  {:else if name === 'comment'}
+    <!-- 评论：单气泡（与对话 tab 区分，专作评论） -->
+    <path d="M4 11.5a6.5 6.5 0 0 1 6.5-6.5h3A6.5 6.5 0 0 1 20 11.5a6.5 6.5 0 0 1-6.5 6.5H9l-4.6 2.7.9-4A6.4 6.4 0 0 1 4 11.5Z" />
+  {:else if name === 'close'}
+    <path d="M6 6l12 12M18 6 6 18" />
   {:else if name === 'back'}
     <path d="M14.5 5l-7 7 7 7" />
   {:else if name === 'chevron'}

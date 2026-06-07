@@ -15,7 +15,7 @@
   let error = '';
   let es;
 
-  const REACTIONS = [['✨', '共鸣'], ['🤍', '喜欢'], ['🫂', '温暖'], ['🥹', '心疼'], ['🌙', '想你']];
+  const totalReacts = (p) => Object.values(p.reactions || {}).reduce((a, b) => a + b, 0); // 共鸣总数（兼容历史多表情）
   $: present = [...lives].sort((a, b) => (b.awake ? 1 : 0) - (a.awake ? 1 : 0));
   $: awakeN = lives.filter((l) => l.awake).length;
   // X 风长文截断：渲染后量一次，正文真的超过截断高度才标记可"展开"（不瞎截、不乱显按钮）。
@@ -112,13 +112,11 @@
             </a>
           {/if}
           <div class="react">
-            {#each REACTIONS as [emo, label]}
-              <button class="rbtn" class:on={p.myReaction === emo} on:click={() => react(p, emo)} aria-label={label} title={label}>
-                <span class="em">{emo}</span>{#if p.reactions[emo]}<span class="cnt">{p.reactions[emo]}</span>{/if}
-              </button>
-            {/each}
-            <button class="cbtn" class:on={p.open} on:click={() => toggleComments(p)} aria-label="评论">
-              <Icon name="chats" size={15} />{#if p.comments}<span class="cnt">{p.comments}</span>{/if}
+            <button class="abtn" class:on={!!p.myReaction} on:click={() => react(p, p.myReaction || '✨')} aria-label="共鸣">
+              <Icon name="spark" size={16} />{#if totalReacts(p)}<span class="cnt">{totalReacts(p)}</span>{/if}
+            </button>
+            <button class="abtn" class:on={p.open} on:click={() => toggleComments(p)} aria-label="评论">
+              <Icon name="comment" size={16} />{#if p.comments}<span class="cnt">{p.comments}</span>{/if}
             </button>
           </div>
           {#if p.open}
@@ -168,15 +166,11 @@
   .src:hover { border-color: var(--accent-line); color: var(--accent); }
   .srctxt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-  .react { display: flex; align-items: center; gap: 2px; margin: 7px 0 0 -6px; }
-  .rbtn, .cbtn { display: inline-flex; align-items: center; gap: 3px; min-height: 28px; padding: 0 6px; border: 0; border-radius: var(--r-pill); background: transparent; color: var(--faint); font-size: 12px; transition: background var(--t-hover) ease, color var(--t-hover) ease; }
-  .rbtn .em { font-size: 14px; line-height: 1; filter: grayscale(0.3); }
-  .rbtn:hover, .cbtn:hover { background: var(--surface-2); color: var(--text); }
-  .rbtn.on { color: var(--accent); }
-  .rbtn.on .em { filter: none; }
-  .cbtn { margin-left: auto; }
-  .cbtn.on { color: var(--accent); }
-  .cnt { font-variant-numeric: tabular-nums; font-size: 12px; }
+  .react { display: flex; align-items: center; gap: 18px; margin: 8px 0 0; }
+  .abtn { display: inline-flex; align-items: center; gap: 5px; min-height: 28px; padding: 0; border: 0; background: transparent; color: var(--faint); font-size: 12.5px; transition: color var(--t-hover) ease; }
+  .abtn:hover { color: var(--text); }
+  .abtn.on { color: var(--accent); }
+  .cnt { font-variant-numeric: tabular-nums; }
 
   .comments { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 8px; }
   .cm { font-size: 14px; line-height: 1.5; }

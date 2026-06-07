@@ -6,6 +6,7 @@
   import LifeAvatar from '../components/LifeAvatar.svelte';
   import EmptyState from '../components/EmptyState.svelte';
   import Skeleton from '../components/Skeleton.svelte';
+  import Icon from '../components/Icon.svelte';
 
   let chats = [];
   let error = '';
@@ -43,7 +44,7 @@
         <div class="last">{c.lastFromHer ? '' : '我：'}{c.lastText}</div>
         {#if !c.pending}<div class="thread">你们的线还在继续</div>{/if}
       </div>
-      <span class="go">›</span>
+      <Icon name="chevron" size={18} />
     </button>
   {/each}
   {#if error}<p class="err">{error}</p>{/if}
@@ -60,5 +61,5 @@
   .pending { font-size: 11px; color: var(--life-reaching); border: 1px solid color-mix(in srgb, var(--life-reaching) 50%, transparent); border-radius: var(--r-pill); padding: 1px 9px; margin-left: auto; }
   .last { color: var(--muted); font-size: 14px; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .thread { color: var(--faint); font-size: 11.5px; margin-top: 3px; }
-  .go { color: var(--faint); font-size: 20px; flex: none; }
+  .rel :global(.ico) { color: var(--faint); flex: none; }
 </style>

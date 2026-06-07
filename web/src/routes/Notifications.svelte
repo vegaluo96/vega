@@ -6,6 +6,7 @@
   import LifeAvatar from '../components/LifeAvatar.svelte';
   import EmptyState from '../components/EmptyState.svelte';
   import Skeleton from '../components/Skeleton.svelte';
+  import Icon from '../components/Icon.svelte';
 
   let notes = [];
   let error = '';
@@ -39,13 +40,13 @@
       <button class="note card-interactive" class:fresh={n.fresh} on:click={() => navigate('chat', { id: n.life })}>
         <LifeAvatar id={n.life} awake={true} size={44} />
         <div class="body"><div class="top"><span class="name">{n.life}</span><span class="reach">想你了</span></div><div class="text">{n.text}</div></div>
-        <span class="go">›</span>
+        <Icon name="chevron" size={18} />
       </button>
     {:else if n.type === 'welcome'}
       <button class="note card-interactive" on:click={() => navigate('plaza')}>
         <span class="mark welcome"></span>
         <div class="body"><div class="top"><span class="name">{n.title}</span></div><div class="text">{n.text}</div></div>
-        <span class="go">›</span>
+        <Icon name="chevron" size={18} />
       </button>
     {:else}
       <div class="note plain">
@@ -70,5 +71,5 @@
   .reach { font-size: 12px; color: var(--life-reaching); }
   .text { color: var(--muted); font-size: 14px; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .text.wrap { white-space: normal; }
-  .go { color: var(--faint); font-size: 20px; flex: none; }
+  .note :global(.ico) { color: var(--faint); flex: none; }
 </style>
