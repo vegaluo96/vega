@@ -308,26 +308,13 @@ async function runChannel(userId: string): Promise<void> {
             if (!lf) continue;
             // —— 认人：让"微信里的你"尽量=你的 ZSKY 网页账号，从而和网页【共享同一段关系与记忆】。 ——
             // ① 已绑过→那个账号；② 连接码→绑到码所属网页账号；③ 扫码本人(iLink 身份匹配)→绑到通道主人账号；④ 其余→微信朋友。
-            let acctId: string;
-            let path: string; // 认人走了哪条路（诊断"按 uid 自动定位"是否生效）
-            const already = accounts.resolveWechat(m.fromUserId);
-            if (already) {
-              acctId = already.userId; path = 'already-bound';
-            } else if (m.text.toLowerCase().includes('zsky-bind:')) {
-              const linked = accounts.bindWechat(cleanBindToken(m.text), m.fromUserId);
-              if (linked) { // 连接码本身不当聊天内容，回个确认即可
-                await ilink.sendMessage(ch.baseurl, ch.botToken, m.fromUserId, m.contextToken, '✅ 打通了——微信里的你，就是 ZSKY 里的你，记忆从此共享。');
-                continue;
-              }
-              acctId = accounts.ensureWechatUser(m.fromUserId, lifeId).userId; path = 'bind-code-invalid→friend';
-            } else if (ch.ilinkUserId && m.fromUserId === ch.ilinkUserId) {
-              accounts.linkWechatOpenid(m.fromUserId, userId, lifeId); // 扫码本人 → 通道主人的网页账号（确定性、安全）
-              acctId = userId; path = 'scan-uid-match→owner';
-            } else {
-              acctId = accounts.ensureWechatUser(m.fromUserId, lifeId).userId; path = 'new→friend'; // 别人 → 独立"微信朋友"
-            }
-            // 直接对比：发消息的 uid vs 扫码时的 uid → 是否相等，决定"纯 uid 自动定位"能不能成。
-            console.log(`[wechat] 认人 from_uid=${m.fromUserId} 扫码uid=${ch.ilinkUserId || '(空)'} 相等=${m.fromUserId === ch.ilinkUserId} → ${path} acct=${acctId.slice(0, 6)}`);
+            // 认人（简化、确定）：每个网页用户连的是【自己的】微信通道，所以这条通道里进来的消息
+            // 一律算作【通道主人 = 连接它的网页号】。从此微信=网页：同账号、同记忆、同钱包、自动同步，
+            // 不靠 iLink uid 匹配、不用手动打通、不再分裂出"微信朋友"。
+            // （个人号场景：来消息的就是你本人。若日后要"一个机器人多人共用"，再按发信人分账号。）
+            const acctId = userId;
+            if (!accounts.resolveWechat(m.fromUserId)) accounts.linkWechatOpenid(m.fromUserId, userId, lifeId); // 记录该微信 uid ↔ 网页号
+            console.log(`[wechat] from_uid=${m.fromUserId} → 通道主人 acct=${acctId.slice(0, 6)}`);
             const ac = accounts.getAccount(acctId);
             if (!ac) continue;
             let reply: string;
