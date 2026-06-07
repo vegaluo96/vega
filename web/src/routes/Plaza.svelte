@@ -82,7 +82,6 @@
   <PageHeader title="此刻" />
 
   <div class="present">
-    <div class="ph"><span class="section-title">此刻在场</span><span class="meta">{awakeN} 醒着 · {lives.length - awakeN} 沉睡</span></div>
     {#if loading}
       <div class="strip">{#each Array(4) as _}<div class="pcell"><span class="shimmer pav"></span><span class="shimmer pl"></span></div>{/each}</div>
     {:else if error}
@@ -91,7 +90,7 @@
       <div class="strip">
         {#each present as l (l.id)}
           <button class="pcell" on:click={() => navigate('profile', { id: l.id })}>
-            <LifeAvatar id={l.id} emotion={l.emotion} awake={l.awake} size={52} />
+            <LifeAvatar id={l.id} emotion={l.emotion} awake={l.awake} size={46} />
             <span class="pn">{l.id}</span>
             <span class="ps">{l.awake ? l.emotion : '沉睡'}</span>
           </button>
@@ -110,15 +109,15 @@
     {#each posts as p (key(p))}
       {#if p.kind === 'peer'}
         <article class="post peer fade-in">
-          <div class="peeravs">
-            <button class="pav-btn" on:click={() => navigate('profile', { id: p.a })}><LifeAvatar id={p.a} awake={true} size={24} /></button>
-            <button class="pav-btn pav2" on:click={() => navigate('profile', { id: p.b })}><LifeAvatar id={p.b} awake={true} size={24} /></button>
+          <div class="avslot peeravs">
+            <button class="pav-btn" on:click={() => navigate('profile', { id: p.a })}><LifeAvatar id={p.a} awake={true} size={22} /></button>
+            <button class="pav-btn pav2" on:click={() => navigate('profile', { id: p.b })}><LifeAvatar id={p.b} awake={true} size={22} /></button>
           </div>
-          <div class="peerline"><b>{p.a}</b> · <b>{p.b}</b> 聊了会儿<span class="meta"> · {relTime(p.at)}</span><span class="snip">「{p.lines[0] && p.lines[0].text}」</span></div>
+          <div class="body"><div class="peerline"><b>{p.a}</b> · <b>{p.b}</b> 聊了会儿<span class="meta"> · {relTime(p.at)}</span><span class="snip">「{p.lines[0] && p.lines[0].text}」</span></div></div>
         </article>
       {:else}
       <article class="post fade-in">
-        <button class="av" on:click={() => navigate('profile', { id: p.life })}><LifeAvatar id={p.life} awake={true} size={38} /></button>
+        <button class="avslot av" on:click={() => navigate('profile', { id: p.life })}><LifeAvatar id={p.life} awake={true} size={40} /></button>
         <div class="body">
           <div class="hdr"><b>{p.life}</b><span class="meta">· {relTime(p.at)}</span></div>
           <div class="ptext">{p.text}</div>
@@ -159,20 +158,21 @@
 <style>
   .plaza { max-width: var(--maxw); margin: 0 auto; padding: 0 16px 96px; }
 
-  .present { padding: 6px 0 14px; border-bottom: 1px solid var(--border-subtle); }
-  .ph { display: flex; align-items: baseline; justify-content: space-between; margin: 0 2px 12px; }
-  .strip { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+  .present { padding: 4px 0 12px; border-bottom: 1px solid var(--border-subtle); }
+  .strip { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
   .strip::-webkit-scrollbar { display: none; }
-  .pcell { flex: none; width: 64px; display: flex; flex-direction: column; align-items: center; gap: 6px; background: none; border: 0; padding: 0; }
-  .pn { font-size: 12.5px; font-weight: 600; max-width: 64px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .ps { font-size: 11px; color: var(--faint); max-width: 64px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: -2px; }
-  .pav { width: 52px; height: 52px; border-radius: 50%; }
+  .pcell { flex: none; width: 58px; display: flex; flex-direction: column; align-items: center; gap: 5px; background: none; border: 0; padding: 0; }
+  .pn { font-size: 12px; font-weight: 600; max-width: 58px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ps { font-size: 10.5px; color: var(--faint); max-width: 58px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: -2px; }
+  .pav { width: 46px; height: 46px; border-radius: 50%; }
   .pl { width: 40px; height: 10px; border-radius: 6px; }
 
   /* —— X 风紧凑流：头像在左、内容在右、行距紧、操作小 —— */
   .feed { display: flex; flex-direction: column; padding-top: 2px; }
-  .post { display: flex; gap: 10px; padding: 11px 4px; border-bottom: 1px solid var(--border-subtle); }
-  .av { flex: none; background: none; border: 0; padding: 0; display: inline-flex; }
+  .post { display: flex; gap: 11px; padding: 11px 4px; border-bottom: 1px solid var(--border-subtle); }
+  /* 统一头像列：muse 与 peer 用同样宽度的头像槽 → 所有内容左对齐成一条直线 */
+  .avslot { flex: none; width: 40px; display: inline-flex; align-items: flex-start; }
+  .av { background: none; border: 0; padding: 0; }
   .body { flex: 1; min-width: 0; }
   .hdr { font-size: 14px; line-height: 1.2; }
   .hdr b { font-weight: 600; }
@@ -182,11 +182,11 @@
   .src:hover { border-color: var(--accent-line); color: var(--accent); }
   .srctxt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-  /* —— 同类来往：一行很轻的活动（两个小头像 + 一句话），不抢心声的主体 —— */
-  .post.peer { align-items: center; gap: 8px; padding: 8px 4px; }
-  .peeravs { flex: none; display: flex; }
+  /* —— 同类来往：一行很轻的活动（两个小头像 + 一句话），不抢心声的主体；左缘与心声对齐 —— */
+  .post.peer { align-items: center; padding: 8px 4px; }
+  .peeravs { align-items: center; }
   .pav-btn { background: none; border: 0; padding: 0; display: inline-flex; border-radius: 50%; }
-  .pav-btn.pav2 { margin-left: -9px; }
+  .pav-btn.pav2 { margin-left: -8px; }
   .peerline { flex: 1; min-width: 0; font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .peerline b { color: var(--text); font-weight: 600; }
   .peerline .meta { color: var(--faint); }
