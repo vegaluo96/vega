@@ -963,6 +963,10 @@ const server = createServer(async (req, res) => {
         const ping = setInterval(() => write(': ping\n\n'), 25_000);
         req.on('close', cleanup); req.on('error', cleanup);
         res.on('close', cleanup); res.on('error', cleanup);
+        // 反代理/CDN 抗缓冲：有些代理会攒够一定字节才下发，导致 SSE 不实时。
+        // 开头塞 ~2KB 填充注释，逼它立刻把缓冲吐给浏览器；之后事件才能即时到达。
+        write(':' + ' '.repeat(2048) + '\n\n');
+        write('retry: 3000\n\n'); // 断线 3 秒重连
         write(': connected\n\n');
         return; // 长连接，保持打开
       }
