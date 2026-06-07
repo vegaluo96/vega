@@ -26,21 +26,30 @@ export interface SocialConfig {
   acquaintEveryMs?: number;  // 相识层（很久一次）
 }
 
-interface SettingsState { model: ModelOverride; social: SocialConfig }
+// 外部世界源（§8.1）：可在后台改的"读哪些世界"。抓取在引擎外、内容冻进事件——配置本身不进神圣日志。
+export interface WorldConfig {
+  rss?: string[];        // 新闻 RSS 列表
+  polymarket?: boolean;  // 接 Polymarket 预测市场
+  everyMs?: number;      // 多久读一遍世界
+}
+
+interface SettingsState { model: ModelOverride; social: SocialConfig; world: WorldConfig }
 
 export interface SettingsStore {
   getModel(): ModelOverride;
   setModel(patch: Partial<ModelOverride> & { clearApiKey?: boolean }): ModelOverride;
   getSocial(): SocialConfig;
   setSocial(patch: Partial<SocialConfig>): SocialConfig;
+  getWorld(): WorldConfig;
+  setWorld(patch: Partial<WorldConfig>): WorldConfig;
 }
 
 export function createSettingsStore(path: string): SettingsStore {
-  let state: SettingsState = { model: {}, social: {} };
+  let state: SettingsState = { model: {}, social: {}, world: {} };
   if (existsSync(path)) {
     try {
       const loaded = JSON.parse(readFileSync(path, 'utf8')) as Partial<SettingsState>;
-      if (loaded && typeof loaded === 'object') state = { model: loaded.model ?? {}, social: loaded.social ?? {} };
+      if (loaded && typeof loaded === 'object') state = { model: loaded.model ?? {}, social: loaded.social ?? {}, world: loaded.world ?? {} };
     } catch {
       /* 配置坏了就用空，回落默认/环境变量，不影响她活着 */
     }
@@ -75,6 +84,17 @@ export function createSettingsStore(path: string): SettingsStore {
       state = { ...state, social: next };
       persist();
       return state.social;
+    },
+    getWorld: () => state.world,
+    setWorld: (patch) => {
+      const next: WorldConfig = { ...state.world };
+      if (Array.isArray(patch.rss)) next.rss = patch.rss.map((s) => String(s).trim()).filter(Boolean);
+      if (typeof patch.polymarket === 'boolean') next.polymarket = patch.polymarket;
+      const ms = num(patch.everyMs);
+      if (ms !== undefined && ms > 0) next.everyMs = Math.round(ms);
+      state = { ...state, world: next };
+      persist();
+      return state.world;
     },
   };
 }
