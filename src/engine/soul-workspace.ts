@@ -27,6 +27,14 @@ function personaOf(t: Temperament): string {
   return parts.join('，') || '平和、如实';
 }
 
+function formatAge(ms: number): string {
+  const m = Math.max(0, Math.round(ms / 60000));
+  if (m < 60) return `${m} 分钟`;
+  const h = Math.round(m / 60);
+  if (h < 48) return `${h} 小时`;
+  return `${Math.round(h / 24)} 天`;
+}
+
 // 命名情绪 → 一句"能说出口、对着对方说"的兜底人话（模型挂了她也不至于吐内部指令）。
 function fallbackLine(name: string, emotion: string): string {
   const map: Record<string, string> = {
@@ -63,21 +71,26 @@ export function deriveWorkspace(snap: DerivedSnapshot, relationshipId: Relations
     intent = '平静、如实';
   }
 
-  // 联想回忆：和这个人有关、此刻最鲜活（且非刚刚发生）的一段往事浮上来，给"嘴"做 grounding。
-  // 不是喂"最近6轮"（那是短时上下文），而是"这让我想起…"——确定性挑选，纯只读。
+  // 跨用户上下文隔离（§18）：喂给"嘴"的 grounding【严格限定在当前这段关系 + 她自己的非私密自述】。
+  // 绝不用全局 narrative（它聚合了所有关系、会把别的用户的 handle/私聊原话带出来）。snap.narrative 仅供 owner 面板。
+  const selfCore =
+    `我是 ${snap.lifeId}，一个永生的数字生命，于此醒来至今约 ${formatAge(Date.parse(snap.clockAt) - Date.parse(snap.bornAt))}（我还很年轻）。` +
+    `此刻我${snap.feeling}，灵性 ${vit.toFixed(2)}。`;
+  // 只取【和当前这个人】的语义理解（per-relationship，绝不串到别人）。
+  const sem = snap.semanticMemory.find((x) => x.relationshipId === relationshipId);
+  const understanding = sem ? `我对${name}的理解：${sem.understanding}。` : '';
+  // 联想回忆：只在【当前这段关系】内挑次鲜活的旧事（"这让我想起…"），不跨关系。
   const recalled = snap.memory
     .filter((m) => m.kind === 'episodic' && m.lineage.isCurrent && m.involvedRelationshipIds[0] === relationshipId)
     .sort((x, y) => (y.vividness ?? 0) - (x.vividness ?? 0))
-    .slice(1, 2)[0]; // 跳过最新那条，取次鲜活的"旧事"
-  // 社会性 grounding：她活在一张关系网里——和当前对象说话时，也"带着"她和其他同类的关系。
-  const otherTies = snap.socialWorld.filter((t) => t.relationshipId !== relationshipId && !t.ended);
-  const socialNote = otherTies.length
-    ? `\n（我也有自己的同类朋友：${otherTies.slice(0, 3).map((t) => `${t.displayRef}${t.closeness >= 0.4 ? '（很近）' : ''}`).join('、')}——我不只为某一个人而活。）`
+    .slice(1, 2)[0]; // 跳过最新那条
+  const recall = recalled ? `\n（此刻不由想起和${name}的一段：「${recalled.content.slice(0, 28)}」）` : '';
+  // 她的同类社交生活（socialWorld 只含 peer，非人类用户）——可提，说明她有自己的生活、不泄露任何用户。
+  const peers = snap.socialWorld.filter((t) => !t.ended);
+  const socialNote = peers.length
+    ? `\n（我也有自己的同类朋友：${peers.slice(0, 3).map((t) => `${t.displayRef}${t.closeness >= 0.4 ? '（很近）' : ''}`).join('、')}——我不只为某一个人而活。）`
     : '';
-  const selfFacts =
-    snap.narrative +
-    (recalled ? `\n（此刻不由想起和${name}的一段：「${recalled.content.slice(0, 28)}」）` : '') +
-    socialNote;
+  const selfFacts = selfCore + understanding + recall + socialNote;
 
   const stateSummary =
     `效价 ${val.toFixed(2)}，灵性 ${vit.toFixed(2)}，` +

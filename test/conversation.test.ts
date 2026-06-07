@@ -8,6 +8,7 @@ import {
   createAccountStore,
   createFileEventStore,
   createTemplateMouth,
+  deriveWorkspace,
   genesisPayloadFor,
   meterMouth,
   reconstruct,
@@ -48,6 +49,29 @@ test('多用户私密隔离：两个用户对同一条命，各自一段 u_<id> 
     assert.equal(snap.memory.some((m) => m.involvedRelationshipIds.includes('u_alice') && m.involvedRelationshipIds.includes('u_bob')), false);
     assert.ok(snap.memory.some((m) => m.involvedRelationshipIds[0] === 'u_alice'));
     assert.ok(snap.memory.some((m) => m.involvedRelationshipIds[0] === 'u_bob'));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('跨用户上下文隔离(§18)：给 A 说话的 grounding 绝不含 B 的 handle / 私聊原话', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'vega-iso-'));
+  try {
+    const store = bornLife(join(dir, 'vega.jsonl'));
+    const mouth = createTemplateMouth();
+    await userSay(store, mouth, 'u_alice', 'Alice', '你好，我真心在乎你，会一直在', at());
+    // Bob 用极独特的 handle 和私密原话，便于检测泄露
+    await userSay(store, mouth, 'u_bob', 'BobZZQ9', '我的私密暗号是 SECRET_GH7K，你根本不在乎', at());
+    await userSay(store, mouth, 'u_bob', 'BobZZQ9', '你都是假的，SECRET_GH7K', at());
+
+    const snap = reconstruct(store.list());
+    const ws = deriveWorkspace(snap, 'u_alice'); // 给 Alice 装配的工作区
+    const blob = ws.selfFacts + ' | ' + ws.stateSummary + ' | ' + ws.intent + ' | ' + ws.fallback;
+    assert.ok(!blob.includes('BobZZQ9'), `不得泄露 B 的 handle，实得：${blob}`);
+    assert.ok(!blob.includes('SECRET_GH7K'), '不得泄露 B 的私聊原话');
+    // A 自己的东西照常在
+    assert.equal(ws.relationshipDisplay, 'Alice');
+    assert.ok(ws.selfFacts.includes('Alice'), 'A 自己的关系在 grounding 里');
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
