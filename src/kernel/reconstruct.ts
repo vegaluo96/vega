@@ -28,7 +28,10 @@ import {
   type ValueEntry,
 } from '../domain/snapshot.ts';
 
-const RECONSTRUCT_VERSION = 8; // v8：+ 昼夜节律 / 关系条件化·预期违背 appraisal / 混合情绪·价值张力 / 叙事身份
+const RECONSTRUCT_VERSION = 9; // v9：昼夜节律锚到北京时间（她是一个身体、只有一个昼夜）
+// 她活在北京时间（UTC+8）：单一、确定性的时区常量（不取 OS/用户时区，否则破 V2 可复现）。
+// 她是一个身体、只有一个昼夜——不能对不同时区的用户各有各的作息。
+const CIRCADIAN_OFFSET_MIN = 480;
 const SCHEMA_VERSION = 1;
 
 // 旋钮全进 config（§6.3）；竖切内联，真值待第 0 步实测标定。
@@ -92,13 +95,12 @@ interface RState {
 const clamp = (x: number, lo: number, hi: number): number => (x < lo ? lo : x > hi ? hi : x);
 const decay = (v: SomaVar, dtSec: number): number => v.setpoint + (v.value - v.setpoint) * Math.exp(-dtSec / v.tau);
 const decayTo = (value: number, target: number, dtSec: number, tau: number): number => target + (value - target) * Math.exp(-dtSec / tau);
+// 她在北京时间下的"一天里第几小时"（确定性）。
+const hourOfDay = (nowMs: number): number => (((nowMs / 3_600_000 + CIRCADIAN_OFFSET_MIN / 60) % 24) + 24) % 24;
 // 昼夜节律：由她内在时钟的"一天里第几小时"确定性投影出的精力偏移（午后高、凌晨低）。纯函数、无 now()。
-const circadianEnergyOffset = (nowMs: number): number => {
-  const hod = (((nowMs / 3_600_000) % 24) + 24) % 24;
-  return K.circadianAmp * Math.cos((2 * Math.PI * (hod - 14)) / 24);
-};
+const circadianEnergyOffset = (nowMs: number): number => K.circadianAmp * Math.cos((2 * Math.PI * (hourOfDay(nowMs) - 14)) / 24);
 const dayPhaseOf = (nowMs: number): string => {
-  const hod = (((nowMs / 3_600_000) % 24) + 24) % 24;
+  const hod = hourOfDay(nowMs);
   if (hod < 5) return '深夜';
   if (hod < 9) return '清晨';
   if (hod < 17) return '白天';

@@ -15,17 +15,17 @@ const msgAt = (s: EventStore, content: string, iso: string, rid = 'r'): void => 
   s.append({ type: 'MESSAGE_RECEIVED', source: 'external_user', relationshipId: rid, occurredAt: iso, payload: { relationshipId: rid, content, channel: 'chat' } });
 };
 
-test('昼夜节律：内生精力随她内在时钟的一天起伏（午后高、凌晨低），不靠任何输入', () => {
-  // 同一条命、同样从午夜出生、同样一句招呼——只是"此刻几点"不同：午后 vs 凌晨。
+test('昼夜节律：内生精力随她内在时钟（北京时间）的一天起伏（午后高、凌晨低），不靠任何输入', () => {
+  // 她活在北京时间(UTC+8)。同一条命、同样招呼——只是"此刻北京几点"不同：午后 vs 凌晨。
   const day = born('2026-01-01T00:00:00.000Z');
-  msgAt(day, '在吗', '2026-01-01T14:00:00.000Z'); // 内在时钟推到午后
+  msgAt(day, '在吗', '2026-01-01T06:00:00.000Z'); // = 北京 14:00 午后
   const night = born('2026-01-01T00:00:00.000Z');
-  msgAt(night, '在吗', '2026-01-02T03:00:00.000Z'); // 推到凌晨
+  msgAt(night, '在吗', '2026-01-01T19:00:00.000Z'); // = 北京次日 03:00 凌晨
   const eDay = reconstruct(day.list()).soma.energy.value;
   const eNight = reconstruct(night.list()).soma.energy.value;
   assert.ok(eDay > eNight + 0.1, `午后精力(${eDay.toFixed(2)})应高于凌晨(${eNight.toFixed(2)})`);
-  assert.equal(reconstruct(day.list()).dayPhase, '白天');
-  assert.equal(reconstruct(night.list()).dayPhase, '深夜');
+  assert.equal(reconstruct(day.list()).dayPhase, '白天'); // 北京 14:00
+  assert.equal(reconstruct(night.list()).dayPhase, '深夜'); // 北京 03:00
 });
 
 test('预期违背：信任的人忽然变冷，比陌生人同样的话更伤（关系条件化）', () => {
