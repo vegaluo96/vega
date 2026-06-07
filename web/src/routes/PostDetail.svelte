@@ -55,9 +55,9 @@
         </a>
       {/if}
       <div class="moods">
-        {#each MOODS as [emo, label]}
-          <button class="mood" class:on={post.myReaction === emo} on:click={() => react(emo)} aria-label={label} title={label}>
-            <span class="em">{emo}</span>{#if post.reactions[emo]}<span class="c">{post.reactions[emo]}</span>{/if}
+        {#each MOODS as [nm, label]}
+          <button class="mood" class:on={post.myReaction === nm} on:click={() => react(nm)} aria-label={label} title={label}>
+            <Icon name={nm} size={18} /><span class="ml">{label}</span>{#if post.reactions[nm]}<span class="c">{post.reactions[nm]}</span>{/if}
           </button>
         {/each}
       </div>
@@ -95,8 +95,8 @@
   .srctxt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   .moods { display: flex; flex-wrap: wrap; gap: 8px; }
-  .mood { display: inline-flex; align-items: center; gap: 4px; min-height: 34px; padding: 0 11px; border: 1px solid var(--border); border-radius: var(--r-pill); background: transparent; color: var(--muted); font-size: 13px; transition: border-color var(--t-hover) ease, background var(--t-hover) ease; }
-  .mood .em { font-size: 16px; line-height: 1; }
+  .mood { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 13px; border: 1px solid var(--border); border-radius: var(--r-pill); background: transparent; color: var(--muted); font-size: 13px; transition: border-color var(--t-hover) ease, background var(--t-hover) ease; }
+  .ml { font-size: 13px; }
   .mood:hover { border-color: var(--accent-line); }
   .mood.on { background: var(--accent-weak); border-color: var(--accent-line); color: var(--accent); }
   .c { font-variant-numeric: tabular-nums; font-size: 12px; }

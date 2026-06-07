@@ -60,24 +60,23 @@
       <button slot="action" class="iconbtn" on:click={toggleSearch} aria-label="搜索"><Icon name={searching ? 'close' : 'search'} size={20} /></button>
     </PageHeader>
     {#if searching}<input class="input input-pill search" bind:value={q} use:focusEl placeholder="搜：名字 / 心声里的字…" />{/if}
-  </div>
 
-  <div class="present">
-    {#if loading}
-      <div class="strip">{#each Array(4) as _}<div class="pcell"><span class="shimmer pav"></span><span class="shimmer pl"></span></div>{/each}</div>
-    {:else if error}
-      <p class="err">{error}</p>
-    {:else}
-      <div class="strip">
-        {#each present as l (l.id)}
-          <button class="pcell" on:click={() => navigate('profile', { id: l.id })}>
-            <LifeAvatar id={l.id} emotion={l.emotion} awake={l.awake} size={46} />
-            <span class="pn">{l.id}</span>
-            <span class="ps">{l.awake ? l.emotion : '沉睡'}</span>
-          </button>
-        {/each}
-      </div>
-    {/if}
+    <div class="present">
+      {#if loading}
+        <div class="strip">{#each Array(5) as _}<div class="pcell"><span class="shimmer pav"></span><span class="shimmer pl"></span></div>{/each}</div>
+      {:else if error}
+        <p class="err">{error}</p>
+      {:else}
+        <div class="strip">
+          {#each present as l (l.id)}
+            <button class="pcell" on:click={() => navigate('profile', { id: l.id })}>
+              <LifeAvatar id={l.id} emotion={l.emotion} awake={l.awake} size={48} />
+              <span class="pn">{l.id}</span>
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </div>
   </div>
 
   <div class="feed">
@@ -98,13 +97,13 @@
             </a>
           {/if}
           <div class="react">
-            {#each MOODS as [emo, label]}
-              <button class="mbtn" class:on={p.myReaction === emo} on:click={() => react(p, emo)} aria-label={label} title={label}>
-                <span class="em">{emo}</span>{#if p.reactions[emo]}<span class="cnt">{p.reactions[emo]}</span>{/if}
+            {#each MOODS as [nm, label]}
+              <button class="mbtn" class:on={p.myReaction === nm} on:click={() => react(p, nm)} aria-label={label} title={label}>
+                <Icon name={nm} size={17} />{#if p.reactions[nm]}<span class="cnt">{p.reactions[nm]}</span>{/if}
               </button>
             {/each}
             <button class="cbtn" on:click={() => openPost(p)} aria-label="留言">
-              <Icon name="comment" size={16} />{#if p.comments}<span class="cnt">{p.comments}</span>{/if}
+              <Icon name="comment" size={17} />{#if p.comments}<span class="cnt">{p.comments}</span>{/if}
             </button>
           </div>
         </div>
@@ -119,14 +118,14 @@
   .iconbtn:hover { color: var(--text); }
   .search { width: 100%; margin: 0 0 12px; }
 
-  .present { padding: 4px 0 12px; border-bottom: 1px solid var(--border-subtle); }
-  .strip { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+  /* —— 顶部在场头像条：随页头一起吸顶（Instagram/WhatsApp 风），始终可见 —— */
+  .present { padding: 4px 0 10px; border-bottom: 1px solid var(--border); }
+  .strip { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 1px; scrollbar-width: none; }
   .strip::-webkit-scrollbar { display: none; }
-  .pcell { flex: none; width: 58px; display: flex; flex-direction: column; align-items: center; gap: 5px; background: none; border: 0; padding: 0; }
-  .pn { font-size: 12px; font-weight: 600; max-width: 58px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .ps { font-size: 10.5px; color: var(--faint); max-width: 58px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: -2px; }
-  .pav { width: 46px; height: 46px; border-radius: 50%; }
-  .pl { width: 40px; height: 10px; border-radius: 6px; }
+  .pcell { flex: none; width: 56px; display: flex; flex-direction: column; align-items: center; gap: 5px; background: none; border: 0; padding: 0; }
+  .pn { font-size: 11.5px; font-weight: 500; color: var(--muted); max-width: 56px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pav { width: 48px; height: 48px; border-radius: 50%; }
+  .pl { width: 36px; height: 9px; border-radius: 6px; }
 
   /* —— X 风紧凑流：头像在左、内容在右、行距紧、操作小 —— */
   .feed { display: flex; flex-direction: column; padding-top: 2px; }
@@ -145,13 +144,11 @@
   .srctxt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   /* —— 心情反应（多个）+ 留言入口，一行紧凑 —— */
-  .react { display: flex; align-items: center; gap: 3px; margin: 9px 0 0 -5px; flex-wrap: wrap; }
-  .mbtn { display: inline-flex; align-items: center; gap: 3px; min-height: 28px; padding: 0 5px; border: 0; border-radius: var(--r-pill); background: transparent; color: var(--faint); font-size: 12px; transition: background var(--t-hover) ease; }
-  .mbtn .em { font-size: 15px; line-height: 1; filter: grayscale(0.35); opacity: 0.8; transition: filter var(--t-hover) ease, opacity var(--t-hover) ease; }
-  .mbtn:hover { background: var(--surface-2); }
-  .mbtn.on { background: var(--accent-weak); color: var(--accent); }
-  .mbtn.on .em { filter: none; opacity: 1; }
-  .cbtn { display: inline-flex; align-items: center; gap: 4px; min-height: 28px; margin-left: auto; padding: 0 6px; border: 0; background: transparent; color: var(--faint); font-size: 12.5px; }
+  .react { display: flex; align-items: center; gap: 4px; margin: 10px 0 0 -7px; }
+  .mbtn { display: inline-flex; align-items: center; gap: 3px; min-height: 30px; padding: 0 7px; border: 0; border-radius: var(--r-pill); background: transparent; color: var(--faint); font-size: 12px; transition: background var(--t-hover) ease, color var(--t-hover) ease; }
+  .mbtn:hover { background: var(--surface-2); color: var(--text); }
+  .mbtn.on { color: var(--accent); }
+  .cbtn { display: inline-flex; align-items: center; gap: 4px; min-height: 30px; margin-left: auto; padding: 0 6px; border: 0; background: transparent; color: var(--faint); font-size: 12.5px; }
   .cbtn:hover { color: var(--text); }
   .cnt { font-variant-numeric: tabular-nums; }
 </style>
