@@ -9,7 +9,19 @@ export {
   type EventStore,
   type ChainCheck,
 } from './kernel/event-store.ts';
-export { reconstruct } from './kernel/reconstruct.ts';
+export {
+  reconstruct,
+  captureCheckpoint,
+  checkpointOf,
+  resumeFromCheckpoint,
+  advanceState,
+  projectState,
+  CHECKPOINT_KIND,
+  type Checkpoint,
+  type ResumeState,
+  type RState,
+} from './kernel/reconstruct.ts';
+export { writeCheckpoint, readCheckpoint } from './persistence/checkpoint-store.ts';
 export {
   createFileEventStore,
   loadValidEvents,

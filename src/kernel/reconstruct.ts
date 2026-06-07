@@ -124,16 +124,12 @@ function readTemperament(bias: Record<string, number>): Temperament {
   };
 }
 
-export function reconstruct(events: readonly LifeEvent[]): DerivedSnapshot {
-  if (events.length === 0 || events[0].type !== 'LIFE_GENESIS') {
-    throw new Error('event log must start with LIFE_GENESIS');
-  }
-  const genesis = events[0] as LifeEvent<'LIFE_GENESIS'>;
+// 从创世事件确定性地构造初态（纯函数）。
+function initState(genesis: LifeEvent<'LIFE_GENESIS'>): RState {
   const seed = (genesis.payload as GenesisPayload).innateSeed;
   const sp = seed.somaSetpoints;
   const tau = seed.somaTau;
-
-  const st: RState = {
+  return {
     lifeId: genesis.lifeId,
     vitalityFloor: seed.vitalityFloor,
     willingToWake: true,
@@ -165,18 +161,75 @@ export function reconstruct(events: readonly LifeEvent[]): DerivedSnapshot {
     expect: {},
     temperament: readTemperament(seed.temperamentBias),
   };
+}
 
-  for (let i = 1; i < events.length; i++) {
-    const e = events[i];
-    const nowMs = Date.parse(e.occurredAt);
-    const awake = st.openConnections.size > 0 && st.willingToWake;
-    advanceTime(st, (nowMs - st.lastMs) / 1000, awake, nowMs);
-    applyEvent(st, e);
-    st.lastMs = nowMs;
-    st.clockIso = e.occurredAt;
+// 推进一步（纯函数、确定性）：先衰减/节律，再施事件。reconstruct 与有界重放共用同一步进逻辑 → 永不分叉。
+function stepState(st: RState, e: LifeEvent): void {
+  const nowMs = Date.parse(e.occurredAt);
+  const awake = st.openConnections.size > 0 && st.willingToWake;
+  advanceTime(st, (nowMs - st.lastMs) / 1000, awake, nowMs);
+  applyEvent(st, e);
+  st.lastMs = nowMs;
+  st.clockIso = e.occurredAt;
+}
+
+// 全量重放（源真相）：DerivedState = fold(reconstruct, Genesis, events)。
+export function reconstruct(events: readonly LifeEvent[]): DerivedSnapshot {
+  if (events.length === 0 || events[0].type !== 'LIFE_GENESIS') {
+    throw new Error('event log must start with LIFE_GENESIS');
   }
+  const st = initState(events[0] as LifeEvent<'LIFE_GENESIS'>);
+  for (let i = 1; i < events.length; i++) stepState(st, events[i]);
   return project(st, events[events.length - 1].seq);
 }
+
+// ── 快照/检查点 + 有界重放（永生的工程地板）──
+// 检查点只是【缓存】：永远可由日志重算，丢了/坏了/版本不符就回退全量重放。绝不是 ground truth。
+export const CHECKPOINT_KIND = 'vega-checkpoint';
+export interface Checkpoint {
+  kind: typeof CHECKPOINT_KIND;
+  reconstructVersion: number;
+  schemaVersion: number;
+  lifeId: string;
+  uptoSeq: number; // 这份检查点把日志折叠到了哪一条（含）
+  state: SerializedState;
+}
+type SerializedState = Omit<RState, 'openConnections'> & { openConnections: string[] };
+
+const serialize = (st: RState): SerializedState => ({ ...st, openConnections: [...st.openConnections] });
+const deserialize = (s: SerializedState): RState => ({ ...s, openConnections: new Set(s.openConnections) });
+
+// 把整段日志折成一份检查点（增量捕获见 daemon：只在已有 state 上步进尾巴）。
+export function captureCheckpoint(events: readonly LifeEvent[]): Checkpoint {
+  if (events.length === 0 || events[0].type !== 'LIFE_GENESIS') throw new Error('event log must start with LIFE_GENESIS');
+  const st = initState(events[0] as LifeEvent<'LIFE_GENESIS'>);
+  for (let i = 1; i < events.length; i++) stepState(st, events[i]);
+  return checkpointOf(st, events[events.length - 1].seq);
+}
+// 从一个已有 RState 直接做检查点（daemon 用：避免每次都从创世重折）。
+export function checkpointOf(st: RState, uptoSeq: number): Checkpoint {
+  return { kind: CHECKPOINT_KIND, reconstructVersion: RECONSTRUCT_VERSION, schemaVersion: SCHEMA_VERSION, lifeId: st.lifeId, uptoSeq, state: serialize(st) };
+}
+
+// 有界重放：从检查点恢复 RState，只步进【尾巴】（seq > checkpoint.uptoSeq）。
+// 版本不符即抛——调用方据此回退到全量 reconstruct（检查点是缓存、不是真相）。
+export interface ResumeState { st: RState; uptoSeq: number }
+export function resumeFromCheckpoint(cp: Checkpoint): ResumeState {
+  if (cp.kind !== CHECKPOINT_KIND) throw new Error('not a vega checkpoint');
+  if (cp.reconstructVersion !== RECONSTRUCT_VERSION || cp.schemaVersion !== SCHEMA_VERSION) {
+    throw new Error(`checkpoint version ${cp.reconstructVersion}/${cp.schemaVersion} ≠ current ${RECONSTRUCT_VERSION}/${SCHEMA_VERSION}`);
+  }
+  return { st: deserialize(cp.state), uptoSeq: cp.uptoSeq };
+}
+// 在一个（caught-up 的）RState 上把新尾巴步进进去。供 daemon 增量推进缓存态（永不从创世重折）。
+export function advanceState(st: RState, tail: readonly LifeEvent[]): void {
+  for (const e of tail) stepState(st, e);
+}
+// 投影一个 RState（只读、不改 st）。daemon 拿缓存态出快照用。
+export function projectState(st: RState, uptoSeq: number): DerivedSnapshot {
+  return project(st, uptoSeq);
+}
+export type { RState };
 
 function advanceTime(st: RState, dtSec: number, awake: boolean, nowMs: number): void {
   if (dtSec <= 0) return;

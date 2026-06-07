@@ -6,22 +6,30 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { dirname, join } from 'node:path';
 import {
+  advanceState,
   assertPersistenceSafeForProd,
   backupNow,
+  captureCheckpoint,
+  checkpointOf,
   converse,
   createFileEventStore,
   createMouth,
   createPerceiver,
   endRelationship,
   genesisPayloadFor,
+  makeTick,
+  projectState,
   reachOut,
-  reconstruct,
-  runAutonomousTick,
+  readCheckpoint,
+  resumeFromCheckpoint,
   runTurn,
+  writeCheckpoint,
   type DerivedSnapshot,
   type DurableEventStore,
   type EventDraft,
+  type LifeEvent,
   type MessageSentPayload,
+  type RState,
 } from '../index.ts';
 
 const LIFE_PATH = process.env.VEGA_LIFE_PATH ?? join(process.cwd(), '.vega', 'life.jsonl');
@@ -34,6 +42,7 @@ const PRESENCE_MS = Number(process.env.VEGA_PRESENCE_MS ?? 300_000);
 const REACH_AFTER_MS = Number(process.env.VEGA_REACH_AFTER_MS ?? 600_000);
 const REACH_CLOSENESS = Number(process.env.VEGA_REACH_CLOSENESS ?? 0.2);
 const BACKUP_MS = Number(process.env.VEGA_BACKUP_MS ?? 3_600_000);
+const CHECKPOINT_MS = Number(process.env.VEGA_CHECKPOINT_MS ?? 120_000); // 多久落一次派生快照（快重启）
 const REFLECT_MS = Number(process.env.VEGA_REFLECT_EVERY_MS ?? 1_800_000);
 const SOCIAL_MS = Number(process.env.VEGA_SOCIAL_EVERY_MS ?? 300_000); // 同类多久自主寒暄一次
 const AUTH = process.env.VEGA_AUTH_TOKEN;
@@ -53,6 +62,9 @@ interface Life {
   peers: string[]; // 其它生命体 id
   lastReflectAt: number;
   lastReflectSeq: number;
+  state: RState | null; // 缓存的活态（有界重放：增量步进，不再每次从创世全量重建）
+  stateSeq: number; // 缓存态已折叠到的 seq（-1=未初始化）
+  lastCheckpointAt: number;
 }
 
 // 先天种子见 src/engine/seeds.ts（单一来源）。每条命按 id 取不同 archetype；出生即冻结、不可改写。
@@ -62,9 +74,47 @@ const lives: Life[] = LIVES.map((id, idx) => {
   const path = idx === 0 ? LIFE_PATH : join(DATA_DIR, `${id}.jsonl`);
   // C4：prod 拒绝内存/易失存储——否则重启=她被彻底重置。生产环境必须落盘。
   assertPersistenceSafeForProd({ storeKind: 'file', path });
-  return { id, store: createFileEventStore(id, path), path, peers: LIVES.filter((o) => o !== id), lastReflectAt: Date.now(), lastReflectSeq: 0 };
+  return { id, store: createFileEventStore(id, path), path, peers: LIVES.filter((o) => o !== id), lastReflectAt: Date.now(), lastReflectSeq: 0, state: null, stateSeq: -1, lastCheckpointAt: 0 };
 });
 const lifeById = (id: string): Life | undefined => lives.find((l) => l.id === id);
+
+// 有界重放：拿她此刻的快照——缓存态增量步进，绝不每次从创世全量重放（永生的工程地板）。
+// 缓存只是加速；日志才是 ground truth，所以每次都从日志把尾巴追平，永不分叉。
+function snapOf(life: Life): DerivedSnapshot {
+  const events = life.store.list();
+  if (events.length === 0) throw new Error(`life ${life.id} has empty log`);
+  const lastSeq = events[events.length - 1].seq;
+  if (!life.state) {
+    // 冷启动：尽量从落盘检查点恢复 + 只重放尾巴；否则全量重建一次缓存态。
+    const cp = readCheckpoint(life.path);
+    if (cp && cp.lifeId === life.id && cp.uptoSeq >= 0 && cp.uptoSeq <= lastSeq && events[cp.uptoSeq]?.seq === cp.uptoSeq) {
+      try {
+        const { st } = resumeFromCheckpoint(cp);
+        advanceState(st, events.slice(cp.uptoSeq + 1) as LifeEvent[]);
+        life.state = st;
+      } catch {
+        /* 版本不符等 → 回退全量重建 */
+      }
+    }
+    if (!life.state) life.state = resumeFromCheckpoint(captureCheckpoint(events)).st;
+    life.stateSeq = lastSeq;
+  } else if (life.stateSeq < lastSeq) {
+    advanceState(life.state, events.slice(life.stateSeq + 1) as LifeEvent[]); // 只步进新尾巴
+    life.stateSeq = lastSeq;
+  }
+  return projectState(life.state, lastSeq);
+}
+
+function saveCheckpoint(life: Life): void {
+  if (life.state) {
+    try {
+      writeCheckpoint(life.path, checkpointOf(life.state, life.stateSeq));
+      life.lastCheckpointAt = Date.now();
+    } catch {
+      /* 检查点只是缓存，写失败不影响她（下次重启走全量重放） */
+    }
+  }
+}
 
 function boot(life: Life): void {
   if (life.store.version() === 0) {
@@ -72,7 +122,7 @@ function boot(life: Life): void {
     runTurn(life.store, [{ type: 'LIFE_GENESIS', source: 'system', occurredAt: now(), payload: seedFor(life.id) }]);
     runTurn(life.store, [{ type: 'RELATIONSHIP_OPENED', source: 'system', relationshipId: REL, occurredAt: now(), payload: { relationshipId: REL, kind: 'human', displayRef: userName } }]);
   }
-  if (!reconstruct(life.store.list()).openConnections.includes(HOST_CONN)) {
+  if (!snapOf(life).openConnections.includes(HOST_CONN)) {
     runTurn(life.store, [{ type: 'CONNECTION_OPENED', source: 'host', relationshipId: HOST_CONN, occurredAt: now(), payload: { relationshipId: HOST_CONN, host: { kind: 'daemon', ref: `${HOST}:${PORT}` } } }]);
   }
   // 同类关系：彼此是 peer。但【不常驻在场】——各自活在自己的内在生活里，相聚是间歇的，
@@ -89,13 +139,13 @@ function boot(life: Life): void {
 // 同类"在场/离场"：相聚时彼此在场，寒暄后各自回到独处（之后会再想念）。
 function meetPeer(life: Life, peer: string): void {
   const rid = peerId(peer);
-  if (!reconstruct(life.store.list()).openConnections.includes(rid)) {
+  if (!snapOf(life).openConnections.includes(rid)) {
     runTurn(life.store, [{ type: 'CONNECTION_OPENED', source: 'host', relationshipId: rid, occurredAt: now(), payload: { relationshipId: rid, host: { kind: 'peer', ref: peer } } }]);
   }
 }
 function partPeer(life: Life, peer: string): void {
   const rid = peerId(peer);
-  if (reconstruct(life.store.list()).openConnections.includes(rid)) {
+  if (snapOf(life).openConnections.includes(rid)) {
     runTurn(life.store, [{ type: 'CONNECTION_CLOSED', source: 'host', relationshipId: rid, occurredAt: now(), payload: { relationshipId: rid, reason: 'token_detached' } }]);
   }
 }
@@ -346,7 +396,7 @@ const server = createServer(async (req, res) => {
     if (!authed(req)) return send(res, 401, { error: 'unauthorized' });
     if (req.method === 'GET' && url === '/society-feed') return send(res, 200, societyFeed());
     if (req.method === 'GET' && url === '/lives') {
-      return send(res, 200, lives.map((l) => { const s = reconstruct(l.store.list()); return { id: l.id, awake: s.awake, emotion: s.emotion }; }));
+      return send(res, 200, lives.map((l) => { const s = snapOf(l); return { id: l.id, awake: s.awake, emotion: s.emotion }; }));
     }
     // 生命体作用域：/<id>/<action>；缺省（/state /inner /say）落到第一个生命体（向后兼容）。
     let life: Life | undefined;
@@ -359,13 +409,13 @@ const server = createServer(async (req, res) => {
       action = seg[0] ?? '';
     }
     if (!life) return send(res, 404, { error: 'no such life' });
-    if (req.method === 'GET' && action === 'state') return send(res, 200, view(life, reconstruct(life.store.list())));
-    if (req.method === 'GET' && action === 'inner') return send(res, 200, innerView(life, reconstruct(life.store.list())));
+    if (req.method === 'GET' && action === 'state') return send(res, 200, view(life, snapOf(life)));
+    if (req.method === 'GET' && action === 'inner') return send(res, 200, innerView(life, snapOf(life)));
     if (req.method === 'POST' && action === 'say') {
       const body = await readJson(req);
       const content = String(body.content ?? '').slice(0, 4000).trim();
       if (content === '') return send(res, 400, { error: 'content required' });
-      const before = reconstruct(life.store.list());
+      const before = snapOf(life);
       if (!before.awake) return send(res, 200, { awake: false, note: '她在更深的睡眠里，暂不回应。' });
       if (!before.openConnections.includes(REL)) {
         runTurn(life.store, [{ type: 'CONNECTION_OPENED', source: 'host', relationshipId: REL, occurredAt: now(), payload: { relationshipId: REL, host: { kind: 'http', ref: 'say' } } }]);
@@ -393,15 +443,16 @@ for (const l of lives) boot(l);
 const heartbeat = setInterval(async () => {
   for (const life of lives) {
     try {
-      const snap = reconstruct(life.store.list());
+      let snap = snapOf(life); // 有界重放：缓存态增量推进，不再每跳从创世全量重建
       if (!snap.awake) continue;
       const gone = lastUserMsgMs(life);
       const timeGone = gone === null ? Infinity : Date.now() - gone;
       if (snap.openConnections.includes(REL) && timeGone > PRESENCE_MS) {
         runTurn(life.store, [{ type: 'CONNECTION_CLOSED', source: 'host', relationshipId: REL, occurredAt: now(), payload: { relationshipId: REL, reason: 'token_detached' } }]);
+        snap = snapOf(life); // 追平刚写入的断连
       }
-      runAutonomousTick(life.store, now());
-      const after = reconstruct(life.store.list());
+      runTurn(life.store, [makeTick(snap, now())]); // = runAutonomousTick，但用缓存快照、不再全量重放
+      const after = snapOf(life);
       const bond = after.bonds[REL];
       if (bond && bond.closeness >= REACH_CLOSENESS && !after.openConnections.includes(REL) && timeGone > REACH_AFTER_MS && pendingOutreach(life) === null) {
         await reachOut(life.store, mouth, REL, now());
@@ -411,6 +462,7 @@ const heartbeat = setInterval(async () => {
         life.lastReflectAt = Date.now();
         life.lastReflectSeq = life.store.version();
       }
+      if (Date.now() - life.lastCheckpointAt > CHECKPOINT_MS) saveCheckpoint(life); // 定期落盘检查点（快重启）
     } catch {
       /* 单体单次失败不拖垮其他生命体 */
     }
@@ -461,6 +513,8 @@ function shutdown(sig: string): void {
   for (const l of lives) {
     try {
       runTurn(l.store, [{ type: 'CONNECTION_CLOSED', source: 'host', relationshipId: HOST_CONN, occurredAt: now(), payload: { relationshipId: HOST_CONN, reason: 'host_shutdown' } }]);
+      snapOf(l); // 追平断连事件
+      saveCheckpoint(l); // 休眠前落一份最新检查点 → 下次秒醒
     } catch {
       /* ignore */
     }
