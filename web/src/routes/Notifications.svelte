@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { api, stream } from '../lib/api.js';
   import { navigate } from '../lib/router.js';
+  import { avatarStyle } from '../lib/avatar.js';
 
   let notes = [];
   let error = '';
@@ -31,7 +32,7 @@
   {/if}
   {#each notes as n}
     <button class="note" class:fresh={n.fresh} on:click={() => navigate('chat', { id: n.life })}>
-      <div class="avatar">{n.life[0].toUpperCase()}</div>
+      <div class="avatar" style={avatarStyle(n.life)}>{n.life[0].toUpperCase()}</div>
       <div class="body">
         <div class="top"><b>{n.life}</b> <span class="dim">想你了</span></div>
         <div class="text">{n.text}</div>

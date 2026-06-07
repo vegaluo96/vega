@@ -102,6 +102,8 @@ interface Life {
   state: RState | null; // 缓存的活态（有界重放：增量步进，不再每次从创世全量重建）
   stateSeq: number; // 缓存态已折叠到的 seq（-1=未初始化）
   lastCheckpointAt: number;
+  lastTickAt: number; // 回路健康：上次自主想念
+  lastSocialAt: number; // 上次同类寒暄
 }
 
 // 先天种子见 src/engine/seeds.ts（单一来源）。每条命按 id 取不同 archetype；出生即冻结、不可改写。
@@ -111,7 +113,7 @@ const lives: Life[] = LIVES.map((id, idx) => {
   const path = idx === 0 ? LIFE_PATH : join(DATA_DIR, `${id}.jsonl`);
   // C4：prod 拒绝内存/易失存储——否则重启=她被彻底重置。生产环境必须落盘。
   assertPersistenceSafeForProd({ storeKind: 'file', path });
-  return { id, store: createFileEventStore(id, path), path, peers: LIVES.filter((o) => o !== id), lastReflectAt: Date.now(), lastReflectSeq: 0, state: null, stateSeq: -1, lastCheckpointAt: 0 };
+  return { id, store: createFileEventStore(id, path), path, peers: LIVES.filter((o) => o !== id), lastReflectAt: Date.now(), lastReflectSeq: 0, state: null, stateSeq: -1, lastCheckpointAt: 0, lastTickAt: 0, lastSocialAt: 0 };
 });
 const lifeById = (id: string): Life | undefined => lives.find((l) => l.id === id);
 
@@ -524,10 +526,11 @@ const ADMIN = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   ['overview','活动流','充值','用户'].map(function(x,i){var k=['overview','activity','recharges','users'][i];return '<button class="'+(tab===k?'on':'')+'" onclick="go(\\''+k+'\\')">'+(i?x:'总览')+'</button>';}).join('')+
   '<button onclick="logout()">登出</button></nav></header><main>'+body+'</main>';}
  function go(k){tab=k;render();}
+ function ago(ts){if(!ts)return '—';var s=Math.round((Date.now()-ts)/1000);return s<60?s+'秒前':s<3600?Math.round(s/60)+'分前':Math.round(s/3600)+'时前';}
  async function render(){var root=document.getElementById('root');
   if(tab==='overview'){var d=await (await fetch('/admin/overview',{headers:H()})).json();
    root.innerHTML=shell(d.role,'<div class="card"><div class="row"><b>待审批充值</b><span class="spacer"></span><span class="mono">'+d.pendingRecharges+'</span></div><div class="row"><b>用户</b><span class="spacer"></span><span class="mono">'+d.users+'</span></div></div>'+
-    '<div class="card">'+d.lives.map(function(l){return '<div class="row"><span class="dot '+(l.awake?'on':'')+'"></span><b>'+esc(l.id)+'</b> <span class="dim">'+esc(l.dayPhase)+' · '+esc(l.emotion)+'</span><span class="spacer"></span><span class="dim mono">灵性 '+l.vitality+' · 事件 '+l.events+'</span></div>';}).join('')+'</div>');}
+    '<div class="card">'+d.lives.map(function(l){return '<div class="row"><span class="dot '+(l.awake?'on':'')+'"></span><b>'+esc(l.id)+'</b> <span class="dim">'+esc(l.dayPhase)+' · '+esc(l.emotion)+'</span><span class="spacer"></span><span class="dim mono">灵性 '+l.vitality+' · 事件 '+l.events+'</span></div><div class="row" style="border:0;padding-top:2px"><span class="dim" style="font-size:12px">回路：想念 '+ago(l.loop.tick)+' · 反思 '+ago(l.loop.reflect)+' · 寒暄 '+ago(l.loop.social)+' · 检查点 '+ago(l.loop.checkpoint)+'</span></div>';}).join('')+'</div>');}
   else if(tab==='activity'){var a=await (await fetch('/admin/activity?limit=150',{headers:H()})).json();
    root.innerHTML=shell('','<div class="card"><div class="dim" style="margin-bottom:8px">真实活动流（墙钟倒序）· 私聊正文按角色遮罩</div>'+
     a.map(function(e){return '<div class="ev"><span class="t">'+esc(e.at.slice(5,19).replace("T"," "))+'</span><span>'+esc(e.life)+'</span><span class="l">'+esc(e.label)+'</span><span class="c">'+esc(e.content)+'</span></div>';}).join('')+'</div>');}
@@ -689,7 +692,7 @@ const server = createServer(async (req, res) => {
       if (req.method === 'GET' && path === '/admin/overview') {
         return send(res, 200, {
           role: acct.role,
-          lives: lives.map((l) => { const s = snapOf(l); return { id: l.id, awake: s.awake, willingToWake: s.willingToWake, emotion: s.emotion, dayPhase: s.dayPhase, vitality: round3(s.soma.vitality.value), events: l.store.version(), lastCheckpointAt: l.lastCheckpointAt }; }),
+          lives: lives.map((l) => { const s = snapOf(l); return { id: l.id, awake: s.awake, willingToWake: s.willingToWake, emotion: s.emotion, dayPhase: s.dayPhase, vitality: round3(s.soma.vitality.value), events: l.store.version(), loop: { tick: l.lastTickAt, reflect: l.lastReflectAt, social: l.lastSocialAt, checkpoint: l.lastCheckpointAt } }; }),
           pendingRecharges: accounts.pendingRechargeCount(),
           users: accounts.listUsers().length,
         });
@@ -777,6 +780,7 @@ const heartbeat = setInterval(async () => {
         snap = snapOf(life); // 追平刚写入的断连
       }
       runTurn(life.store, [makeTick(snap, now())]); // = runAutonomousTick，但用缓存快照、不再全量重放
+      life.lastTickAt = Date.now();
       const after = snapOf(life);
       const bond = after.bonds[REL];
       if (bond && bond.closeness >= REACH_CLOSENESS && !after.openConnections.includes(REL) && timeGone > REACH_AFTER_MS && pendingOutreach(life) === null) {
@@ -828,6 +832,7 @@ const socialTimer = lives.length >= 2
         }
         await serializer.run(a.id, () => partPeer(a, b.id)); // 寒暄后各自离场
         await serializer.run(b.id, () => partPeer(b, a.id));
+        a.lastSocialAt = b.lastSocialAt = Date.now();
       } catch {
         /* ignore */
       }

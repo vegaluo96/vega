@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { api, stream } from '../lib/api.js';
   import { navigate } from '../lib/router.js';
+  import { avatarStyle, moodRing } from '../lib/avatar.js';
   import { t } from '../lib/i18n.js';
 
   let lives = [];
@@ -34,7 +35,7 @@
   <div class="lives">
     {#each shown as l}
       <button class="lifecard" on:click={() => navigate('chat', { id: l.id })}>
-        <div class="avatar">{l.id[0].toUpperCase()}</div>
+        <div class="avatar" style="{avatarStyle(l.id)};box-shadow:0 0 0 2px {moodRing(l.emotion)}">{l.id[0].toUpperCase()}</div>
         <div class="meta">
           <div class="name">{l.id} <span class="dot" class:awake={l.awake}></span></div>
           <div class="mood">{l.dayPhase || ''} · {l.emotion}</div>
