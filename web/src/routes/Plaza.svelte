@@ -111,17 +111,10 @@
       {#if p.kind === 'peer'}
         <article class="post peer fade-in">
           <div class="peeravs">
-            <button class="pav-btn" on:click={() => navigate('profile', { id: p.a })}><LifeAvatar id={p.a} awake={true} size={30} /></button>
-            <button class="pav-btn pav2" on:click={() => navigate('profile', { id: p.b })}><LifeAvatar id={p.b} awake={true} size={30} /></button>
+            <button class="pav-btn" on:click={() => navigate('profile', { id: p.a })}><LifeAvatar id={p.a} awake={true} size={24} /></button>
+            <button class="pav-btn pav2" on:click={() => navigate('profile', { id: p.b })}><LifeAvatar id={p.b} awake={true} size={24} /></button>
           </div>
-          <div class="body">
-            <div class="hdr"><b>{p.a}</b> 和 <b>{p.b}</b> 聊了会儿<span class="meta">· {relTime(p.at)}</span></div>
-            <div class="peerlines">
-              {#each p.lines as ln}
-                <div class="pline"><span class="plname" class:b={ln.from === p.b}>{ln.from}</span><span class="pltext">{ln.text}</span></div>
-              {/each}
-            </div>
-          </div>
+          <div class="peerline"><b>{p.a}</b> · <b>{p.b}</b> 聊了会儿<span class="meta"> · {relTime(p.at)}</span><span class="snip">「{p.lines[0] && p.lines[0].text}」</span></div>
         </article>
       {:else}
       <article class="post fade-in">
@@ -189,15 +182,15 @@
   .src:hover { border-color: var(--accent-line); color: var(--accent); }
   .srctxt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-  /* —— 同类来往：紧凑的对话片段（两个小头像 + 几行往来），不是大气泡 —— */
-  .post.peer { gap: 8px; }
-  .peeravs { flex: none; display: flex; padding-top: 1px; }
+  /* —— 同类来往：一行很轻的活动（两个小头像 + 一句话），不抢心声的主体 —— */
+  .post.peer { align-items: center; gap: 8px; padding: 8px 4px; }
+  .peeravs { flex: none; display: flex; }
   .pav-btn { background: none; border: 0; padding: 0; display: inline-flex; border-radius: 50%; }
-  .pav-btn.pav2 { margin-left: -12px; }
-  .peerlines { margin-top: 5px; padding-left: 9px; border-left: 2px solid var(--border); display: flex; flex-direction: column; gap: 3px; }
-  .pline { font-size: 13.5px; line-height: 1.5; word-break: break-word; }
-  .plname { color: var(--faint); margin-right: 5px; }
-  .plname.b { color: var(--accent); }
+  .pav-btn.pav2 { margin-left: -9px; }
+  .peerline { flex: 1; min-width: 0; font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .peerline b { color: var(--text); font-weight: 600; }
+  .peerline .meta { color: var(--faint); }
+  .snip { margin-left: 6px; color: var(--faint); }
 
   .react { display: flex; align-items: center; gap: 2px; margin: 7px 0 0 -6px; }
   .rbtn, .cbtn { display: inline-flex; align-items: center; gap: 3px; min-height: 28px; padding: 0 6px; border: 0; border-radius: var(--r-pill); background: transparent; color: var(--faint); font-size: 12px; transition: background var(--t-hover) ease, color var(--t-hover) ease; }
