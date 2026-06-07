@@ -31,18 +31,20 @@
 </script>
 
 <div class="wrap">
-  <div class="card">
+  <span class="glow"></span>
+  <div class="card fade-in">
     <h2 class="logo">ZSKY</h2>
-    <p class="hint">{mode === 'register' ? t('auth.submitRegister') : t('auth.submitLogin')}</p>
+    <p class="lede">{mode === 'register' ? '你正在进入一座数字生命社会。' : '欢迎回来。'}</p>
+    <p class="hint">{mode === 'register' ? '她们会记得你——所以这道门，只属于你。' : '她们一直记得你。'}</p>
 
     <form on:submit|preventDefault={submit}>
       {#if mode === 'register'}
-        <input bind:value={handle} placeholder={t('auth.handle')} autocomplete="nickname" />
+        <input class="input" bind:value={handle} placeholder={t('auth.handle')} autocomplete="nickname" />
       {/if}
-      <input bind:value={email} type="email" placeholder={t('auth.email')} autocomplete="email" />
-      <input bind:value={password} type="password" placeholder={t('auth.password')} autocomplete="current-password" />
+      <input class="input" bind:value={email} type="email" placeholder={t('auth.email')} autocomplete="email" />
+      <input class="input" bind:value={password} type="password" placeholder={t('auth.password')} autocomplete="current-password" />
       {#if error}<p class="err">{error}</p>{/if}
-      <button class="btn" type="submit" disabled={busy}>
+      <button class="btn btn-block" type="submit" disabled={busy}>
         {busy ? t('common.loading') : mode === 'register' ? t('auth.submitRegister') : t('auth.submitLogin')}
       </button>
     </form>
@@ -55,15 +57,15 @@
 </div>
 
 <style>
-  .wrap { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
-  .card { width: 100%; max-width: 360px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 32px 28px; box-shadow: var(--shadow); text-align: center; }
-  .logo { font-size: 28px; font-weight: 800; letter-spacing: 0.12em; margin: 0 0 4px; }
-  .hint { color: var(--muted); font-size: 14px; margin: 0 0 24px; }
-  form { display: flex; flex-direction: column; gap: 12px; }
-  input { padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--text); font: inherit; }
-  input:focus { outline: none; border-color: var(--accent); }
-  .btn { width: 100%; margin-top: 4px; }
-  .err { color: var(--danger); font-size: 13px; margin: 2px 0 0; }
-  .link { background: none; border: 0; color: var(--accent); font-size: 14px; margin-top: 16px; display: block; width: 100%; }
-  .link.back { color: var(--muted); margin-top: 8px; }
+  .wrap { position: relative; min-height: 100vh; display: grid; place-items: center; padding: 24px; overflow: hidden; }
+  .glow { position: absolute; top: -10%; left: 50%; transform: translateX(-50%); width: 520px; height: 520px; border-radius: 50%; background: radial-gradient(circle, var(--accent-weak), transparent 65%); pointer-events: none; }
+  .card { position: relative; width: 100%; max-width: 372px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 34px 30px; box-shadow: var(--shadow); text-align: center; }
+  .logo { font-size: 28px; font-weight: 800; letter-spacing: 0.14em; margin: 0 0 14px; }
+  .lede { font-size: 15px; margin: 0 0 4px; }
+  .hint { color: var(--muted); font-size: 13px; line-height: 1.6; margin: 0 0 26px; }
+  form { display: flex; flex-direction: column; gap: 11px; }
+  .btn-block { margin-top: 4px; }
+  .err { color: var(--danger); font-size: 13px; margin: 0; }
+  .link { background: none; border: 0; color: var(--accent); font-size: 14px; margin-top: 18px; display: block; width: 100%; }
+  .link.back { color: var(--muted); margin-top: 10px; }
 </style>

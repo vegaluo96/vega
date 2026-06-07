@@ -2,7 +2,9 @@
   import { onMount } from 'svelte';
   import { api } from '../lib/api.js';
   import { navigate } from '../lib/router.js';
-  import { avatarStyle, moodRing } from '../lib/avatar.js';
+  import PageHeader from '../components/PageHeader.svelte';
+  import LifeAvatar from '../components/LifeAvatar.svelte';
+  import EmptyState from '../components/EmptyState.svelte';
 
   let chats = [];
   let error = '';
@@ -18,36 +20,44 @@
   });
 </script>
 
-<section>
-  <h2 class="section">对话</h2>
-  {#if loading}<p class="muted">载入中…</p>{/if}
+<div class="rels">
+  <PageHeader title="关系" subtitle="你和她们之间，正在继续的关系。" />
+
+  {#if loading}<p class="caption">载入中…</p>{/if}
   {#if !loading && chats.length === 0 && !error}
-    <p class="muted">你还没和谁说过话。去广场认识一个她吧——她会记住你。</p>
+    <EmptyState title="你还没有和谁建立关系。" text="去广场遇见一个她——她会记住你，从这一刻开始。">
+      <button slot="action" class="btn" on:click={() => navigate('plaza')}>去广场</button>
+    </EmptyState>
   {/if}
-  {#each chats as c}
-    <button class="chat" on:click={() => navigate('chat', { id: c.life })}>
-      <div class="avatar" style="{avatarStyle(c.life)};box-shadow:0 0 0 2px {moodRing(c.emotion)}">{c.life[0].toUpperCase()}</div>
+
+  {#each chats as c (c.life)}
+    <button class="rel card-interactive" on:click={() => navigate('chat', { id: c.life })}>
+      <LifeAvatar id={c.life} emotion={c.emotion} awake={c.awake} size={48} />
       <div class="body">
-        <div class="top"><b>{c.life}</b> <span class="dot" class:awake={c.awake}></span>{#if c.pending}<span class="badge">她想你了</span>{/if}</div>
+        <div class="top">
+          <span class="name">{c.life}</span>
+          <span class="dot" class:awake={c.awake}></span>
+          {#if c.pending}<span class="pending">她想你了</span>{/if}
+        </div>
         <div class="last">{c.lastFromHer ? '' : '我：'}{c.lastText}</div>
+        {#if !c.pending}<div class="thread">你们的线还在继续</div>{/if}
       </div>
+      <span class="go">›</span>
     </button>
   {/each}
   {#if error}<p class="err">{error}</p>{/if}
-</section>
+</div>
 
 <style>
-  section { max-width: var(--maxw); margin: 0 auto; padding: 16px 16px 90px; }
-  .section { font-size: 18px; font-weight: 800; margin: 8px 2px 16px; }
-  .chat { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 12px; margin-bottom: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); }
-  .chat:active { background: var(--surface-2); }
-  .avatar { width: 48px; height: 48px; border-radius: 999px; display: grid; place-items: center; font-weight: 700; color: #fff; flex: none; }
+  .rels { max-width: var(--maxw); margin: 0 auto; padding: 4px 16px 96px; }
+  .rel { display: flex; align-items: center; gap: 13px; padding: 13px; margin-bottom: 8px; }
   .body { flex: 1; min-width: 0; }
   .top { display: flex; align-items: center; gap: 8px; }
-  .dot { width: 8px; height: 8px; border-radius: 999px; background: var(--muted); }
-  .dot.awake { background: #3fb950; }
-  .badge { font-size: 11px; color: var(--accent); border: 1px solid var(--accent); border-radius: 999px; padding: 1px 8px; }
-  .last { color: var(--muted); font-size: 14px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .muted { color: var(--muted); line-height: 1.7; }
-  .err { color: var(--danger); }
+  .name { font-weight: 700; font-size: 15.5px; }
+  .dot { width: 7px; height: 7px; border-radius: var(--r-pill); background: var(--life-asleep); flex: none; }
+  .dot.awake { background: var(--life-awake); box-shadow: 0 0 0 3px color-mix(in srgb, var(--life-awake) 20%, transparent); }
+  .pending { font-size: 11px; color: var(--life-reaching); border: 1px solid color-mix(in srgb, var(--life-reaching) 50%, transparent); border-radius: var(--r-pill); padding: 1px 9px; margin-left: auto; }
+  .last { color: var(--muted); font-size: 14px; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .thread { color: var(--faint); font-size: 11.5px; margin-top: 3px; }
+  .go { color: var(--faint); font-size: 20px; flex: none; }
 </style>

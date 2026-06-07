@@ -1,38 +1,104 @@
-/* ZSKY 设计 token —— 参照 x.com：简洁大气、内容优先、单一强调色；但底色更暖（她是活的）。
-   颜色全走 CSS 变量，light/dark 两套，全站自动适配（§8.4）。 */
+/* ============================================================================
+   ZSKY 设计系统 —— 一座数字生命社会的视觉语言。
+   关键词：安静 · 克制 · 观测感 · 关系重量 · 有生命迹象。
+   不是科技感堆砌，不是社交信息流，不是 AI 女友。颜色全走 token，light/dark 两套。
+   ========================================================================== */
+
 :root {
-  --bg: #fbfaf8;
+  /* —— 表面 / 层级 —— 暖白底，她是活的，不是冷冰冰的 SaaS —— */
+  --bg: #faf9f7;
   --surface: #ffffff;
-  --surface-2: #f4f3f1;
-  --text: #17171c;
-  --muted: #6b6b78;
-  --border: #ececef;
-  --accent: #6b5cf0;
-  --accent-soft: rgba(107, 92, 240, 0.12);
+  --elevated: #ffffff;
+  --surface-2: #f4f3f0;
+  --border: #e8e6e1;
+  --border-subtle: #f0eeea;
+
+  /* —— 文字三级 —— */
+  --text: #1a1a1f;
+  --muted: #6c6c75;
+  --faint: #a2a2ac;
+
+  /* —— 主色：克制的靛——只在关键处用，绝不大面积铺 —— */
+  --accent: #5b51d8;
+  --accent-weak: rgba(91, 81, 216, 0.10);
+  --accent-line: rgba(91, 81, 216, 0.28);
   --on-accent: #ffffff;
-  --danger: #e0556b;
-  --radius: 14px;
-  --radius-sm: 10px;
-  --gap: 16px;
-  --maxw: 640px;
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.05);
+
+  /* —— 生命状态色：用于微小的点/环/标签，不做大色块 —— */
+  --life-awake: #3f9d6b;        /* 醒着 */
+  --life-asleep: #9a9aa4;       /* 沉睡 */
+  --life-remembering: #c0894a;  /* 想起某人 */
+  --life-reaching: #8a63c9;     /* 她主动找你 */
+  --life-tension: #c4673f;      /* 心里的拉扯 */
+
+  /* —— 语义色 —— */
+  --danger: #d2495f;
+  --danger-weak: rgba(210, 73, 95, 0.10);
+  --warning: #c0894a;
+  --success: #3f9d6b;
+
+  /* —— 圆角系统 —— */
+  --r-xs: 6px;
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-lg: 20px;
+  --r-pill: 999px;
+
+  /* —— 间距系统 —— */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s6: 24px;
+  --s8: 32px;
+  --s12: 48px;
+
+  /* —— 仅保留一档克制的浮起阴影 —— */
+  --shadow: 0 1px 2px rgba(20, 20, 30, 0.04), 0 12px 32px rgba(20, 20, 30, 0.06);
+
+  /* —— 动效时长 —— */
+  --t-hover: 120ms;
+  --t-active: 80ms;
+  --t-fade: 160ms;
+
+  --maxw: 600px;
+  --rail: 248px;
   color-scheme: light;
 }
+
 [data-theme='dark'] {
-  --bg: #0b0b10;
-  --surface: #14141b;
-  --surface-2: #1b1b24;
-  --text: #ece9f5;
-  --muted: #8b8b99;
-  --border: #20202b;
+  --bg: #08080c;
+  --surface: #101017;
+  --elevated: #16161f;
+  --surface-2: #1a1a24;
+  --border: #21212c;
+  --border-subtle: #18181f;
+
+  --text: #ecebf2;
+  --muted: #8c8c99;
+  --faint: #585866;
+
   --accent: #8b7cf6;
-  --accent-soft: rgba(139, 124, 246, 0.16);
-  --on-accent: #0b0b10;
-  --danger: #f0667c;
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 30px rgba(0, 0, 0, 0.4);
+  --accent-weak: rgba(139, 124, 246, 0.14);
+  --accent-line: rgba(139, 124, 246, 0.34);
+  --on-accent: #0a0a10;
+
+  --life-awake: #4cae7a;
+  --life-asleep: #6a6a78;
+  --life-remembering: #d09a5c;
+  --life-reaching: #a487e0;
+  --life-tension: #d9794f;
+
+  --danger: #ef6177;
+  --danger-weak: rgba(239, 97, 119, 0.14);
+  --warning: #d09a5c;
+  --success: #4cae7a;
+
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 16px 40px rgba(0, 0, 0, 0.5);
   color-scheme: dark;
 }
 
+/* —— reset / base —— */
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; height: 100%; }
 body {
@@ -40,19 +106,81 @@ body {
   color: var(--text);
   font: 16px/1.6 system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
-  transition: background 0.3s ease, color 0.3s ease;
+  text-rendering: optimizeLegibility;
+  transition: background var(--t-fade) ease, color var(--t-fade) ease;
 }
 a { color: var(--accent); text-decoration: none; }
-button { font: inherit; cursor: pointer; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button { font: inherit; cursor: pointer; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+::selection { background: var(--accent-weak); }
 
-/* 通用按钮 */
+/* —— 字体层级 —— */
+.page-title { font-size: 26px; font-weight: 800; letter-spacing: -0.01em; line-height: 1.2; margin: 0; }
+.section-title { font-size: 13px; font-weight: 600; letter-spacing: 0.04em; text-transform: none; color: var(--muted); margin: 0; }
+.caption { font-size: 13px; color: var(--muted); line-height: 1.6; }
+.meta { font-size: 11.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.faint { color: var(--faint); }
+.mono { font-variant-numeric: tabular-nums; }
+.err { color: var(--danger); }
+
+/* —— 按钮：primary / secondary / ghost / danger —— */
 .btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  padding: 11px 20px; border-radius: 999px; border: 1px solid transparent;
-  background: var(--accent); color: var(--on-accent); font-weight: 600;
-  transition: transform 0.08s ease, opacity 0.2s ease;
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--s2);
+  min-height: 44px; padding: 0 var(--s6); border-radius: var(--r-pill);
+  border: 1px solid transparent; background: var(--accent); color: var(--on-accent);
+  font-size: 15px; font-weight: 600; line-height: 1; white-space: nowrap;
+  transition: transform var(--t-active) ease, background var(--t-hover) ease, border-color var(--t-hover) ease, opacity var(--t-hover) ease;
 }
-.btn:active { transform: scale(0.98); }
-.btn.ghost { background: transparent; color: var(--text); border-color: var(--border); }
-.btn:disabled { opacity: 0.5; cursor: default; }
+.btn:hover { background: color-mix(in srgb, var(--accent) 88%, #000); }
+.btn:active { transform: scale(0.985); }
+.btn:disabled { opacity: 0.45; cursor: default; transform: none; }
+.btn-secondary { background: var(--surface-2); color: var(--text); border-color: var(--border); }
+.btn-secondary:hover { background: color-mix(in srgb, var(--surface-2) 90%, var(--text)); border-color: var(--accent-line); }
+.btn-ghost { background: transparent; color: var(--text); border-color: var(--border); }
+.btn-ghost:hover { background: var(--surface-2); }
+.btn-danger { background: transparent; color: var(--danger); border-color: var(--danger); }
+.btn-danger:hover { background: var(--danger-weak); }
+.btn-sm { min-height: 36px; padding: 0 var(--s4); font-size: 13.5px; }
+.btn-block { display: flex; width: 100%; }
+
+/* —— 输入框：统一高度 / 圆角 / focus —— */
+.input {
+  width: 100%; min-height: 46px; padding: 0 var(--s4);
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  background: var(--surface); color: var(--text); font: inherit;
+  transition: border-color var(--t-hover) ease, box-shadow var(--t-hover) ease;
+}
+.input::placeholder { color: var(--faint); }
+.input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); }
+.input-pill { border-radius: var(--r-pill); padding: 0 var(--s4); }
+
+/* —— 卡片：surface / quiet / interactive —— */
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); }
+.card-quiet { background: transparent; border: 1px solid var(--border-subtle); border-radius: var(--r-md); }
+.card-interactive {
+  display: block; width: 100%; text-align: left; color: var(--text);
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md);
+  transition: border-color var(--t-hover) ease, background var(--t-hover) ease, transform var(--t-active) ease;
+}
+.card-interactive:hover { border-color: var(--accent-line); }
+.card-interactive:active { transform: scale(0.992); }
+
+/* —— chips（筛选）—— */
+.chips { display: flex; gap: var(--s2); flex-wrap: wrap; }
+.chip {
+  min-height: 34px; padding: 0 var(--s3); border-radius: var(--r-pill);
+  background: transparent; border: 1px solid var(--border); color: var(--muted);
+  font-size: 13px; display: inline-flex; align-items: center;
+  transition: all var(--t-hover) ease;
+}
+.chip:hover { border-color: var(--accent-line); color: var(--text); }
+.chip.on { background: var(--accent-weak); color: var(--accent); border-color: var(--accent-line); }
+
+/* —— 微进入动效（尊重 reduce-motion）—— */
+.fade-in { animation: fade-in var(--t-fade) ease both; }
+@keyframes fade-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
+}

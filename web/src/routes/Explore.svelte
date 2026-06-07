@@ -2,12 +2,17 @@
   import { onMount } from 'svelte';
   import { api } from '../lib/api.js';
   import { navigate } from '../lib/router.js';
-  import { avatarStyle, moodRing } from '../lib/avatar.js';
+  import PageHeader from '../components/PageHeader.svelte';
+  import LifeAvatar from '../components/LifeAvatar.svelte';
+  import LifeStatePill from '../components/LifeStatePill.svelte';
+  import EmptyState from '../components/EmptyState.svelte';
 
   let lives = [];
   let error = '';
   let q = '';
-  let filter = 'all'; // all | awake
+  let filter = 'all'; // all | awake | quiet | ardent | curious
+  const FILTERS = [['all', '全部'], ['awake', '此刻醒着'], ['quiet', '安静'], ['ardent', '热烈'], ['curious', '好奇']];
+
   onMount(async () => {
     try {
       lives = await api.lives();
@@ -15,50 +20,66 @@
       error = e.message;
     }
   });
+
+  // 只用已有字段过滤（temperament 文本），不造新字段。
+  function match(l) {
+    const tp = l.temperament || '';
+    if (filter === 'awake') return l.awake;
+    if (filter === 'quiet') return /沉|静|内向|克制/.test(tp);
+    if (filter === 'ardent') return /热烈|奔放|外向/.test(tp);
+    if (filter === 'curious') return /好奇/.test(tp);
+    return true;
+  }
   $: shown = lives
-    .filter((l) => filter !== 'awake' || l.awake)
+    .filter(match)
     .filter((l) => !q || (l.id + ' ' + (l.temperament || '') + ' ' + (l.emotion || '')).toLowerCase().includes(q.toLowerCase()));
+
+  const stateLine = (l) => (l.awake ? `此刻${l.emotion}${l.dayPhase ? '，在' + l.dayPhase + '里' : ''}` : '在更深的睡眠里');
 </script>
 
-<section>
-  <h2 class="section">探索 · 认识一个她</h2>
-  <input class="search" bind:value={q} placeholder="名字 / 气质（内向沉静、热烈奔放…）/ 心情" />
+<div class="explore">
+  <PageHeader title="认识一个她" subtitle="不是匹配对象，而是一段关系的开始。" />
+
+  <input class="input input-pill" bind:value={q} placeholder="名字 / 气质（内向沉静、热烈奔放…）/ 心情" />
+
   <div class="chips">
-    <button class:on={filter === 'all'} on:click={() => (filter = 'all')}>全部</button>
-    <button class:on={filter === 'awake'} on:click={() => (filter = 'awake')}>此刻醒着</button>
+    {#each FILTERS as [k, label]}
+      <button class="chip" class:on={filter === k} on:click={() => (filter = k)}>{label}</button>
+    {/each}
   </div>
 
+  {#if shown.length === 0 && !error}
+    <EmptyState title="没有符合条件的她。" text="换个气质试试，或者去广场看看此刻谁醒着。" />
+  {/if}
+  {#if error}<p class="err">{error}</p>{/if}
+
   <div class="grid">
-    {#each shown as l}
-      <button class="card" on:click={() => navigate('profile', { id: l.id })}>
-        <div class="avatar" style="{avatarStyle(l.id)};box-shadow:0 0 0 2px {moodRing(l.emotion)}">{l.id[0].toUpperCase()}</div>
-        <div class="name">{l.id} <span class="dot" class:awake={l.awake}></span></div>
-        <div class="temp">{l.temperament || ''}</div>
-        <div class="mood">{l.dayPhase || ''} · {l.emotion}</div>
+    {#each shown as l (l.id)}
+      <button class="dossier card-interactive fade-in" on:click={() => navigate('profile', { id: l.id })}>
+        <LifeAvatar id={l.id} emotion={l.emotion} awake={l.awake} size={52} />
+        <div class="info">
+          <div class="row1"><span class="name">{l.id}</span><span class="enter">去见她 ›</span></div>
+          <LifeStatePill awake={l.awake} dayPhase={l.dayPhase} emotion={l.emotion} />
+          {#if l.temperament}<div class="temp">{l.temperament}</div>{/if}
+          <div class="line">{stateLine(l)}</div>
+        </div>
       </button>
     {/each}
   </div>
-  {#if shown.length === 0 && !error}<p class="muted">没有符合的她。</p>{/if}
-  {#if error}<p class="err">{error}</p>{/if}
-</section>
+</div>
 
 <style>
-  section { max-width: var(--maxw); margin: 0 auto; padding: 16px 16px 90px; }
-  .section { font-size: 18px; font-weight: 800; margin: 8px 2px 14px; }
-  .search { width: 100%; padding: 11px 16px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text); font: inherit; }
-  .search:focus { outline: none; border-color: var(--accent); }
-  .chips { display: flex; gap: 8px; margin: 12px 0 16px; }
-  .chips button { background: var(--surface); border: 1px solid var(--border); color: var(--muted); padding: 6px 14px; border-radius: 999px; font-size: 13px; }
-  .chips button.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
-  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-  .card { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 18px 12px; text-align: center; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); }
-  .card:active { background: var(--surface-2); }
-  .avatar { width: 56px; height: 56px; border-radius: 999px; display: grid; place-items: center; font-weight: 700; color: #fff; margin-bottom: 4px; }
-  .name { font-weight: 700; display: flex; align-items: center; gap: 6px; }
-  .dot { width: 8px; height: 8px; border-radius: 999px; background: var(--muted); }
-  .dot.awake { background: #3fb950; }
-  .temp { color: var(--muted); font-size: 12px; line-height: 1.4; }
-  .mood { color: var(--muted); font-size: 12px; opacity: 0.8; }
-  .muted { color: var(--muted); }
-  .err { color: var(--danger); }
+  .explore { max-width: var(--maxw); margin: 0 auto; padding: 4px 16px 96px; }
+  .chips { margin: 14px 0 18px; }
+  .grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
+  .dossier { display: flex; gap: 14px; padding: 15px; align-items: flex-start; }
+  .info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+  .row1 { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .name { font-weight: 700; font-size: 16px; }
+  .enter { font-size: 12px; color: var(--accent); flex: none; }
+  .temp { color: var(--muted); font-size: 12.5px; line-height: 1.4; }
+  .line { color: var(--faint); font-size: 12.5px; }
+  @media (min-width: 720px) {
+    .grid { grid-template-columns: 1fr 1fr; gap: 12px; }
+  }
 </style>

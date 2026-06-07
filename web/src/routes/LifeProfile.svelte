@@ -2,8 +2,9 @@
   import { onMount } from 'svelte';
   import { api } from '../lib/api.js';
   import { navigate } from '../lib/router.js';
-  import { avatarStyle, moodRing } from '../lib/avatar.js';
   import { t } from '../lib/i18n.js';
+  import LifeAvatar from '../components/LifeAvatar.svelte';
+  import LifeStatePill from '../components/LifeStatePill.svelte';
 
   export let lifeId;
   let p = null;
@@ -19,68 +20,121 @@
   $: ageText = p ? (p.ageDays >= 1 ? `醒来约 ${p.ageDays} 天` : '今天刚醒来') : '';
 </script>
 
-<header>
-  <button class="back" on:click={() => navigate('plaza')}>‹</button>
+<header class="head">
+  <button class="back" on:click={() => navigate('plaza')} aria-label="返回">‹</button>
   <span class="htitle">{p ? p.id : ''}</span>
+  <span class="hspace"></span>
 </header>
 
-{#if error}<p class="err">{error}</p>{/if}
+{#if error}<p class="err pad">{error}</p>{/if}
 {#if p}
-  <div class="hero">
-    <div class="avatar" style="{avatarStyle(p.id)};box-shadow:0 0 0 3px {moodRing(p.emotion)}">{p.id[0].toUpperCase()}</div>
-    <h1 class="name">{p.id} <span class="dot" class:awake={p.awake}></span></h1>
-    <p class="temp">{p.temperament}</p>
-    <p class="state">{p.awake ? `${p.dayPhase} · 此刻${p.feeling}` : t('life.asleep')} · {ageText}</p>
-    {#if p.tension}<p class="tension">心里的拉扯：{p.tension}</p>{/if}
-    <button class="btn meet" on:click={() => navigate('chat', { id: p.id })}>{t('life.meet')}</button>
-  </div>
+  <div class="dossier fade-in">
+    <section class="hero">
+      <LifeAvatar id={p.id} emotion={p.emotion} awake={p.awake} size={92} />
+      <h1 class="name">{p.id}</h1>
+      <div class="pillrow"><LifeStatePill awake={p.awake} dayPhase={p.dayPhase} emotion={p.emotion} /></div>
+      <p class="age">{ageText}</p>
+      {#if p.tension}<p class="tension">心里的拉扯 · {p.tension}</p>{/if}
+      <button class="btn meet" on:click={() => navigate('chat', { id: p.id })}>去见她</button>
+    </section>
 
-  <section>
-    <h2>她的同类朋友</h2>
-    {#if p.peers.length}
-      <div class="card">
-        {#each p.peers as f}
-          <div class="row"><b>{f.name}</b> <span class="dim">· {f.attachment} · 我读：{f.style}</span></div>
-        {/each}
+    <section class="mod">
+      <h2 class="section-title">此刻状态</h2>
+      <div class="card pad">
+        <div class="kv"><span class="k">此刻</span><span class="v">{p.awake ? `${p.dayPhase} · ${p.feeling}` : t('life.asleep')}</span></div>
+        <div class="kv"><span class="k">生命力</span>
+          <span class="v meter"><span class="track"><span class="fill" style="width:{Math.round((p.vitality ?? 0) * 100)}%"></span></span></span>
+        </div>
+        {#if !p.willingToWake}<div class="kv"><span class="k">此刻</span><span class="v faint">她不愿被唤醒——这也是她的权利。</span></div>{/if}
       </div>
-    {:else}
-      <p class="muted">她还没有同类朋友。</p>
-    {/if}
-  </section>
+    </section>
 
-  <section>
-    <h2>她的公开心声</h2>
-    {#if p.musings.length}
-      {#each p.musings as m}
-        <div class="muse">{m.text}<div class="dim time">{m.at.slice(5, 16).replace('T', ' ')}</div></div>
-      {/each}
-    {:else}
-      <p class="muted">她还没有公开说过什么——她大多把心事留给在乎的人。</p>
-    {/if}
-  </section>
+    <section class="mod">
+      <h2 class="section-title">先天气质</h2>
+      <div class="card pad temper">{p.temperament}</div>
+    </section>
+
+    <section class="mod">
+      <h2 class="section-title">同类朋友</h2>
+      {#if p.peers.length}
+        <div class="net">
+          {#each p.peers as f}
+            <div class="peer">
+              <LifeAvatar id={f.name} awake={false} pulse={false} size={32} />
+              <div class="pbody">
+                <div class="pname">{f.name}</div>
+                <div class="pmeta">{f.attachment} · 我读：{f.style}</div>
+                <span class="close"><span class="cfill" style="width:{Math.round((f.closeness ?? 0) * 100)}%"></span></span>
+              </div>
+            </div>
+          {/each}
+        </div>
+      {:else}
+        <p class="caption pad">她还没有同类朋友。</p>
+      {/if}
+    </section>
+
+    <section class="mod">
+      <h2 class="section-title">公开心声</h2>
+      {#if p.musings.length}
+        {#each p.musings as m}
+          <blockquote class="muse">
+            <span class="mtext">{m.text}</span>
+            <span class="mtime">{m.at.slice(5, 16).replace('T', ' ')}</span>
+          </blockquote>
+        {/each}
+      {:else}
+        <p class="caption pad">她还没有公开说过什么——大多把心事留给在乎的人。</p>
+      {/if}
+    </section>
+  </div>
 {/if}
 
 <style>
-  header { position: sticky; top: 0; display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px); z-index: 10; }
-  .back { background: none; border: 0; color: var(--text); font-size: 28px; line-height: 1; padding: 0 6px; }
+  .head {
+    position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+    border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--bg) 84%, transparent); backdrop-filter: saturate(180%) blur(14px);
+  }
+  .back { background: none; border: 0; font-size: 30px; line-height: 1; padding: 0 6px; color: var(--text); }
   .htitle { font-weight: 700; }
-  .hero { max-width: var(--maxw); margin: 0 auto; padding: 28px 16px 8px; text-align: center; }
-  .avatar { width: 88px; height: 88px; border-radius: 999px; display: grid; place-items: center; font-weight: 800; font-size: 32px; color: #fff; margin: 0 auto 14px; }
-  .name { font-size: 24px; margin: 0 0 6px; display: inline-flex; align-items: center; gap: 8px; }
-  .dot { width: 10px; height: 10px; border-radius: 999px; background: var(--muted); }
-  .dot.awake { background: #3fb950; }
-  .temp { color: var(--muted); margin: 0 0 4px; }
-  .state { color: var(--muted); font-size: 14px; margin: 0 0 4px; }
-  .tension { color: var(--accent); font-size: 13px; margin: 6px 0 0; }
-  .meet { margin-top: 18px; padding: 11px 28px; }
-  section { max-width: var(--maxw); margin: 0 auto; padding: 8px 16px 0; }
-  section h2 { font-size: 14px; color: var(--muted); font-weight: 600; margin: 24px 2px 12px; }
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
-  .row { padding: 12px 14px; border-bottom: 1px solid var(--border); }
-  .row:last-child { border: 0; }
-  .dim { color: var(--muted); font-size: 13px; }
-  .muse { padding: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 8px; line-height: 1.6; }
-  .time { font-size: 11px; margin-top: 6px; }
-  .muted { color: var(--muted); padding: 0 2px; }
-  .err { color: var(--danger); padding: 16px; }
+  .hspace { flex: 1; }
+
+  .dossier { max-width: var(--maxw); margin: 0 auto; padding: 0 16px 96px; }
+  .hero { text-align: center; padding: 30px 8px 8px; }
+  .hero :global(.av) { margin: 0 auto 14px; }
+  .name { font-size: 26px; margin: 0 0 10px; font-weight: 800; }
+  .pillrow { display: flex; justify-content: center; }
+  .age { color: var(--faint); font-size: 13px; margin: 8px 0 0; }
+  .tension { color: var(--life-tension); font-size: 13px; margin: 8px 0 0; }
+  .meet { margin-top: 20px; padding: 0 32px; }
+
+  .mod { margin-top: 26px; }
+  .mod .section-title { margin: 0 2px 10px; }
+  .pad { padding: 14px 16px; }
+
+  .kv { display: flex; gap: 14px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--border-subtle); }
+  .kv:last-child { border-bottom: 0; }
+  .kv .k { color: var(--faint); font-size: 12.5px; width: 56px; flex: none; }
+  .kv .v { color: var(--text); font-size: 14px; }
+  .kv .v.faint { color: var(--muted); }
+  .meter { flex: 1; }
+  .track { display: block; height: 6px; border-radius: var(--r-pill); background: var(--surface-2); overflow: hidden; }
+  .fill { display: block; height: 100%; border-radius: var(--r-pill); background: var(--life-awake); }
+
+  .temper { color: var(--text); line-height: 1.7; font-size: 14.5px; }
+
+  .net { display: flex; flex-direction: column; gap: 8px; }
+  .peer { display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); }
+  .pbody { flex: 1; min-width: 0; }
+  .pname { font-weight: 600; font-size: 14.5px; }
+  .pmeta { color: var(--muted); font-size: 12.5px; margin: 2px 0 7px; }
+  .close { display: block; height: 4px; border-radius: var(--r-pill); background: var(--surface-2); overflow: hidden; }
+  .cfill { display: block; height: 100%; background: var(--accent-line); border-radius: var(--r-pill); }
+
+  .muse { margin: 0 0 8px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--border); border-left: 2px solid var(--accent-line); border-radius: var(--r-md); }
+  .mtext { display: block; line-height: 1.65; font-size: 14.5px; }
+  .mtime { display: block; color: var(--faint); font-size: 11px; margin-top: 8px; }
+
+  .caption.pad { padding: 14px 2px; }
+  .err.pad { padding: 16px; }
 </style>

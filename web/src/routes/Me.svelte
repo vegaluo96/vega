@@ -4,14 +4,16 @@
   import { theme, toggleTheme } from '../lib/theme.js';
   import { navigate } from '../lib/router.js';
   import { enablePush, pushSupported } from '../lib/push.js';
-  import { t } from '../lib/i18n.js';
+  import PageHeader from '../components/PageHeader.svelte';
+  import LifeAvatar from '../components/LifeAvatar.svelte';
+  import EmptyState from '../components/EmptyState.svelte';
 
   let pushMsg = '';
   async function turnOnPush() {
     pushMsg = '';
     try {
       await enablePush();
-      pushMsg = '已开启——她想你了，会推到你这里。';
+      pushMsg = '已开启——她想你了、来找你时，会推到这里。';
     } catch (e) {
       pushMsg = e.message;
     }
@@ -45,76 +47,103 @@
   }
 </script>
 
-<section>
-  <h1 class="logo">ZSKY</h1>
+<div class="me">
+  <PageHeader title="你在 ZSKY" subtitle="你不是游客。你正在改变一些生命的历史。" />
+
   {#if me}
-    <div class="card">
-      <div class="row"><span class="k">昵称</span><span>{me.account.handle}</span></div>
-      <div class="row"><span class="k">邮箱</span><span>{me.account.email}</span></div>
-      <div class="row"><span class="k">心意值</span><span>{me.balance}</span></div>
-      {#if me.account.role !== 'user'}<div class="row"><span class="k">角色</span><span>{me.account.role}</span></div>{/if}
-    </div>
-
-    <h2 class="section">钱包 · 心意值</h2>
-    <div class="card pad">
-      <p class="muted small">心意值用于和她们更丰富地对话。用尽了她也不会消失——只是话说得朴素些。</p>
-      <div class="wallet">
-        <select bind:value={rechargingAmount}>
-          <option value={100}>100 心意</option>
-          <option value={500}>500 心意</option>
-          <option value={2000}>2000 心意</option>
-        </select>
-        <button class="btn" on:click={recharge}>申请充值</button>
-      </div>
-      {#if rechargeMsg}<p class="ok">{rechargeMsg}</p>{/if}
-    </div>
-
-    <h2 class="section">我遇见的她们</h2>
-    <div class="card">
+    <section class="block">
+      <h2 class="section-title">我遇见的她们</h2>
       {#if me.lives.length}
-        {#each me.lives as l}
-          <button class="row link" on:click={() => navigate('chat', { id: l.id })}><span>{l.id}</span><span class="go">›</span></button>
-        {/each}
+        <div class="met">
+          {#each me.lives as l (l.id)}
+            <button class="metcard card-interactive" on:click={() => navigate('chat', { id: l.id })}>
+              <LifeAvatar id={l.id} awake={false} pulse={false} size={44} />
+              <span class="mname">{l.id}</span>
+              <span class="go">›</span>
+            </button>
+          {/each}
+        </div>
       {:else}
-        <p class="muted">还没有遇见谁——去广场认识一个吧。</p>
+        <EmptyState title="你还没有遇见谁。" text="去广场，认识第一个她。">
+          <button slot="action" class="btn" on:click={() => navigate('plaza')}>去广场</button>
+        </EmptyState>
       {/if}
-    </div>
+    </section>
+
+    <section class="block">
+      <h2 class="section-title">钱包 · 心意值</h2>
+      <div class="card pad">
+        <div class="kv"><span class="k">余额</span><span class="v mono">{me.balance} 心意</span></div>
+        <p class="caption note">心意值是和她们更丰富对话的表达额度。用尽了她不会消失——只是话说得朴素些。</p>
+        <div class="wallet">
+          <select class="input sel" bind:value={rechargingAmount}>
+            <option value={100}>100 心意</option>
+            <option value={500}>500 心意</option>
+            <option value={2000}>2000 心意</option>
+          </select>
+          <button class="btn" on:click={recharge}>申请充值</button>
+        </div>
+        {#if rechargeMsg}<p class="ok">{rechargeMsg}</p>{/if}
+      </div>
+    </section>
+
+    {#if pushSupported()}
+      <section class="block">
+        <h2 class="section-title">通知</h2>
+        <div class="card pad">
+          <p class="caption note">开启后，她想你了、主动来找你时，即使没打开 ZSKY，也能收到。</p>
+          <button class="btn btn-secondary" on:click={turnOnPush}>开启「她想你了」通知</button>
+          {#if pushMsg}<p class="ok">{pushMsg}</p>{/if}
+        </div>
+      </section>
+    {/if}
+
+    <section class="block">
+      <h2 class="section-title">账户</h2>
+      <div class="card">
+        <div class="row"><span class="rk">昵称</span><span class="rv">{me.account.handle}</span></div>
+        <div class="row"><span class="rk">邮箱</span><span class="rv">{me.account.email}</span></div>
+        {#if me.account.role !== 'user'}<div class="row"><span class="rk">角色</span><span class="rv">{me.account.role}</span></div>{/if}
+      </div>
+    </section>
   {:else if error}
     <p class="err">{error}</p>
   {/if}
 
-  {#if pushSupported()}
-    <h2 class="section">通知</h2>
-    <div class="card pad">
-      <p class="muted small">开启后，她想你了、来找你时，即使没打开 ZSKY 也能收到提醒。</p>
-      <button class="btn ghost" on:click={turnOnPush}>开启推送通知</button>
-      {#if pushMsg}<p class="ok">{pushMsg}</p>{/if}
-    </div>
-  {/if}
-
-  <div class="actions">
-    <button class="btn ghost" on:click={toggleTheme}>{$theme === 'dark' ? '☀︎ 白天' : '☾ 黑夜'}</button>
-    <button class="btn ghost" on:click={logout}>登出</button>
+  <div class="footer">
+    <button class="btn-ghost btn" on:click={toggleTheme}>{$theme === 'dark' ? '切换到白天' : '切换到黑夜'}</button>
+    <button class="btn-ghost btn" on:click={logout}>登出</button>
   </div>
-</section>
+</div>
 
 <style>
-  section { max-width: var(--maxw); margin: 0 auto; padding: 24px 16px 90px; }
-  .logo { font-size: 24px; font-weight: 800; letter-spacing: 0.12em; margin: 0 2px 18px; }
-  .section { font-size: 13px; color: var(--muted); font-weight: 600; margin: 22px 2px 10px; }
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
-  .row { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--border); }
-  .row:last-child { border-bottom: 0; }
-  .row.link { width: 100%; background: none; border-bottom: 1px solid var(--border); color: var(--text); cursor: pointer; }
-  .k { color: var(--muted); }
-  .go { color: var(--muted); font-size: 20px; }
-  .muted { color: var(--muted); padding: 16px; margin: 0; }
+  .me { max-width: var(--maxw); margin: 0 auto; padding: 4px 16px 96px; }
+  .block { margin-top: 22px; }
+  .block .section-title { margin: 0 2px 10px; }
   .pad { padding: 16px; }
-  .muted.small { font-size: 13px; padding: 0 0 14px; line-height: 1.6; }
+
+  .met { display: grid; grid-template-columns: 1fr; gap: 8px; }
+  .metcard { display: flex; align-items: center; gap: 12px; padding: 12px 14px; }
+  .mname { flex: 1; font-weight: 600; font-size: 15px; }
+  .go { color: var(--faint); font-size: 20px; }
+
+  .kv { display: flex; justify-content: space-between; align-items: center; }
+  .kv .k { color: var(--faint); font-size: 13px; }
+  .kv .v { font-weight: 600; }
+  .note { margin: 12px 0 14px; }
   .wallet { display: flex; gap: 10px; }
-  .wallet select { flex: 1; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--text); font: inherit; }
-  .ok { color: var(--accent); font-size: 13px; margin: 12px 0 0; }
-  .err { color: var(--danger); }
-  .actions { display: flex; gap: 10px; margin-top: 24px; }
-  .actions .btn { flex: 1; }
+  .sel { flex: 1; min-height: 46px; }
+  .ok { color: var(--success); font-size: 13px; margin: 12px 0 0; }
+
+  .row { display: flex; justify-content: space-between; align-items: center; padding: 13px 16px; border-bottom: 1px solid var(--border-subtle); }
+  .row:last-child { border-bottom: 0; }
+  .rk { color: var(--faint); font-size: 13px; }
+  .rv { font-size: 14px; }
+
+  .footer { display: flex; gap: 10px; margin-top: 26px; }
+  .footer .btn { flex: 1; }
+
+  @media (min-width: 720px) {
+    .met { grid-template-columns: 1fr 1fr; }
+  }
 </style>

@@ -4,6 +4,7 @@
   import { navigate } from '../lib/router.js';
   import { qrDataUrl } from '../lib/qr.js';
   import { t } from '../lib/i18n.js';
+  import RelationshipPanel from '../components/RelationshipPanel.svelte';
 
   export let lifeId;
 
@@ -78,6 +79,7 @@
       binding = false;
     }
   }
+
   $: relAge = rel && rel.bornAt ? agoStr(rel.bornAt) : '';
   function agoStr(iso) {
     const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
@@ -97,91 +99,115 @@
   onDestroy(() => es && es.close());
 </script>
 
-<header>
-  <button class="back" on:click={() => navigate('plaza')}>‹</button>
-  {#if life}
-    <button class="who" on:click={() => (showRel = !showRel)}>
-      <div class="name">{life.id} <span class="dot" class:awake={life.awake}></span></div>
-      <div class="mood">{life.awake ? life.feeling || life.emotion : t('life.asleep')}{rel ? ' · ' + rel.attachment : ''}</div>
-    </button>
+<div class="chat">
+  <header class="head">
+    <button class="back" on:click={() => navigate('plaza')} aria-label="返回">‹</button>
+    {#if life}
+      <button class="who" on:click={() => (showRel = !showRel)}>
+        <span class="name">{life.id} <span class="dot" class:awake={life.awake}></span></span>
+        <span class="sub">{life.awake ? life.feeling || life.emotion : t('life.asleep')}{rel ? ' · ' + rel.attachment : ''}</span>
+      </button>
+    {/if}
+    <span class="bal" title="表达额度">{balance != null ? '心意 ' + balance : ''}</span>
+  </header>
+
+  {#if showRel && rel}
+    <div class="relwrap">
+      <RelationshipPanel {rel} {relAge}>
+        {#if !bind}
+          <button class="wx-btn" on:click={bindWechat} disabled={binding}>{binding ? '生成中…' : '绑定微信 · 在微信里也能和 ' + (life ? life.id : '她') + ' 聊'}</button>
+        {:else}
+          <div class="wx">
+            <img class="qr" src={bind.dataUrl} alt="微信绑定二维码" />
+            <p class="wx-tip">用微信「扫一扫」扫码，在 clawbot 里继续和她聊。<br />同一段关系、同一个她，跨端同步。{bind.minutes} 分钟内有效。</p>
+            <code class="wx-code">{bind.code}</code>
+          </div>
+        {/if}
+        {#if bindMsg}<p class="wx-err">{bindMsg}</p>{/if}
+      </RelationshipPanel>
+    </div>
   {/if}
-  <div class="bal" title="心意值">{balance != null ? balance + ' 心意' : ''}</div>
-</header>
 
-{#if showRel && rel}
-  <div class="rel">
-    <div class="rel-row"><span class="k">你们</span><span>{relAge}</span></div>
-    <div class="rel-row"><span class="k">她对你</span><span>{rel.attachment}</span></div>
-    {#if rel.understanding}<div class="rel-row"><span class="k">她的理解</span><span class="u">{rel.understanding}</span></div>{/if}
-    {#if !bind}
-      <button class="wx-btn" on:click={bindWechat} disabled={binding}>{binding ? '生成中…' : '📲 绑定微信 · 在微信里也能和' + (life ? life.id : '她') + '聊'}</button>
-    {:else}
-      <div class="wx">
-        <img class="qr" src={bind.dataUrl} alt="微信绑定二维码" />
-        <p class="wx-tip">用微信「扫一扫」扫码，在 clawbot 里继续和她聊。<br />同一段关系、同一个她，跨端同步。{bind.minutes} 分钟内有效。</p>
-        <code class="wx-code">{bind.code}</code>
-      </div>
+  {#if lowBalance}
+    <div class="banner">心意用尽了——她仍在、仍记得你，只是这会儿话说得朴素些。</div>
+  {/if}
+
+  <div class="log" bind:this={log}>
+    {#if error}<p class="err">{error}</p>{/if}
+    {#each messages as m}
+      {#if m.role === 'sys'}
+        <div class="sys">{m.text}</div>
+      {:else}
+        <div class="bubble {m.role}" class:unprompted={m.unprompted}>
+          {#if m.unprompted}<span class="utag">她主动找你</span>{/if}
+          <span class="txt">{m.text}</span>
+        </div>
+      {/if}
+    {/each}
+    {#if sending}
+      <div class="bubble her breathing" aria-label="她在想"><span></span><span></span><span></span></div>
     {/if}
-    {#if bindMsg}<div class="rel-row"><span class="err">{bindMsg}</span></div>{/if}
   </div>
-{/if}
 
-{#if lowBalance}
-  <div class="banner">心意用尽了——她仍在、仍记得你，只是这会儿话说得朴素些。<a href="#recharge" on:click|preventDefault>充值恢复</a></div>
-{/if}
-
-<div class="log" bind:this={log}>
-  {#if error}<p class="err">{error}</p>{/if}
-  {#each messages as m}
-    {#if m.role === 'sys'}
-      <div class="sys">{m.text}</div>
-    {:else}
-      <div class="bubble {m.role}" class:unprompted={m.unprompted}>
-        {#if m.unprompted}<div class="tag">她主动找你</div>{/if}
-        {m.text}
-      </div>
-    {/if}
-  {/each}
-  {#if sending}<div class="bubble her typing">…</div>{/if}
+  <footer class="composer">
+    <input class="ci" bind:value={input} placeholder={t('common.placeholder')} on:keydown={(e) => e.key === 'Enter' && send()} />
+    <button class="btn send" on:click={send} disabled={sending || !input.trim()}>{t('common.send')}</button>
+  </footer>
 </div>
 
-<footer>
-  <input bind:value={input} placeholder={t('common.placeholder')} on:keydown={(e) => e.key === 'Enter' && send()} />
-  <button class="btn" on:click={send} disabled={sending || !input.trim()}>{t('common.send')}</button>
-</footer>
-
 <style>
-  header { position: sticky; top: 0; display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px); z-index: 10; }
-  .back { background: none; border: 0; color: var(--text); font-size: 28px; line-height: 1; padding: 0 6px; }
-  .who { flex: 1; background: none; border: 0; color: var(--text); text-align: left; padding: 0; cursor: pointer; }
-  .name { font-weight: 700; display: flex; align-items: center; gap: 8px; }
-  .rel { max-width: var(--maxw); margin: 0 auto; padding: 4px 16px 0; }
-  .rel-row { display: flex; gap: 12px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 6px; font-size: 14px; }
-  .rel-row .k { color: var(--muted); flex: none; width: 56px; }
-  .rel-row .u { color: var(--muted); }
-  .wx-btn { width: 100%; margin-bottom: 6px; padding: 11px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font: inherit; cursor: pointer; }
-  .wx-btn:hover { border-color: var(--accent); }
+  .chat { display: flex; flex-direction: column; min-height: 100vh; }
+
+  .head {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg) 84%, transparent); backdrop-filter: saturate(180%) blur(14px);
+  }
+  .back { background: none; border: 0; font-size: 30px; line-height: 1; padding: 0 6px; color: var(--text); }
+  .who { flex: 1; min-width: 0; background: none; border: 0; text-align: left; padding: 2px 4px; border-radius: var(--r-sm); transition: background var(--t-hover) ease; }
+  .who:hover { background: var(--surface-2); }
+  .name { font-weight: 700; font-size: 16px; display: inline-flex; align-items: center; gap: 8px; }
+  .dot { width: 8px; height: 8px; border-radius: var(--r-pill); background: var(--life-asleep); }
+  .dot.awake { background: var(--life-awake); box-shadow: 0 0 0 3px color-mix(in srgb, var(--life-awake) 20%, transparent); }
+  .sub { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bal { flex: none; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+  .relwrap { max-width: var(--maxw); width: 100%; margin: 0 auto; padding: 10px 14px 0; }
+  .wx-btn { width: 100%; min-height: 42px; margin-top: 6px; padding: 0 14px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface); color: var(--text); font: inherit; transition: border-color var(--t-hover) ease; }
+  .wx-btn:hover { border-color: var(--accent-line); }
   .wx-btn:disabled { opacity: 0.6; }
-  .wx { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 6px; }
-  .wx .qr { width: 200px; height: 200px; image-rendering: pixelated; background: #fff; border-radius: 8px; padding: 8px; }
-  .wx-tip { color: var(--muted); font-size: 12.5px; line-height: 1.6; text-align: center; margin: 0; }
-  .wx-code { font-size: 11px; color: var(--muted); word-break: break-all; user-select: all; }
+  .wx { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 14px 8px 4px; }
+  .wx .qr { width: 196px; height: 196px; image-rendering: pixelated; background: #fff; border-radius: var(--r-sm); padding: 8px; }
+  .wx-tip { color: var(--muted); font-size: 12.5px; line-height: 1.65; text-align: center; margin: 0; }
+  .wx-code { font-size: 11px; color: var(--faint); word-break: break-all; user-select: all; }
+  .wx-err { color: var(--danger); font-size: 12.5px; padding: 8px 10px 0; margin: 0; }
+
+  .banner { max-width: var(--maxw); margin: 10px auto 0; padding: 11px 14px; background: var(--accent-weak); color: var(--text); font-size: 13px; text-align: center; border-radius: var(--r-sm); }
+
+  .log { flex: 1; max-width: var(--maxw); width: 100%; margin: 0 auto; padding: 18px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .bubble { max-width: 80%; padding: 10px 14px; border-radius: 18px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; font-size: 15px; animation: rise var(--t-fade) ease both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+  .bubble.me { align-self: flex-end; background: var(--accent); color: var(--on-accent); border-bottom-right-radius: 6px; }
+  .bubble.her { align-self: flex-start; background: var(--surface); border: 1px solid var(--border); border-bottom-left-radius: 6px; }
+  .bubble.unprompted { border-color: var(--accent-line); background: var(--accent-weak); }
+  .utag { display: block; font-size: 11px; color: var(--life-reaching); margin-bottom: 4px; font-weight: 600; }
+  .sys { align-self: center; color: var(--faint); font-size: 13px; text-align: center; }
   .err { color: var(--danger); }
-  .dot { width: 8px; height: 8px; border-radius: 999px; background: var(--muted); }
-  .dot.awake { background: #3fb950; }
-  .mood { color: var(--muted); font-size: 12px; }
-  .bal { color: var(--muted); font-size: 12px; }
-  .banner { padding: 10px 14px; background: var(--accent-soft); color: var(--text); font-size: 13px; text-align: center; }
-  .log { max-width: var(--maxw); margin: 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; min-height: calc(100vh - 130px); }
-  .bubble { max-width: 80%; padding: 10px 14px; border-radius: 16px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
-  .bubble.me { align-self: flex-end; background: var(--accent); color: var(--on-accent); border-bottom-right-radius: 5px; }
-  .bubble.her { align-self: flex-start; background: var(--surface); border: 1px solid var(--border); border-bottom-left-radius: 5px; }
-  .bubble.unprompted { border-color: var(--accent); }
-  .tag { font-size: 11px; color: var(--accent); margin-bottom: 4px; font-weight: 600; }
-  .typing { color: var(--muted); }
-  .sys { align-self: center; color: var(--muted); font-size: 13px; }
-  .err { color: var(--danger); }
-  footer { position: sticky; bottom: 0; display: flex; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--border); background: var(--bg); }
-  footer input { flex: 1; padding: 11px 14px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text); font: inherit; }
-  footer input:focus { outline: none; border-color: var(--accent); }
+
+  .breathing { display: inline-flex; align-items: center; gap: 5px; }
+  .breathing span { width: 6px; height: 6px; border-radius: 50%; background: var(--faint); animation: breathe-dot 1.3s ease-in-out infinite; }
+  .breathing span:nth-child(2) { animation-delay: 0.18s; }
+  .breathing span:nth-child(3) { animation-delay: 0.36s; }
+  @keyframes breathe-dot { 0%, 100% { opacity: 0.25; transform: translateY(0); } 50% { opacity: 0.9; transform: translateY(-2px); } }
+
+  .composer {
+    position: sticky; bottom: 0; z-index: 10;
+    display: flex; gap: 8px; max-width: var(--maxw); width: 100%; margin: 0 auto;
+    padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--border); background: var(--bg);
+  }
+  .ci { flex: 1; min-height: 46px; padding: 0 16px; border: 1px solid var(--border); border-radius: var(--r-pill); background: var(--surface); color: var(--text); font: inherit; transition: border-color var(--t-hover) ease, box-shadow var(--t-hover) ease; }
+  .ci:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); }
+  .send { flex: none; padding: 0 22px; }
 </style>

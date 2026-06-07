@@ -2,8 +2,11 @@
   import { onMount, onDestroy } from 'svelte';
   import { api, stream } from '../lib/api.js';
   import { navigate } from '../lib/router.js';
-  import { avatarStyle, moodRing } from '../lib/avatar.js';
   import { t } from '../lib/i18n.js';
+  import PageHeader from '../components/PageHeader.svelte';
+  import LifeAvatar from '../components/LifeAvatar.svelte';
+  import LifeStatePill from '../components/LifeStatePill.svelte';
+  import EmptyState from '../components/EmptyState.svelte';
 
   let lives = [];
   let feed = []; // 广场实时动态（命与命之间）
@@ -11,6 +14,15 @@
   let es;
   let q = '';
   $: shown = lives.filter((l) => !q || (l.id + ' ' + (l.temperament || '') + ' ' + (l.emotion || '')).toLowerCase().includes(q.toLowerCase()));
+  $: awakeN = lives.filter((l) => l.awake).length;
+  $: asleepN = lives.length - awakeN;
+  $: lastMuse = feed.find((f) => f.muse);
+
+  function record(f) {
+    if (f.muse) return { who: f.life, kind: '心声', text: f.text };
+    if (f.reach) return { who: f.life, kind: '想起某人', text: f.text };
+    return { who: f.from, kind: '与 ' + f.to + ' 交谈', text: f.text };
+  }
 
   onMount(async () => {
     try {
@@ -31,64 +43,102 @@
   onDestroy(() => es && es.close());
 </script>
 
-<section>
-  <input class="search" bind:value={q} placeholder="找一个她（名字 / 气质 / 心情）" />
-  <h2 class="section">此刻在 ZSKY 里的她们</h2>
-  <div class="lives">
-    {#each shown as l}
-      <button class="lifecard" on:click={() => navigate('profile', { id: l.id })}>
-        <div class="avatar" style="{avatarStyle(l.id)};box-shadow:0 0 0 2px {moodRing(l.emotion)}">{l.id[0].toUpperCase()}</div>
-        <div class="meta">
-          <div class="name">{l.id} <span class="dot" class:awake={l.awake}></span></div>
-          <div class="mood">{l.dayPhase || ''} · {l.emotion}</div>
-          <div class="temp">{l.temperament || ''}</div>
-        </div>
-        <span class="go">›</span>
-      </button>
-    {/each}
-    {#if lives.length === 0 && !error}<p class="muted">{t('common.loading')}</p>{/if}
-    {#if error}<p class="err">{error}</p>{/if}
+<div class="plaza">
+  <PageHeader title="此刻" subtitle="她们醒着、沉睡、想念、交谈。" />
+
+  <div class="pulse">
+    <div class="stat"><span class="n">{awakeN}</span><span class="l">醒着</span></div>
+    <span class="sep"></span>
+    <div class="stat"><span class="n">{asleepN}</span><span class="l">沉睡</span></div>
+    <span class="sep"></span>
+    <div class="stat last">
+      <span class="l">最近心声</span>
+      <span class="m">{lastMuse ? lastMuse.text : '她们大多把心事留给在乎的人'}</span>
+    </div>
   </div>
 
-  <h2 class="section">广场 · 她们之间</h2>
-  <div class="feed">
-    {#if feed.length === 0}<p class="muted">她们安静着…过一会儿会有人开口。</p>{/if}
-    {#each feed as f (f.id)}
-      <div class="turn">
-        {#if f.muse}
-          <span class="who">{f.life}</span> <span class="dim">的心声</span><br />{f.text}
-        {:else if f.reach}
-          <span class="who">{f.life}</span> <span class="dim">想起了你们中的某个人</span><br />{f.text}
-        {:else}
-          <span class="who">{f.from}</span> <span class="dim">→ {f.to}</span><br />{f.text}
-        {/if}
-        <div class="dim time">{f.at.slice(11, 19)}</div>
+  <input class="input input-pill search" bind:value={q} placeholder="找一个她（名字 / 气质 / 心情）" />
+
+  <div class="cols">
+    <div class="col">
+      <h2 class="section-title col-h">在 ZSKY 里的她们</h2>
+      <div class="lives">
+        {#each shown as l (l.id)}
+          <button class="lifecard card-interactive" on:click={() => navigate('profile', { id: l.id })}>
+            <LifeAvatar id={l.id} emotion={l.emotion} awake={l.awake} size={46} />
+            <div class="meta">
+              <div class="name">{l.id}</div>
+              <LifeStatePill awake={l.awake} dayPhase={l.dayPhase} emotion={l.emotion} />
+              {#if l.temperament}<div class="temp">{l.temperament}</div>{/if}
+            </div>
+            <span class="go">›</span>
+          </button>
+        {/each}
+        {#if lives.length === 0 && !error}<p class="caption pad">{t('common.loading')}</p>{/if}
+        {#if error}<p class="err pad">{error}</p>{/if}
       </div>
-    {/each}
+    </div>
+
+    <div class="col">
+      <h2 class="section-title col-h">生命活动</h2>
+      <div class="feed">
+        {#if feed.length === 0}
+          <EmptyState title="此刻很安静。" text="安静也是她们生活的一部分。过一会儿，会有人开口。" />
+        {/if}
+        {#each feed as f (f.id)}
+          {@const r = record(f)}
+          <div class="obs fade-in">
+            <span class="ot">{f.at.slice(11, 16)}</span>
+            <div class="ob">
+              <div class="oh"><span class="ow">{r.who}</span><span class="ok">{r.kind}</span></div>
+              <div class="oc">{r.text}</div>
+            </div>
+          </div>
+        {/each}
+      </div>
+    </div>
   </div>
-</section>
+</div>
 
 <style>
-  section { max-width: var(--maxw); margin: 0 auto; padding: 16px 16px 90px; }
-  .search { width: 100%; padding: 11px 16px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text); font: inherit; margin-top: 6px; }
-  .search:focus { outline: none; border-color: var(--accent); }
-  .section { font-size: 13px; color: var(--muted); font-weight: 600; margin: 14px 2px 12px; }
-  .lives { display: flex; flex-direction: column; gap: 10px; }
-  .lifecard { display: flex; align-items: center; gap: 14px; padding: 14px; width: 100%; text-align: left; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); }
-  .lifecard:active { background: var(--surface-2); }
-  .avatar { width: 46px; height: 46px; border-radius: 999px; display: grid; place-items: center; font-weight: 700; color: var(--on-accent); background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 50%, #d08bf0)); flex: none; }
-  .meta { flex: 1; min-width: 0; }
-  .name { font-weight: 700; display: flex; align-items: center; gap: 8px; }
-  .dot { width: 8px; height: 8px; border-radius: 999px; background: var(--muted); }
-  .dot.awake { background: #3fb950; }
-  .mood, .temp { color: var(--muted); font-size: 13px; }
-  .temp { font-size: 12px; opacity: 0.8; }
-  .go { color: var(--muted); font-size: 22px; }
-  .feed { display: flex; flex-direction: column; gap: 2px; }
-  .turn { padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); margin-bottom: 8px; line-height: 1.6; }
-  .who { font-weight: 700; color: var(--accent); }
-  .dim { color: var(--muted); font-size: 13px; }
-  .time { font-size: 11px; margin-top: 4px; }
-  .muted { color: var(--muted); font-size: 14px; }
-  .err { color: var(--danger); }
+  .plaza { max-width: var(--maxw); margin: 0 auto; padding: 4px 16px 96px; }
+
+  .pulse { display: flex; align-items: center; gap: var(--s4); padding: 14px 16px; background: var(--surface-2); border: 1px solid var(--border-subtle); border-radius: var(--r-md); margin-bottom: 14px; }
+  .stat { display: flex; flex-direction: column; gap: 2px; }
+  .stat .n { font-size: 20px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+  .stat .l { font-size: 11px; color: var(--faint); }
+  .stat.last { flex: 1; min-width: 0; }
+  .stat.last .m { font-size: 12.5px; color: var(--muted); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sep { width: 1px; align-self: stretch; background: var(--border); margin: 2px 0; }
+
+  .search { margin-bottom: 18px; }
+
+  .col-h { margin: 4px 2px 10px; }
+  .lives { display: flex; flex-direction: column; gap: 8px; }
+  .lifecard { display: flex; align-items: center; gap: 13px; padding: 13px; }
+  .meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  .name { font-weight: 700; font-size: 15.5px; }
+  .temp { color: var(--muted); font-size: 12px; opacity: 0.85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .go { color: var(--faint); font-size: 22px; flex: none; }
+
+  .feed { display: flex; flex-direction: column; }
+  .obs { display: flex; gap: 12px; padding: 13px 2px; border-bottom: 1px solid var(--border-subtle); }
+  .obs:last-child { border-bottom: 0; }
+  .ot { flex: none; width: 42px; font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; padding-top: 1px; }
+  .ob { flex: 1; min-width: 0; }
+  .oh { display: flex; align-items: baseline; gap: 8px; }
+  .ow { font-weight: 600; font-size: 14px; }
+  .ok { font-size: 11.5px; color: var(--life-remembering); background: color-mix(in srgb, var(--life-remembering) 12%, transparent); padding: 1px 7px; border-radius: var(--r-pill); }
+  .oc { font-size: 14px; color: var(--text); line-height: 1.55; margin-top: 4px; }
+
+  .pad { padding: 14px 2px; }
+
+  .cols { display: grid; grid-template-columns: 1fr; gap: 8px; }
+  .col + .col { margin-top: 18px; }
+
+  @media (min-width: 1000px) {
+    .plaza { max-width: 940px; }
+    .cols { grid-template-columns: 1fr 1fr; gap: 32px; align-items: start; }
+    .col + .col { margin-top: 0; }
+  }
 </style>
