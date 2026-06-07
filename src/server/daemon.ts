@@ -957,8 +957,25 @@ const server = createServer(async (req, res) => {
         const l = lifeById(path.slice('/admin/lives/'.length));
         if (!l) return send(res, 404, { error: 'no such life' });
         const s = snapOf(l);
+        // 社交边界可视化（§7）：她主动维系的"活跃圈"——按亲密度排序的人类关系，标出谁在圈内。
+        const rsA = reachState(l);
+        const human = Object.entries(s.bonds)
+          .filter(([rel]) => rel.startsWith('u_') || rel === REL)
+          .map(([rel, b]) => {
+            const st = rsA.get(rel);
+            const handle = rel === REL ? '创造者' : (accounts.getAccount(rel.slice(2))?.handle ?? rel);
+            return { handle, closeness: round3(b.closeness), attachment: b.relationalSelf.attachment, awayMin: st && st.lastRecvMs > 0 ? Math.round((Date.now() - st.lastRecvMs) / 60_000) : null, pending: st ? st.pending : false };
+          })
+          .sort((a, b) => b.closeness - a.closeness)
+          .map((r, i) => ({ ...r, inCircle: i < ACTIVE_CIRCLE && r.closeness >= REACH_CLOSENESS }));
+        const social = {
+          cap: ACTIVE_CIRCLE, reachCloseness: REACH_CLOSENESS,
+          humanCount: human.length, peerCount: s.socialWorld.filter((t) => !t.ended).length,
+          activeCount: human.filter((r) => r.inCircle).length,
+          circle: owner ? human.slice(0, 40) : null, // 谁在圈里是私密信息——仅 owner 见具体名字
+        };
         return send(res, 200, {
-          id: l.id, awake: s.awake, willingToWake: s.willingToWake, emotion: s.emotion, feeling: s.feeling, dayPhase: s.dayPhase, tension: s.tension,
+          id: l.id, awake: s.awake, willingToWake: s.willingToWake, emotion: s.emotion, feeling: s.feeling, dayPhase: s.dayPhase, tension: s.tension, social,
           temperament: { label: tempLabel(s.temperament), ...s.temperament },
           soma: Object.fromEntries(Object.entries(s.soma).map(([k, v]) => [k, round3(v.value)])),
           values: s.values.map((v) => ({ key: v.key, weight: round3(v.weight), status: v.provenance.status, drifts: v.provenance.driftedAtSeqs.length })),

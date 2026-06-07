@@ -259,6 +259,27 @@
           </AdminSection>
         {/if}
 
+        {#if v.social}
+          <AdminSection title="社交圈" subtitle="活跃 {v.social.activeCount}/{v.social.cap} · 人类 {v.social.humanCount} · 同类 {v.social.peerCount}">
+            <span slot="action" class="tag">主动维系上限 {v.social.cap}（Dunbar）</span>
+            {#if v.social.circle}
+              <div class="panel">
+                {#each v.social.circle as r}
+                  <div class="crow">
+                    <span class="cin" class:on={r.inCircle} title={r.inCircle ? '活跃圈内：她会主动找' : '只记得、不主动打扰'}></span>
+                    <b class="cname">{r.handle}</b>
+                    <span class="cbar"><span class="cfill" style="width:{Math.round(r.closeness * 100)}%"></span></span>
+                    <span class="dim cmeta">{r.attachment}{r.awayMin != null ? ' · 离开 ' + r.awayMin + '分' : ''}{r.pending ? ' · 已主动留言待回' : ''}</span>
+                  </div>
+                {/each}
+                {#if v.social.circle.length === 0}<p class="dim empty">还没有人类关系。</p>{/if}
+              </div>
+            {:else}
+              <div class="panel pad dim">活跃圈 {v.social.activeCount} / 上限 {v.social.cap} · 共 {v.social.humanCount} 段人类关系。具体是谁仅 owner 可见。</div>
+            {/if}
+          </AdminSection>
+        {/if}
+
         <AdminSection title="同类社交网">
           <div class="panel">
             {#each v.socialWorld as x}<div class="prow"><b>{x.name}</b><span class="dim">亲密 {x.closeness} · {x.attachment} · 我读 {x.style}</span></div>{/each}
@@ -353,6 +374,14 @@
   .chap { padding: 7px 0; border-bottom: 1px solid var(--border-subtle); display: flex; gap: 10px; align-items: baseline; }
   .chap:last-child { border-bottom: 0; }
   .cn { color: var(--accent); font-size: 11px; font-weight: 700; flex: none; }
+  .crow { display: grid; grid-template-columns: 12px 110px 90px 1fr; gap: 12px; align-items: center; padding: 9px 16px; border-bottom: 1px solid var(--border-subtle); }
+  .crow:last-child { border-bottom: 0; }
+  .cin { width: 9px; height: 9px; border-radius: 50%; background: var(--faint-c); }
+  .cin.on { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); }
+  .cname { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cbar { height: 5px; border-radius: 999px; background: var(--panel-2); overflow: hidden; }
+  .cfill { display: block; height: 100%; background: var(--accent); border-radius: 999px; }
+  .cmeta { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .prow { padding: 11px 16px; border-bottom: 1px solid var(--border-subtle); display: flex; gap: 10px; align-items: baseline; }
   .prow:last-child { border-bottom: 0; }
   .prow .dim { font-size: 12.5px; }
