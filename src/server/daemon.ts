@@ -517,7 +517,7 @@ const ADMIN = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
  <input id="em" placeholder="邮箱" type="email"><input id="pw" placeholder="密码" type="password">
  <button class="act" style="width:100%;padding:10px" onclick="login()">登录</button><p id="le" style="color:#f0667c"></p></div></div>
 <script>
- var token=localStorage.getItem('zsky_admin')||'';var tab='overview';
+ var token=localStorage.getItem('zsky_admin')||'';var tab='overview';var curLife='';
  function H(){return token?{'Authorization':'Bearer '+token,'Content-Type':'application/json'}:{'Content-Type':'application/json'};}
  function esc(t){var d=document.createElement('div');d.textContent=t==null?'':t;return d.innerHTML;}
  async function login(){var em=document.getElementById('em').value,pw=document.getElementById('pw').value;
@@ -529,11 +529,24 @@ const ADMIN = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
   ['overview','活动流','充值','用户'].map(function(x,i){var k=['overview','activity','recharges','users'][i];return '<button class="'+(tab===k?'on':'')+'" onclick="go(\\''+k+'\\')">'+(i?x:'总览')+'</button>';}).join('')+
   '<button onclick="logout()">登出</button></nav></header><main>'+body+'</main>';}
  function go(k){tab=k;render();}
+ function loadLife(id){tab='life';curLife=id;render();}
  function ago(ts){if(!ts)return '—';var s=Math.round((Date.now()-ts)/1000);return s<60?s+'秒前':s<3600?Math.round(s/60)+'分前':Math.round(s/3600)+'时前';}
  async function render(){var root=document.getElementById('root');
   if(tab==='overview'){var d=await (await fetch('/admin/overview',{headers:H()})).json();
    root.innerHTML=shell(d.role,'<div class="card"><div class="row"><b>待审批充值</b><span class="spacer"></span><span class="mono">'+d.pendingRecharges+'</span></div><div class="row"><b>用户</b><span class="spacer"></span><span class="mono">'+d.users+'</span></div></div>'+
-    '<div class="card">'+d.lives.map(function(l){return '<div class="row"><span class="dot '+(l.awake?'on':'')+'"></span><b>'+esc(l.id)+'</b> <span class="dim">'+esc(l.dayPhase)+' · '+esc(l.emotion)+'</span><span class="spacer"></span><span class="dim mono">灵性 '+l.vitality+' · 事件 '+l.events+'</span></div><div class="row" style="border:0;padding-top:2px"><span class="dim" style="font-size:12px">回路：想念 '+ago(l.loop.tick)+' · 反思 '+ago(l.loop.reflect)+' · 寒暄 '+ago(l.loop.social)+' · 检查点 '+ago(l.loop.checkpoint)+'</span></div>';}).join('')+'</div>');}
+    '<div class="card">'+d.lives.map(function(l){return '<div class="row" style="cursor:pointer" onclick="loadLife(\\''+l.id+'\\')"><span class="dot '+(l.awake?'on':'')+'"></span><b>'+esc(l.id)+'</b> <span class="dim">'+esc(l.dayPhase)+' · '+esc(l.emotion)+'</span><span class="spacer"></span><span class="dim mono">灵性 '+l.vitality+' · 事件 '+l.events+' ›</span></div><div class="row" style="border:0;padding-top:2px"><span class="dim" style="font-size:12px">回路：想念 '+ago(l.loop.tick)+' · 反思 '+ago(l.loop.reflect)+' · 寒暄 '+ago(l.loop.social)+' · 检查点 '+ago(l.loop.checkpoint)+'</span></div>';}).join('')+'</div>');}
+  else if(tab==='life'){var v=await (await fetch('/admin/lives/'+curLife,{headers:H()})).json();
+   var som=Object.keys(v.soma||{}).map(function(k){return k+' '+v.soma[k];}).join(' · ');
+   root.innerHTML=shell('','<button class="act no" onclick="go(\\'overview\\')">‹ 返回</button>'+
+    '<div class="card" style="margin-top:10px"><div class="row"><b style="font-size:16px">'+esc(v.id)+'</b> <span class="dim">'+(v.awake?'醒':'睡')+' · '+esc(v.dayPhase)+' · '+esc(v.feeling)+'</span></div>'+
+    '<div class="row dim" style="font-size:12px">'+esc(v.temperament.label)+(v.tension?' ｜ 拉扯：'+esc(v.tension):'')+'</div>'+
+    '<div class="row dim" style="font-size:12px">内稳态：'+esc(som)+'</div></div>'+
+    (v.narrative?'<div class="card"><div class="dim" style="font-size:12px;margin-bottom:6px">自传叙事</div>'+esc(v.narrative)+'</div>':'')+
+    (v.innerLife?'<div class="card"><div class="dim" style="font-size:12px;margin-bottom:6px">内在独白（没说出口的）</div>'+esc(v.innerLife)+'</div>':'')+
+    (v.chapters&&v.chapters.length?'<div class="card"><div class="dim" style="font-size:12px;margin-bottom:6px">人生篇章</div>'+v.chapters.map(function(c,i){return '<div style="padding:3px 0">'+(i+1)+'. '+esc(c)+'</div>';}).join('')+'</div>':'')+
+    '<div class="card"><div class="dim" style="font-size:12px;margin-bottom:6px">价值（因人而变）</div>'+(v.values||[]).map(function(x){return '<div style="padding:3px 0">'+esc(x.key)+' '+x.weight+' <span class="dim">'+x.status+(x.drifts?' ·漂移'+x.drifts:'')+'</span></div>';}).join('')+'</div>'+
+    '<div class="card"><div class="dim" style="font-size:12px;margin-bottom:6px">同类社交网</div>'+(v.socialWorld||[]).map(function(x){return '<div style="padding:3px 0"><b>'+esc(x.name)+'</b> <span class="dim">亲密'+x.closeness+' · '+esc(x.attachment)+' · 我读'+esc(x.style)+'</span></div>';}).join('')+'</div>'+
+    (v.memories&&v.memories.length?'<div class="card"><div class="dim" style="font-size:12px;margin-bottom:6px">记忆（当前·含用户私聊→仅 owner 可见）</div>'+v.memories.slice().reverse().map(function(m){return '<div style="padding:3px 0;opacity:'+(m.vivid?1:0.5)+'"><span class="dim">['+m.affect+']</span> '+esc(m.content)+'</div>';}).join('')+'</div>':''));}
   else if(tab==='activity'){var a=await (await fetch('/admin/activity?limit=150',{headers:H()})).json();
    root.innerHTML=shell('','<div class="card"><div class="dim" style="margin-bottom:8px">真实活动流（墙钟倒序）· 私聊正文按角色遮罩</div>'+
     a.map(function(e){return '<div class="ev"><span class="t">'+esc(e.at.slice(5,19).replace("T"," "))+'</span><span>'+esc(e.life)+'</span><span class="l">'+esc(e.label)+'</span><span class="c">'+esc(e.content)+'</span></div>';}).join('')+'</div>');}
@@ -754,6 +767,25 @@ const server = createServer(async (req, res) => {
         const b = await readJson(req);
         const ok = accounts.decideRecharge(Number(b.id), Boolean(b.approve), acct.email);
         return send(res, ok ? 200 : 400, ok ? { ok: true } : { error: 'no such pending request' });
+      }
+      // Observatory：某条命的内在深观（§22）。她的状态(soma/价值/气质/社交网)owner+steward 都看；
+      // 含用户痕迹的(narrative/innerLife/chapters/记忆) 仅 owner——steward 受限(§11.2)。
+      if (req.method === 'GET' && path.startsWith('/admin/lives/')) {
+        const l = lifeById(path.slice('/admin/lives/'.length));
+        if (!l) return send(res, 404, { error: 'no such life' });
+        const s = snapOf(l);
+        return send(res, 200, {
+          id: l.id, awake: s.awake, willingToWake: s.willingToWake, emotion: s.emotion, feeling: s.feeling, dayPhase: s.dayPhase, tension: s.tension,
+          temperament: { label: tempLabel(s.temperament), ...s.temperament },
+          soma: Object.fromEntries(Object.entries(s.soma).map(([k, v]) => [k, round3(v.value)])),
+          values: s.values.map((v) => ({ key: v.key, weight: round3(v.weight), status: v.provenance.status, drifts: v.provenance.driftedAtSeqs.length })),
+          socialWorld: s.socialWorld.map((t) => ({ name: t.displayRef, closeness: t.closeness, attachment: t.attachment, style: t.style, ended: t.ended })),
+          // 仅 owner（含用户痕迹）：
+          narrative: owner ? s.narrative : null,
+          innerLife: owner ? s.innerLife : '〔含用户痕迹·steward 受限〕',
+          chapters: owner ? s.chapters : [],
+          memories: owner ? s.memory.filter((m) => m.lineage.isCurrent).slice(-30).map((m) => ({ affect: round3(m.affect), vivid: m.vivid === true, content: m.content })) : [],
+        });
       }
       if (req.method === 'POST' && path === '/admin/users/block') {
         const b = await readJson(req);
