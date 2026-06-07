@@ -59,6 +59,9 @@ const TICK_MS = Number(process.env.VEGA_TICK_MS ?? 60_000);
 const PRESENCE_MS = Number(process.env.VEGA_PRESENCE_MS ?? 300_000);
 const REACH_AFTER_MS = Number(process.env.VEGA_REACH_AFTER_MS ?? 600_000);
 const REACH_CLOSENESS = Number(process.env.VEGA_REACH_CLOSENESS ?? 0.2);
+// —— 社交边界（Dunbar 灵感）——她只【主动】维系最亲近的一圈，且每跳限额；token 不随用户数爆炸。
+const ACTIVE_CIRCLE = Number(process.env.VEGA_ACTIVE_CIRCLE ?? 15); // 主动维系的关系数上限（其余只记得、不主动打扰）
+const REACH_PER_TICK = Number(process.env.VEGA_REACH_PER_TICK ?? 1); // 每跳最多主动找几个人
 const BACKUP_MS = Number(process.env.VEGA_BACKUP_MS ?? 3_600_000);
 const CHECKPOINT_MS = Number(process.env.VEGA_CHECKPOINT_MS ?? 120_000); // 多久落一次派生快照（快重启）
 const REFLECT_MS = Number(process.env.VEGA_REFLECT_EVERY_MS ?? 1_800_000);
@@ -276,6 +279,23 @@ function pendingOutreach(life: Life): string | null {
   }
   return null;
 }
+// 一次扫描得到每段关系的：我最后听到对方（对方发来的）墙钟时间 + 是否已有未回的主动留言。
+// 给"社交边界"的主动外联用——避免每个候选都全量扫日志。
+function reachState(life: Life): Map<string, { lastRecvMs: number; pending: boolean }> {
+  const m = new Map<string, { lastRecvMs: number; pending: boolean }>();
+  for (const e of life.store.list()) {
+    const rel = e.relationshipId;
+    if (typeof rel !== 'string') continue;
+    if (e.type === 'MESSAGE_RECEIVED') {
+      const cur = m.get(rel) ?? { lastRecvMs: 0, pending: false };
+      cur.lastRecvMs = Date.parse(e.occurredAt); cur.pending = false; m.set(rel, cur);
+    } else if (e.type === 'MESSAGE_SENT' && (e.payload as MessageSentPayload).unprompted) {
+      const cur = m.get(rel) ?? { lastRecvMs: 0, pending: false };
+      cur.pending = true; m.set(rel, cur);
+    }
+  }
+  return m;
+}
 
 const round3 = (n: number): number => Number(n.toFixed(3));
 // 先天气质 → 一句人话（让面板能一眼看出"这条命天生是什么样"）。
@@ -357,6 +377,20 @@ function societyFeed(): Array<{ from: string; to: string; text: string; at: stri
   }
   out.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
   return out.slice(-80);
+}
+
+// 广场"生命活动"历史（不止在线时才有）：公开心声 + 同类交谈，按时间【新→旧】。进广场即有内容。
+function societyRecent(limit: number): Array<Record<string, unknown>> {
+  const out: Array<Record<string, unknown>> = [];
+  for (const l of lives) {
+    for (const e of l.store.list()) {
+      if (e.type !== 'MESSAGE_SENT' || typeof e.relationshipId !== 'string') continue;
+      if (e.relationshipId === 'r_square') out.push({ muse: true, life: l.id, text: (e.payload as MessageSentPayload).utterance, at: e.occurredAt });
+      else if (e.relationshipId.startsWith('peer_')) out.push({ from: l.id, to: e.relationshipId.slice('peer_'.length), text: (e.payload as MessageSentPayload).utterance, at: e.occurredAt });
+    }
+  }
+  out.sort((a, b) => (String(a.at) < String(b.at) ? 1 : -1));
+  return out.slice(0, limit).map((x, i) => ({ ...x, id: String(x.at) + '_' + i }));
 }
 
 // 管理员活动流（§11.1 飞行记录仪）：跨命的带时间戳事件，按真实墙钟(recordedAt) 倒序。
@@ -658,6 +692,8 @@ const server = createServer(async (req, res) => {
       if (req.method === 'GET' && url === '/api/lives') {
         return send(res, 200, lives.map((l) => { const s = snapOf(l); return { id: l.id, awake: s.awake, emotion: s.emotion, dayPhase: s.dayPhase, temperament: tempLabel(s.temperament) }; }));
       }
+      // 广场"生命活动"历史（公开：心声 + 同类交谈）——进广场即有内容，不止在线时。
+      if (req.method === 'GET' && url === '/api/society') return send(res, 200, societyRecent(40));
       if (req.method === 'POST' && url === '/api/auth/register') {
         const b = await readJson(req);
         const r = accounts.register(String(b.email ?? ''), String(b.password ?? ''), String(b.handle ?? ''));
@@ -745,17 +781,18 @@ const server = createServer(async (req, res) => {
         }
         const sem = snap.semanticMemory.find((x) => x.relationshipId === rel);
         return send(res, 200, {
-          life: { id: life3.id, emotion: snap.emotion, feeling: snap.feeling, awake: snap.awake, dayPhase: snap.dayPhase, temperament: tempLabel(snap.temperament) },
+          life: { id: life3.id, emotion: snap.emotion, feeling: snap.feeling, awake: snap.awake, dayPhase: snap.dayPhase, tension: snap.tension, temperament: tempLabel(snap.temperament) },
           met: Boolean(bond),
           relationship: bond ? { closeness: round3(bond.closeness), attachment: bond.relationalSelf.attachment, style: bond.theoryOfMind.style, understanding: sem ? sem.understanding : null, bornAt: snap.bornAt } : null,
           history: history.slice(-50),
           balance: accounts.balance(me.id),
         });
       }
-      // 通知中心：她在你不在时主动找过你的（跨我遇见的命，未被新消息盖过的最近一条）。
+      // 通知中心（站内通知，区别于"对话/关系"列表）：她主动找你 + 钱包/系统提醒。
       if (req.method === 'GET' && url === '/api/notifications') {
         const rel = accounts.relIdFor(me.id);
         const notes: Array<Record<string, unknown>> = [];
+        // 1) 她主动找你（跨我遇见的命，未被我新消息盖过的最近一条）
         for (const l of lives) {
           const es = l.store.list();
           let lastRecv = -1;
@@ -763,11 +800,21 @@ const server = createServer(async (req, res) => {
           for (let i = es.length - 1; i > lastRecv; i--) {
             const e = es[i];
             if (e.type === 'MESSAGE_SENT' && e.relationshipId === rel && (e.payload as MessageSentPayload).unprompted) {
-              notes.push({ life: l.id, text: (e.payload as MessageSentPayload).utterance, at: e.occurredAt });
+              notes.push({ type: 'reach', life: l.id, text: (e.payload as MessageSentPayload).utterance, at: e.occurredAt });
               break;
             }
           }
         }
+        // 2) 钱包：充值审批结果（站内通知）
+        for (const r of accounts.recentRechargeResults(me.id, 5)) {
+          notes.push({ type: 'wallet', ok: r.status === 'approved', at: r.decidedAt,
+            title: r.status === 'approved' ? `充值到账 · ${r.amount} 心意` : `充值未通过 · ${r.amount} 心意`,
+            text: r.status === 'approved' ? '已到账，可以和她们更丰富地聊了。' : '这笔申请没有通过，可重新申请。' });
+        }
+        // 3) 系统：心意用尽提醒
+        if (accounts.balance(me.id) <= 0) notes.push({ type: 'wallet', ok: false, at: now(), title: '心意用尽了', text: '她仍在、仍记得你，只是这会儿表达朴素些。充值可恢复。' });
+        // 4) 欢迎（还没遇见谁）
+        if (livesMetBy(me).length === 0) notes.push({ type: 'welcome', at: me.createdAt, title: '欢迎来到 ZSKY', text: '去广场，认识第一个她——她会记住你。' });
         notes.sort((a, b) => (String(a.at) < String(b.at) ? 1 : -1));
         return send(res, 200, notes);
       }
@@ -998,10 +1045,22 @@ const heartbeat = setInterval(async () => {
       // 健康时间线：每跳采样一点（环形缓冲，最多 720 ≈ 12h@60s）。
       life.samples.push({ at: Date.now(), vit: round3(after.soma.vitality.value), val: round3(after.soma.valence.value), ene: round3(after.soma.energy.value), con: round3(after.soma.connection.value), emo: after.emotion });
       if (life.samples.length > 720) life.samples.shift();
-      const bond = after.bonds[REL];
-      if (bond && bond.closeness >= REACH_CLOSENESS && !after.openConnections.includes(REL) && timeGone > REACH_AFTER_MS && pendingOutreach(life) === null) {
-        const o = await reachOut(life.store, mouth, REL, now());
-        if (o) bus.publish('reach_out', REL, { life: life.id, text: o.utterance }); // 她想你了——只推给那一个人
+      // —— 社交边界（Dunbar 灵感）——任何人来找她她都回应（reactive，用户付费）；
+      // "主动想你"只发生在她【活跃社交圈】内（最亲近的 K 个），每跳限额——token 不随用户数爆炸。
+      const rs = reachState(life);
+      const circle = Object.entries(after.bonds)
+        .filter(([rel]) => rel.startsWith('u_') || rel === REL) // 人类用户 + 内嵌创造者（不含同类 peer_）
+        .filter(([, b]) => b.closeness >= REACH_CLOSENESS)
+        .sort(([, a], [, b]) => b.closeness - a.closeness)
+        .slice(0, ACTIVE_CIRCLE); // 只主动维系最亲近的一圈，其余只记得、不打扰
+      let reached = 0;
+      for (const [rel] of circle) {
+        if (reached >= REACH_PER_TICK) break;
+        const st = rs.get(rel);
+        if (!st || st.lastRecvMs <= 0 || st.pending) continue; // 没真说过话 / 已有未回的主动留言 → 跳过
+        if (Date.now() - st.lastRecvMs <= REACH_AFTER_MS) continue; // 还没"离开"够久
+        const o = await reachOut(life.store, mouth, rel, now());
+        if (o) { bus.publish('reach_out', rel, { life: life.id, text: o.utterance }); reached += 1; } // 她想你了——只推给那一个人
       }
       if (Date.now() - life.lastReflectAt > REFLECT_MS && life.store.version() - life.lastReflectSeq >= 3) {
         runTurn(life.store, [{ type: 'REFLECTION_TRIGGERED', source: 'autonomous_loop', occurredAt: now(), payload: { scope: 'recent', windowFromSeq: life.lastReflectSeq, windowToSeq: life.store.version() } }]);

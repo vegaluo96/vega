@@ -114,7 +114,7 @@
 
   {#if showRel && rel}
     <div class="relwrap">
-      <RelationshipPanel {rel} {relAge}>
+      <RelationshipPanel {rel} {relAge} feeling={life && life.awake ? life.feeling || life.emotion : ''} tension={life ? life.tension : ''}>
         {#if !bind}
           <button class="wx-btn" on:click={bindWechat} disabled={binding}><Icon name="qr" size={16} /> {binding ? '生成中…' : '绑定微信 · 在微信里也能和 ' + (life ? life.id : '她') + ' 聊'}</button>
         {:else}
@@ -157,10 +157,10 @@
 </div>
 
 <style>
-  .chat { display: flex; flex-direction: column; min-height: 100vh; }
+  .chat { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
 
   .head {
-    position: sticky; top: 0; z-index: 10;
+    flex: none;
     display: flex; align-items: center; gap: 10px; padding: 10px 12px;
     border-bottom: 1px solid var(--border);
     background: color-mix(in srgb, var(--bg) 84%, transparent); backdrop-filter: saturate(180%) blur(14px);
@@ -186,7 +186,7 @@
 
   .banner { max-width: var(--maxw); margin: 10px auto 0; padding: 11px 14px; background: var(--accent-weak); color: var(--text); font-size: 13px; text-align: center; border-radius: var(--r-sm); }
 
-  .log { flex: 1; max-width: var(--maxw); width: 100%; margin: 0 auto; padding: 18px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .log { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; max-width: var(--maxw); width: 100%; margin: 0 auto; padding: 18px 14px; display: flex; flex-direction: column; gap: 10px; }
   .bubble { max-width: 80%; padding: 10px 14px; border-radius: 18px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; font-size: 15px; animation: rise var(--t-fade) ease both; }
   @keyframes rise { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
   .bubble.me { align-self: flex-end; background: var(--accent); color: var(--on-accent); border-bottom-right-radius: 6px; }
@@ -203,7 +203,7 @@
   @keyframes breathe-dot { 0%, 100% { opacity: 0.25; transform: translateY(0); } 50% { opacity: 0.9; transform: translateY(-2px); } }
 
   .composer {
-    position: sticky; bottom: 0; z-index: 10;
+    flex: none;
     display: flex; gap: 8px; max-width: var(--maxw); width: 100%; margin: 0 auto;
     padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
     border-top: 1px solid var(--border); background: var(--bg);

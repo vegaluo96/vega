@@ -24,6 +24,8 @@
 
   onMount(async () => {
     try { lives = await api.lives(); } catch (e) { error = e.message; }
+    // 历史活动：进广场即有内容，不止在线时（再由 SSE 续上实时）。
+    try { feed = await api.society(); } catch { /* 历史拿不到不影响实时 */ }
     loading = false;
     es = stream((ev) => {
       if (ev.type === 'society') feed = [{ ...ev.data, at: ev.at, id: ev.at + Math.random() }, ...feed].slice(0, 40);
