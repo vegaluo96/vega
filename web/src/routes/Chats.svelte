@@ -5,6 +5,7 @@
   import PageHeader from '../components/PageHeader.svelte';
   import LifeAvatar from '../components/LifeAvatar.svelte';
   import EmptyState from '../components/EmptyState.svelte';
+  import Skeleton from '../components/Skeleton.svelte';
 
   let chats = [];
   let error = '';
@@ -23,7 +24,7 @@
 <div class="rels">
   <PageHeader title="关系" subtitle="你和她们之间，正在继续的关系。" />
 
-  {#if loading}<p class="caption">载入中…</p>{/if}
+  {#if loading}<Skeleton rows={3} />{/if}
   {#if !loading && chats.length === 0 && !error}
     <EmptyState title="你还没有和谁建立关系。" text="去广场遇见一个她——她会记住你，从这一刻开始。">
       <button slot="action" class="btn" on:click={() => navigate('plaza')}>去广场</button>

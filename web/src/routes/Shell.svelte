@@ -7,14 +7,15 @@
   import LifeProfile from './LifeProfile.svelte';
   import Me from './Me.svelte';
   import Notifications from './Notifications.svelte';
+  import Icon from '../components/Icon.svelte';
   import { t } from '../lib/i18n.js';
 
   const TABS = [
-    { k: 'plaza', ico: '◎', label: 'nav.plaza' },
-    { k: 'explore', ico: '⌕', label: 'nav.explore' },
-    { k: 'notifications', ico: '♡', label: 'nav.notifications' },
-    { k: 'chats', ico: '✦', label: 'nav.chats' },
-    { k: 'me', ico: '◍', label: 'nav.me' },
+    { k: 'plaza', ico: 'plaza', label: 'nav.plaza' },
+    { k: 'explore', ico: 'explore', label: 'nav.explore' },
+    { k: 'notifications', ico: 'notifications', label: 'nav.notifications' },
+    { k: 'chats', ico: 'chats', label: 'nav.chats' },
+    { k: 'me', ico: 'me', label: 'nav.me' },
   ];
   // 主导航高亮：chat/profile 归到来源 tab（默认广场）
   $: activeTab = TABS.some((x) => x.k === $route.name) ? $route.name : 'plaza';
@@ -26,7 +27,7 @@
     <div class="brand">ZSKY</div>
     {#each TABS as tab}
       <button class:active={activeTab === tab.k} class:userentry={tab.k === 'me'} on:click={() => navigate(tab.k)}>
-        <span class="ico">{tab.ico}</span><span class="lbl">{t(tab.label)}</span>
+        <span class="ico"><Icon name={tab.ico} size={22} /></span><span class="lbl">{t(tab.label)}</span>
       </button>
     {/each}
   </nav>
@@ -70,8 +71,8 @@
     transition: color var(--t-hover) ease;
   }
   nav button.active { color: var(--accent); }
+  .ico { display: inline-flex; align-items: center; justify-content: center; transition: transform var(--t-hover) ease; }
   nav button.active .ico { transform: translateY(-1px); }
-  .ico { font-size: 19px; line-height: 1; transition: transform var(--t-hover) ease; }
   .lbl { letter-spacing: 0.02em; }
   .app.immersive nav { display: none; }
 
@@ -92,8 +93,7 @@
       padding: 0 16px; border-radius: var(--r-pill); font-size: 15px; font-weight: 600; color: var(--muted);
       transition: background var(--t-hover) ease, color var(--t-hover) ease;
     }
-    nav button.userentry { margin-top: auto; border-top: 1px solid var(--border-subtle); border-radius: var(--r-pill); }
-    nav button .ico { font-size: 18px; }
+    nav button.userentry { margin-top: auto; }
     nav button.active { background: var(--accent-weak); color: var(--accent); }
     nav button.active .ico { transform: none; }
     nav button:not(.active):hover { background: var(--surface-2); color: var(--text); }

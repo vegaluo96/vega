@@ -5,6 +5,7 @@
   import { qrDataUrl } from '../lib/qr.js';
   import { t } from '../lib/i18n.js';
   import RelationshipPanel from '../components/RelationshipPanel.svelte';
+  import Icon from '../components/Icon.svelte';
 
   export let lifeId;
 
@@ -101,7 +102,7 @@
 
 <div class="chat">
   <header class="head">
-    <button class="back" on:click={() => navigate('plaza')} aria-label="返回">‹</button>
+    <button class="back" on:click={() => navigate('plaza')} aria-label="返回"><Icon name="back" size={24} /></button>
     {#if life}
       <button class="who" on:click={() => (showRel = !showRel)}>
         <span class="name">{life.id} <span class="dot" class:awake={life.awake}></span></span>
@@ -115,7 +116,7 @@
     <div class="relwrap">
       <RelationshipPanel {rel} {relAge}>
         {#if !bind}
-          <button class="wx-btn" on:click={bindWechat} disabled={binding}>{binding ? '生成中…' : '绑定微信 · 在微信里也能和 ' + (life ? life.id : '她') + ' 聊'}</button>
+          <button class="wx-btn" on:click={bindWechat} disabled={binding}><Icon name="qr" size={16} /> {binding ? '生成中…' : '绑定微信 · 在微信里也能和 ' + (life ? life.id : '她') + ' 聊'}</button>
         {:else}
           <div class="wx">
             <img class="qr" src={bind.dataUrl} alt="微信绑定二维码" />
@@ -164,7 +165,7 @@
     border-bottom: 1px solid var(--border);
     background: color-mix(in srgb, var(--bg) 84%, transparent); backdrop-filter: saturate(180%) blur(14px);
   }
-  .back { background: none; border: 0; font-size: 30px; line-height: 1; padding: 0 6px; color: var(--text); }
+  .back { background: none; border: 0; padding: 0 6px; color: var(--text); display: inline-flex; align-items: center; }
   .who { flex: 1; min-width: 0; background: none; border: 0; text-align: left; padding: 2px 4px; border-radius: var(--r-sm); transition: background var(--t-hover) ease; }
   .who:hover { background: var(--surface-2); }
   .name { font-weight: 700; font-size: 16px; display: inline-flex; align-items: center; gap: 8px; }
@@ -174,7 +175,7 @@
   .bal { flex: none; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 
   .relwrap { max-width: var(--maxw); width: 100%; margin: 0 auto; padding: 10px 14px 0; }
-  .wx-btn { width: 100%; min-height: 42px; margin-top: 6px; padding: 0 14px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface); color: var(--text); font: inherit; transition: border-color var(--t-hover) ease; }
+  .wx-btn { width: 100%; min-height: 42px; margin-top: 6px; padding: 0 14px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface); color: var(--text); font: inherit; display: inline-flex; align-items: center; justify-content: center; gap: 8px; transition: border-color var(--t-hover) ease; }
   .wx-btn:hover { border-color: var(--accent-line); }
   .wx-btn:disabled { opacity: 0.6; }
   .wx { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 14px 8px 4px; }

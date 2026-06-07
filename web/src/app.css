@@ -1,104 +1,83 @@
 /* ============================================================================
-   ZSKY 设计系统 —— 一座数字生命社会的视觉语言。
-   关键词：安静 · 克制 · 观测感 · 关系重量 · 有生命迹象。
-   不是科技感堆砌，不是社交信息流，不是 AI 女友。颜色全走 token，light/dark 两套。
+   ZSKY 设计系统 ·二轮 —— 一座数字生命社会。
+   质感取向：墨色为主、强调色克制（只点睛，不铺面）、暖纸/深空两套底、
+   每个头像是一小片星空。安静、观测、关系重量；不是 AI 模板、不是社交流。
    ========================================================================== */
 
 :root {
-  /* —— 表面 / 层级 —— 暖白底，她是活的，不是冷冰冰的 SaaS —— */
-  --bg: #faf9f7;
+  /* —— 底 / 层级（暖纸）—— */
+  --bg: #f7f6f3;
   --surface: #ffffff;
   --elevated: #ffffff;
-  --surface-2: #f4f3f0;
-  --border: #e8e6e1;
-  --border-subtle: #f0eeea;
+  --surface-2: #f0efea;
+  --border: #e6e4dd;
+  --border-subtle: #efeee8;
 
   /* —— 文字三级 —— */
-  --text: #1a1a1f;
-  --muted: #6c6c75;
-  --faint: #a2a2ac;
+  --text: #1b1b20;
+  --muted: #6a6a73;
+  --faint: #a2a2ab;
 
-  /* —— 主色：克制的靛——只在关键处用，绝不大面积铺 —— */
-  --accent: #5b51d8;
-  --accent-weak: rgba(91, 81, 216, 0.10);
-  --accent-line: rgba(91, 81, 216, 0.28);
-  --on-accent: #ffffff;
+  /* —— 主操作=墨色（高级、克制）；强调色只点睛 —— */
+  --primary: #1c1c22;
+  --on-primary: #ffffff;
+  --accent: #5b57b8;              /* 克制的靛，仅用于激活/链接/"她找你" */
+  --accent-weak: rgba(91, 87, 184, 0.10);
+  --accent-line: rgba(91, 87, 184, 0.26);
 
-  /* —— 生命状态色：用于微小的点/环/标签，不做大色块 —— */
-  --life-awake: #3f9d6b;        /* 醒着 */
-  --life-asleep: #9a9aa4;       /* 沉睡 */
-  --life-remembering: #c0894a;  /* 想起某人 */
-  --life-reaching: #8a63c9;     /* 她主动找你 */
-  --life-tension: #c4673f;      /* 心里的拉扯 */
+  /* —— 生命状态色（小点/小环/小签，绝不大色块）—— */
+  --life-awake: #3f9968;
+  --life-asleep: #9c9ca4;
+  --life-remembering: #b3823f;
+  --life-reaching: #7d63b8;
+  --life-tension: #bb6440;
 
-  /* —— 语义色 —— */
-  --danger: #d2495f;
-  --danger-weak: rgba(210, 73, 95, 0.10);
-  --warning: #c0894a;
-  --success: #3f9d6b;
+  --danger: #c64559;
+  --danger-weak: rgba(198, 69, 89, 0.10);
+  --warning: #b3823f;
+  --success: #3f9968;
 
-  /* —— 圆角系统 —— */
-  --r-xs: 6px;
-  --r-sm: 10px;
-  --r-md: 14px;
-  --r-lg: 20px;
-  --r-pill: 999px;
-
-  /* —— 间距系统 —— */
-  --s1: 4px;
-  --s2: 8px;
-  --s3: 12px;
-  --s4: 16px;
-  --s6: 24px;
-  --s8: 32px;
-  --s12: 48px;
-
-  /* —— 仅保留一档克制的浮起阴影 —— */
-  --shadow: 0 1px 2px rgba(20, 20, 30, 0.04), 0 12px 32px rgba(20, 20, 30, 0.06);
-
-  /* —— 动效时长 —— */
-  --t-hover: 120ms;
-  --t-active: 80ms;
-  --t-fade: 160ms;
-
-  --maxw: 600px;
-  --rail: 248px;
+  --r-xs: 6px; --r-sm: 10px; --r-md: 13px; --r-lg: 18px; --r-pill: 999px;
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s6: 24px; --s8: 32px; --s12: 48px;
+  --shadow: 0 1px 2px rgba(20, 20, 30, 0.04), 0 10px 28px rgba(20, 20, 30, 0.05);
+  --t-hover: 120ms; --t-active: 80ms; --t-fade: 180ms;
+  --maxw: 600px; --rail: 244px;
   color-scheme: light;
 }
 
 [data-theme='dark'] {
-  --bg: #08080c;
-  --surface: #101017;
-  --elevated: #16161f;
-  --surface-2: #1a1a24;
-  --border: #21212c;
-  --border-subtle: #18181f;
+  --bg: #0a0a0e;
+  --surface: #121218;
+  --elevated: #17171f;
+  --surface-2: #1a1a22;
+  --border: #24242e;
+  --border-subtle: #1a1a21;
 
-  --text: #ecebf2;
-  --muted: #8c8c99;
-  --faint: #585866;
+  --text: #ecebf1;
+  --muted: #8b8b97;
+  --faint: #585863;
 
-  --accent: #8b7cf6;
-  --accent-weak: rgba(139, 124, 246, 0.14);
-  --accent-line: rgba(139, 124, 246, 0.34);
-  --on-accent: #0a0a10;
+  --primary: #eeecf4;
+  --on-primary: #0a0a0e;
+  --accent: #9a8ef0;
+  --accent-weak: rgba(154, 142, 240, 0.13);
+  --accent-line: rgba(154, 142, 240, 0.30);
 
   --life-awake: #4cae7a;
-  --life-asleep: #6a6a78;
-  --life-remembering: #d09a5c;
-  --life-reaching: #a487e0;
-  --life-tension: #d9794f;
+  --life-asleep: #6a6a76;
+  --life-remembering: #cf9a5c;
+  --life-reaching: #a78fe6;
+  --life-tension: #d4794f;
 
-  --danger: #ef6177;
-  --danger-weak: rgba(239, 97, 119, 0.14);
-  --warning: #d09a5c;
+  --danger: #e7637a;
+  --danger-weak: rgba(231, 99, 122, 0.14);
+  --warning: #cf9a5c;
   --success: #4cae7a;
 
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 16px 40px rgba(0, 0, 0, 0.5);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 16px 40px rgba(0, 0, 0, 0.46);
   color-scheme: dark;
 }
 
-/* —— reset / base —— */
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; height: 100%; }
 body {
@@ -107,7 +86,6 @@ body {
   font: 16px/1.6 system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  transition: background var(--t-fade) ease, color var(--t-fade) ease;
 }
 a { color: var(--accent); text-decoration: none; }
 button { font: inherit; cursor: pointer; color: inherit; }
@@ -115,8 +93,8 @@ button { font: inherit; cursor: pointer; color: inherit; }
 ::selection { background: var(--accent-weak); }
 
 /* —— 字体层级 —— */
-.page-title { font-size: 26px; font-weight: 800; letter-spacing: -0.01em; line-height: 1.2; margin: 0; }
-.section-title { font-size: 13px; font-weight: 600; letter-spacing: 0.04em; text-transform: none; color: var(--muted); margin: 0; }
+.page-title { font-size: 23px; font-weight: 750; letter-spacing: -0.01em; line-height: 1.25; margin: 0; }
+.section-title { font-size: 12.5px; font-weight: 600; letter-spacing: 0.02em; color: var(--muted); margin: 0; }
 .caption { font-size: 13px; color: var(--muted); line-height: 1.6; }
 .meta { font-size: 11.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
 .muted { color: var(--muted); }
@@ -124,27 +102,27 @@ button { font: inherit; cursor: pointer; color: inherit; }
 .mono { font-variant-numeric: tabular-nums; }
 .err { color: var(--danger); }
 
-/* —— 按钮：primary / secondary / ghost / danger —— */
+/* —— 按钮：primary=墨 / secondary / ghost / danger —— */
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: var(--s2);
   min-height: 44px; padding: 0 var(--s6); border-radius: var(--r-pill);
-  border: 1px solid transparent; background: var(--accent); color: var(--on-accent);
+  border: 1px solid transparent; background: var(--primary); color: var(--on-primary);
   font-size: 15px; font-weight: 600; line-height: 1; white-space: nowrap;
-  transition: transform var(--t-active) ease, background var(--t-hover) ease, border-color var(--t-hover) ease, opacity var(--t-hover) ease;
+  transition: transform var(--t-active) ease, opacity var(--t-hover) ease, background var(--t-hover) ease, border-color var(--t-hover) ease;
 }
-.btn:hover { background: color-mix(in srgb, var(--accent) 88%, #000); }
+.btn:hover { opacity: 0.9; }
 .btn:active { transform: scale(0.985); }
-.btn:disabled { opacity: 0.45; cursor: default; transform: none; }
+.btn:disabled { opacity: 0.4; cursor: default; transform: none; }
 .btn-secondary { background: var(--surface-2); color: var(--text); border-color: var(--border); }
-.btn-secondary:hover { background: color-mix(in srgb, var(--surface-2) 90%, var(--text)); border-color: var(--accent-line); }
+.btn-secondary:hover { opacity: 1; border-color: var(--accent-line); }
 .btn-ghost { background: transparent; color: var(--text); border-color: var(--border); }
-.btn-ghost:hover { background: var(--surface-2); }
-.btn-danger { background: transparent; color: var(--danger); border-color: var(--danger); }
-.btn-danger:hover { background: var(--danger-weak); }
+.btn-ghost:hover { opacity: 1; background: var(--surface-2); }
+.btn-danger { background: transparent; color: var(--danger); border-color: color-mix(in srgb, var(--danger) 50%, transparent); }
+.btn-danger:hover { opacity: 1; background: var(--danger-weak); }
 .btn-sm { min-height: 36px; padding: 0 var(--s4); font-size: 13.5px; }
 .btn-block { display: flex; width: 100%; }
 
-/* —— 输入框：统一高度 / 圆角 / focus —— */
+/* —— 输入 —— */
 .input {
   width: 100%; min-height: 46px; padding: 0 var(--s4);
   border: 1px solid var(--border); border-radius: var(--r-sm);
@@ -153,33 +131,36 @@ button { font: inherit; cursor: pointer; color: inherit; }
 }
 .input::placeholder { color: var(--faint); }
 .input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); }
-.input-pill { border-radius: var(--r-pill); padding: 0 var(--s4); }
+.input-pill { border-radius: var(--r-pill); }
 
-/* —— 卡片：surface / quiet / interactive —— */
+/* —— 卡片 —— */
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); }
 .card-quiet { background: transparent; border: 1px solid var(--border-subtle); border-radius: var(--r-md); }
 .card-interactive {
   display: block; width: 100%; text-align: left; color: var(--text);
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md);
-  transition: border-color var(--t-hover) ease, background var(--t-hover) ease, transform var(--t-active) ease;
+  transition: border-color var(--t-hover) ease, transform var(--t-active) ease;
 }
 .card-interactive:hover { border-color: var(--accent-line); }
 .card-interactive:active { transform: scale(0.992); }
 
-/* —— chips（筛选）—— */
+/* —— chips —— */
 .chips { display: flex; gap: var(--s2); flex-wrap: wrap; }
 .chip {
   min-height: 34px; padding: 0 var(--s3); border-radius: var(--r-pill);
   background: transparent; border: 1px solid var(--border); color: var(--muted);
-  font-size: 13px; display: inline-flex; align-items: center;
+  font-size: 13px; display: inline-flex; align-items: center; gap: 6px;
   transition: all var(--t-hover) ease;
 }
 .chip:hover { border-color: var(--accent-line); color: var(--text); }
-.chip.on { background: var(--accent-weak); color: var(--accent); border-color: var(--accent-line); }
+.chip.on { background: var(--text); color: var(--bg); border-color: var(--text); }
 
-/* —— 微进入动效（尊重 reduce-motion）—— */
+/* —— 微进入 + 骨架 —— */
 .fade-in { animation: fade-in var(--t-fade) ease both; }
 @keyframes fade-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.shimmer { position: relative; overflow: hidden; background: var(--surface-2); }
+.shimmer::after { content: ''; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--text) 6%, transparent), transparent); animation: shimmer 1.4s infinite; }
+@keyframes shimmer { 100% { transform: translateX(100%); } }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }

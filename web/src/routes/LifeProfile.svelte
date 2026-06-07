@@ -5,6 +5,7 @@
   import { t } from '../lib/i18n.js';
   import LifeAvatar from '../components/LifeAvatar.svelte';
   import LifeStatePill from '../components/LifeStatePill.svelte';
+  import Icon from '../components/Icon.svelte';
 
   export let lifeId;
   let p = null;
@@ -21,7 +22,7 @@
 </script>
 
 <header class="head">
-  <button class="back" on:click={() => navigate('plaza')} aria-label="返回">‹</button>
+  <button class="back" on:click={() => navigate('plaza')} aria-label="返回"><Icon name="back" size={24} /></button>
   <span class="htitle">{p ? p.id : ''}</span>
   <span class="hspace"></span>
 </header>
@@ -95,7 +96,7 @@
     position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 8px; padding: 10px 12px;
     border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--bg) 84%, transparent); backdrop-filter: saturate(180%) blur(14px);
   }
-  .back { background: none; border: 0; font-size: 30px; line-height: 1; padding: 0 6px; color: var(--text); }
+  .back { background: none; border: 0; padding: 0 6px; color: var(--text); display: inline-flex; align-items: center; }
   .htitle { font-weight: 700; }
   .hspace { flex: 1; }
 

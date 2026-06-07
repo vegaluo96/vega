@@ -13,7 +13,7 @@
 </header>
 
 <style>
-  .ph { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--s4); padding: var(--s6) 0 var(--s4); }
-  .sub { margin: 7px 0 0; color: var(--muted); font-size: 14px; line-height: 1.55; }
+  .ph { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--s4); padding: 20px 0 16px; }
+  .sub { margin: 6px 0 0; color: var(--muted); font-size: 13.5px; line-height: 1.5; }
   .act { flex: none; padding-bottom: 2px; }
 </style>

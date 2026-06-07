@@ -7,6 +7,7 @@
   import PageHeader from '../components/PageHeader.svelte';
   import LifeAvatar from '../components/LifeAvatar.svelte';
   import EmptyState from '../components/EmptyState.svelte';
+  import Icon from '../components/Icon.svelte';
 
   let pushMsg = '';
   async function turnOnPush() {
@@ -111,8 +112,8 @@
   {/if}
 
   <div class="footer">
-    <button class="btn-ghost btn" on:click={toggleTheme}>{$theme === 'dark' ? '切换到白天' : '切换到黑夜'}</button>
-    <button class="btn-ghost btn" on:click={logout}>登出</button>
+    <button class="btn-ghost btn" on:click={toggleTheme}><Icon name={$theme === 'dark' ? 'sun' : 'moon'} size={18} /> {$theme === 'dark' ? '白天' : '黑夜'}</button>
+    <button class="btn-ghost btn" on:click={logout}><Icon name="logout" size={18} /> 登出</button>
   </div>
 </div>
 

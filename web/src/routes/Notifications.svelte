@@ -5,9 +5,11 @@
   import PageHeader from '../components/PageHeader.svelte';
   import LifeAvatar from '../components/LifeAvatar.svelte';
   import EmptyState from '../components/EmptyState.svelte';
+  import Skeleton from '../components/Skeleton.svelte';
 
   let notes = [];
   let error = '';
+  let loading = true;
   let es;
 
   onMount(async () => {
@@ -16,6 +18,7 @@
     } catch (e) {
       error = e.message;
     }
+    loading = false;
     // 她趁你不在时来找你——实时进来。
     es = stream((ev) => {
       if (ev.type === 'reach_out') {
@@ -29,8 +32,9 @@
 <div class="notifs">
   <PageHeader title="通知" subtitle="她趁你不在时，来找过你。" />
 
+  {#if loading}<Skeleton rows={3} />{/if}
   {#if error}<p class="err">{error}</p>{/if}
-  {#if notes.length === 0 && !error}
+  {#if !loading && notes.length === 0 && !error}
     <EmptyState title="还没有谁来找你。" text="她们在各自过日子——等你们更近一些，她会主动来的。" />
   {/if}
 
