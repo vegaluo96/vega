@@ -10,7 +10,7 @@
   const dispatch = createEventDispatcher();
 
   let channel = undefined; // undefined=加载中 / null=未连接 / { lifeId }=已连接（绑着某条命）
-  let qrImg = '', polling = false, msg = '', busy = false;
+  let qrImg = '', polling = false, msg = '', busy = false, code = '';
   let alive = true; // 组件还在吗——离开页面后停止轮询，别在已销毁的实例上继续拉取/绑定
 
   async function refresh() {
@@ -57,8 +57,14 @@
   }
   async function disconnect() {
     msg = ''; busy = true;
-    try { await api.wxDisconnect(); await refresh(); dispatch('change'); qrImg = ''; msg = '已断开微信。'; }
+    try { await api.wxDisconnect(); await refresh(); dispatch('change'); qrImg = ''; code = ''; msg = '已断开微信。'; }
     catch (e) { msg = e.message; }
+    busy = false;
+  }
+  async function getCode() {
+    msg = ''; busy = true;
+    try { const r = await api.bind(lifeId); code = r.qr; } // r.qr = 'zsky-bind:XXXX'，发给微信里的她即打通
+    catch (e) { msg = e.message || '取连接码失败'; }
     busy = false;
   }
 </script>
@@ -77,6 +83,14 @@
   {:else}
     <button class="wb-btn" on:click={switchToHer} disabled={busy}><Icon name="qr" size={15} /> 微信当前和 {channel.lifeId} 聊 · 改成和她</button>
   {/if}
+  {#if channel}
+    {#if !code}
+      <button class="wb-tie" on:click={getCode} disabled={busy}>微信里的你还不是这里的你？点这里打通记忆 →</button>
+    {:else}
+      <p class="wb-hint">把下面这串发给微信里的她（10 分钟内有效），微信的你就和这里成为同一个你、共享记忆：</p>
+      <code class="wb-code">{code}</code>
+    {/if}
+  {/if}
   {#if msg}<p class="wb-msg">{msg}</p>{/if}
 </div>
 
@@ -94,4 +108,7 @@
   .wb-hint.dim { color: var(--faint); margin: 8px 0 0; }
   .wb-qr { display: block; width: 180px; height: 180px; margin: 0 auto; background: #fff; border-radius: var(--r-sm); padding: 8px; image-rendering: pixelated; }
   .wb-msg { font-size: 12.5px; color: var(--success); margin: 8px 0 0; text-align: center; }
+  .wb-tie { display: block; width: 100%; margin-top: 8px; padding: 6px 4px; border: 0; background: none; color: var(--faint); font: inherit; font-size: 12px; text-align: center; }
+  .wb-tie:hover:not(:disabled) { color: var(--accent); }
+  .wb-code { display: block; margin-top: 6px; padding: 10px 12px; background: var(--bg); border: 1px dashed var(--accent-line); border-radius: var(--r-sm); color: var(--accent); font-size: 13px; text-align: center; word-break: break-all; user-select: all; }
 </style>

@@ -74,6 +74,8 @@ export interface AccountStore {
   createBindToken(userId: string, lifeId: string): string;
   bindWechat(token: string, openid: string): { userId: string; lifeId: string } | null;
   resolveWechat(openid: string): { userId: string; lifeId: string } | null;
+  // 把一个微信身份直接绑到【已存在的网页账号】——扫码本人/连接码打通用，从此微信与网页共享同一段关系与记忆。
+  linkWechatOpenid(openid: string, userId: string, lifeId: string): void;
   unbindWechat(openid: string): void;
   // 账号级绑定：微信只绑账号一次；"在微信里和哪条命聊"在网页随时切换，不用重绑。
   setWechatLife(userId: string, lifeId: string): void;
@@ -278,6 +280,10 @@ export function createAccountStore(path = ':memory:', opts: AccountStoreOptions 
     resolveWechat(openid) {
       const row = db.prepare('SELECT user_id,life_id FROM wechat_bindings WHERE openid=?').get(openid) as { user_id: string; life_id: string } | undefined;
       return row ? { userId: row.user_id, lifeId: row.life_id } : null;
+    },
+    linkWechatOpenid(openid, userId, lifeId) {
+      db.prepare('INSERT INTO wechat_bindings(openid,user_id,life_id,bound_at) VALUES(?,?,?,?) ON CONFLICT(openid) DO UPDATE SET user_id=excluded.user_id, life_id=excluded.life_id, bound_at=excluded.bound_at')
+        .run(openid, userId, lifeId, now());
     },
     unbindWechat(openid) {
       db.prepare('DELETE FROM wechat_bindings WHERE openid=?').run(openid);

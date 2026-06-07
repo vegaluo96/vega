@@ -303,10 +303,29 @@ async function runChannel(userId: string): Promise<void> {
         for (const m of msgs) {
           if (!mine()) break;
           try {
-            const who = accounts.ensureWechatUser(m.fromUserId, lifeId); // 发信人身份
             const lf = lifeById(lifeId); // 用通道的活跃命（切换即对所有人生效）
-            const ac = accounts.getAccount(who.userId);
-            if (!lf || !ac) continue;
+            if (!lf) continue;
+            // —— 认人：让"微信里的你"尽量=你的 ZSKY 网页账号，从而和网页【共享同一段关系与记忆】。 ——
+            // ① 已绑过→那个账号；② 连接码→绑到码所属网页账号；③ 扫码本人(iLink 身份匹配)→绑到通道主人账号；④ 其余→微信朋友。
+            let acctId: string;
+            const already = accounts.resolveWechat(m.fromUserId);
+            if (already) {
+              acctId = already.userId;
+            } else if (m.text.toLowerCase().includes('zsky-bind:')) {
+              const linked = accounts.bindWechat(cleanBindToken(m.text), m.fromUserId);
+              if (linked) { // 连接码本身不当聊天内容，回个确认即可
+                await ilink.sendMessage(ch.baseurl, ch.botToken, m.fromUserId, m.contextToken, '✅ 打通了——微信里的你，就是 ZSKY 里的你，记忆从此共享。');
+                continue;
+              }
+              acctId = accounts.ensureWechatUser(m.fromUserId, lifeId).userId;
+            } else if (ch.ilinkUserId && m.fromUserId === ch.ilinkUserId) {
+              accounts.linkWechatOpenid(m.fromUserId, userId, lifeId); // 扫码本人 → 通道主人的网页账号（确定性、安全）
+              acctId = userId;
+            } else {
+              acctId = accounts.ensureWechatUser(m.fromUserId, lifeId).userId; // 别人 → 独立"微信朋友"
+            }
+            const ac = accounts.getAccount(acctId);
+            if (!ac) continue;
             const reply = snapOf(lf).awake ? String((await respondAsUser(lf, ac, m.text, 'wechat')).utterance ?? '…') : '她在更深的睡眠里，等会儿再来找我吧。';
             await ilink.sendMessage(ch.baseurl, ch.botToken, m.fromUserId, m.contextToken, reply);
           } catch (e) { console.log('[wechat] 回消息失败:', (e as Error).message); }
