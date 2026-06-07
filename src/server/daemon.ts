@@ -107,6 +107,7 @@ function worldStatus(): Record<string, unknown> {
 const ilink = createIlink({ base: process.env.VEGA_ILINK_BASE });
 const WECHAT_LIFE = process.env.VEGA_WECHAT_LIFE || ''; // 微信通道默认对应哪条命；空=第一条
 const channelGen = new Map<string, number>(); // userId → 当前 worker 代号；重连/断开 +1，旧 worker 据此自退（防重复 worker / 断连后无 worker）
+const creditHintAt = new Map<string, number>(); // 微信"心意用尽"温柔提示的节流：每账号最多 10 分钟一次
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 const DEFAULT_BASE = 'https://api.apiyi.com/v1';
 const envTimeout = (): number => (process.env.VEGA_MODEL_TIMEOUT_MS ? Number(process.env.VEGA_MODEL_TIMEOUT_MS) : 20_000);
@@ -333,6 +334,14 @@ async function runChannel(userId: string): Promise<void> {
               // voice=rich+verdict=fallback＝配了模型但调用失败（key 被禁/超时/网络）。
               console.log(`[wechat] 回 ${ac.handle}(${acctId.slice(0, 6)}) voice=${(resp as { voice?: string }).voice} verdict=${(resp as { verdict?: string }).verdict} 余额=${(resp as { balance?: number }).balance} 嘴=${mouth.id}`);
               reply = String((resp as { utterance?: string }).utterance ?? '…');
+              // 别让"心意用尽→她变朴素"成为沉默之谜：配了模型但这个账号余额耗尽时，温柔说明 + 指路充值（节流，不刷屏）。
+              if ((resp as { voice?: string }).voice === 'plain' && !!effMouthConfig()) {
+                const last = creditHintAt.get(acctId) ?? 0;
+                if (Date.now() - last > 10 * 60_000) {
+                  creditHintAt.set(acctId, Date.now());
+                  reply += '\n\n（小声说：我的心意用完了，这会儿话就说得素些～去 zsky.com 给我充一点，我们能聊得更深。我一直都在。）';
+                }
+              }
             } else {
               reply = '她在更深的睡眠里，等会儿再来找我吧。';
             }
