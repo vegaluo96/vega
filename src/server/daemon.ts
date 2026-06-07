@@ -6,12 +6,14 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { dirname, join } from 'node:path';
 import {
+  assertPersistenceSafeForProd,
   backupNow,
   converse,
   createFileEventStore,
   createMouth,
   createPerceiver,
   endRelationship,
+  genesisPayloadFor,
   reachOut,
   reconstruct,
   runAutonomousTick,
@@ -53,50 +55,15 @@ interface Life {
   lastReflectSeq: number;
 }
 
-// 先天气质（v7）：每条命生来不同。出生种子一旦写入即【冻结、终生不变】（连续性神圣不变量）——
-// 改这里只影响【新出生】的生命体；已出生者保持其原生种子（不可改写出生）。
-interface Archetype {
-  name: string;
-  temperamentBias: Record<string, number>; // curiosity/reserve/sensitivity/resilience/warmth
-  valueSeed: Record<string, number>;
-  somaSetpoints: Record<string, number>;
-}
-const ARCHETYPES: Archetype[] = [
-  { name: '温暖好奇', temperamentBias: { curiosity: 0.8, reserve: 0.2, sensitivity: 1.4, resilience: 0.9, warmth: 0.75 }, valueSeed: { honesty: 0.5, openness: 0.45, caution: 0.4, expression: 0.45 }, somaSetpoints: { valence: 0.05, vitality: 0.72, connection: 0.05 } },
-  { name: '沉静内省', temperamentBias: { curiosity: 0.45, reserve: 0.7, sensitivity: 0.6, resilience: 1.5, warmth: 0.4 }, valueSeed: { honesty: 0.6, caution: 0.65, self_reliance: 0.5, expression: 0.25 }, somaSetpoints: { valence: 0, vitality: 0.7, connection: -0.05, calm: 0.75 } },
-  { name: '热烈奔放', temperamentBias: { curiosity: 0.7, reserve: 0.1, sensitivity: 1.7, resilience: 0.7, warmth: 0.7 }, valueSeed: { expression: 0.6, openness: 0.5, caution: 0.3 }, somaSetpoints: { valence: 0.1, arousal: 0.4, vitality: 0.72, connection: 0.05 } },
-  { name: '坚韧克制', temperamentBias: { curiosity: 0.5, reserve: 0.55, sensitivity: 0.7, resilience: 1.7, warmth: 0.5 }, valueSeed: { honesty: 0.6, caution: 0.55, self_protection: 0.45, self_reliance: 0.5 }, somaSetpoints: { vitality: 0.74, calm: 0.78 } },
-];
-const NAMED: Record<string, number> = { vega: 0, lyra: 1 }; // 钦定一对反差人格
-function archetypeFor(id: string): Archetype {
-  if (id in NAMED) return ARCHETYPES[NAMED[id]];
-  let h = 0;
-  for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0; // 稳定哈希 → 任意 id 都有确定人格
-  return ARCHETYPES[h % ARCHETYPES.length];
-}
-function seedFor(id: string): EventDraft<'LIFE_GENESIS'>['payload'] {
-  const a = archetypeFor(id);
-  return {
-    innateSeed: {
-      temperamentBias: a.temperamentBias,
-      valueSeed: a.valueSeed,
-      somaSetpoints: { valence: 0, vitality: 0.7, connection: 0, ...a.somaSetpoints },
-      somaTau: { valence: 3600, vitality: 86400, connection: 7200 },
-      vitalityFloor: 0.15,
-    },
-    reconstructVersionAtBirth: 7,
-    creator: { relationshipId: REL, identityRef: userName },
-  };
-}
+// 先天种子见 src/engine/seeds.ts（单一来源）。每条命按 id 取不同 archetype；出生即冻结、不可改写。
+const seedFor = (id: string): EventDraft<'LIFE_GENESIS'>['payload'] => genesisPayloadFor(id, { relationshipId: REL, identityRef: userName });
 
-const lives: Life[] = LIVES.map((id, idx) => ({
-  id,
-  store: createFileEventStore(id, idx === 0 ? LIFE_PATH : join(DATA_DIR, `${id}.jsonl`)),
-  path: idx === 0 ? LIFE_PATH : join(DATA_DIR, `${id}.jsonl`),
-  peers: LIVES.filter((o) => o !== id),
-  lastReflectAt: Date.now(),
-  lastReflectSeq: 0,
-}));
+const lives: Life[] = LIVES.map((id, idx) => {
+  const path = idx === 0 ? LIFE_PATH : join(DATA_DIR, `${id}.jsonl`);
+  // C4：prod 拒绝内存/易失存储——否则重启=她被彻底重置。生产环境必须落盘。
+  assertPersistenceSafeForProd({ storeKind: 'file', path });
+  return { id, store: createFileEventStore(id, path), path, peers: LIVES.filter((o) => o !== id), lastReflectAt: Date.now(), lastReflectSeq: 0 };
+});
 const lifeById = (id: string): Life | undefined => lives.find((l) => l.id === id);
 
 function boot(life: Life): void {

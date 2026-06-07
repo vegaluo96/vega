@@ -31,6 +31,7 @@ export {
 export { converse, reachOut, type ConverseResult, type OutreachResult } from './engine/converse.ts';
 export { makeTick, runAutonomousTick } from './engine/autonomous-loop.ts';
 export { peerExchange, type Participant, type PeerTurn } from './engine/society.ts';
+export { ARCHETYPES, archetypeFor, innateSeedFor, genesisPayloadFor, type Archetype } from './engine/seeds.ts';
 export {
   createMouth,
   createTemplateMouth,

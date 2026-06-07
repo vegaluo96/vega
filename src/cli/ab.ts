@@ -10,6 +10,7 @@ import {
   createApiyiMouth,
   createFileEventStore,
   createTemplateMouth,
+  genesisPayloadFor,
   stateHash,
   type EventDraft,
   type Mouth,
@@ -29,17 +30,8 @@ function mouthFor(model: string): Mouth {
   return createApiyiMouth({ baseUrl: process.env.VEGA_MODEL_BASE_URL ?? 'https://api.apiyi.com/v1', apiKey: key, model, timeoutMs: 30_000 });
 }
 
-const seedPayload = {
-  innateSeed: {
-    temperamentBias: { curiosity: 0.6 },
-    valueSeed: { honesty: 0.5, caution: 0.6, expression: 0.3 },
-    somaSetpoints: { valence: 0, vitality: 0.7, connection: 0 },
-    somaTau: { valence: 3600, vitality: 86400, connection: 7200 },
-    vitalityFloor: 0.15,
-  },
-  reconstructVersionAtBirth: 1,
-  creator: { relationshipId: 'r_creator', identityRef: 'Tam' },
-};
+// 两边用同一个共享种子（v7 archetype），A/B 只变模型、不变她（#6）。
+const seedPayload = genesisPayloadFor('vega-ab', { relationshipId: 'r_creator', identityRef: 'Tam' });
 
 async function run(model: string): Promise<{ utterances: string[]; hashes: string[] }> {
   const dir = mkdtempSync(join(tmpdir(), 'vega-ab-'));

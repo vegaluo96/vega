@@ -8,6 +8,7 @@ import {
   createFileEventStore,
   createMouth,
   createPerceiver,
+  genesisPayloadFor,
   reconstruct,
   runAutonomousTick,
   runTurn,
@@ -25,22 +26,8 @@ const mouth = createMouth();
 const perceiver = createPerceiver();
 
 function genesisDraft(): EventDraft<'LIFE_GENESIS'> {
-  return {
-    type: 'LIFE_GENESIS',
-    source: 'system',
-    occurredAt: now(),
-    payload: {
-      innateSeed: {
-        temperamentBias: { curiosity: 0.6, reserve: 0.3 },
-        valueSeed: { honesty: 0.5, caution: 0.6, expression: 0.3 },
-        somaSetpoints: { valence: 0, vitality: 0.7, connection: 0 },
-        somaTau: { valence: 3600, vitality: 86400, connection: 7200 },
-        vitalityFloor: 0.15,
-      },
-      reconstructVersionAtBirth: 1,
-      creator: { relationshipId: REL, identityRef: userName },
-    },
-  };
+  // 用共享的先天种子（v7 archetype）出生，与守护进程一致（#6）。
+  return { type: 'LIFE_GENESIS', source: 'system', occurredAt: now(), payload: genesisPayloadFor('vega', { relationshipId: REL, identityRef: userName }) };
 }
 const connOpen = (): EventDraft<'CONNECTION_OPENED'> => ({
   type: 'CONNECTION_OPENED', source: 'host', relationshipId: REL, occurredAt: now(),

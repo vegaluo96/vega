@@ -74,6 +74,12 @@ export function verifyChain(events: readonly LifeEvent[]): ChainCheck {
     }
     const expectedPrev = i === 0 ? null : events[i - 1].contentHash;
     if (e.prevHash !== expectedPrev) return { ok: false, reason: `prevHash break at seq ${e.seq}` };
+    // 信封 relationshipId 不进 contentHash（locked，不能改哈希否则旧档全废）；
+    // 改用【已哈希的 payload.relationshipId】当真相，杜绝信封被独立篡改而 verifyChain 查不出。
+    const pr = (e.payload as { relationshipId?: unknown }).relationshipId;
+    if (e.relationshipId !== undefined && typeof pr === 'string' && e.relationshipId !== pr) {
+      return { ok: false, reason: `relationshipId envelope/payload mismatch at seq ${e.seq}` };
+    }
   }
   return { ok: true };
 }

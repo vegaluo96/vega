@@ -10,6 +10,7 @@ import {
   type GenesisPayload,
   type LifeEvent,
   type MessageReceivedPayload,
+  type MessageSentPayload,
   type ReflectionTriggeredPayload,
   type RelationshipEndedPayload,
   type RelationshipOpenedPayload,
@@ -207,7 +208,12 @@ function applyEvent(st: RState, e: LifeEvent): void {
       appraiseMessage(st, e as LifeEvent<'MESSAGE_RECEIVED'>);
       break;
     case 'MESSAGE_SENT':
-      break; // 审计专用，affectsDerivedState=false（契约①）
+      // 契约①运行时焊点：模型产物（对外措辞）永不进派生状态。
+      // 若有人篡改日志把它标成"影响状态"，重放即拒绝——把架构默契变成硬约束。
+      if ((e.payload as MessageSentPayload).affectsDerivedState !== false) {
+        throw new Error(`契约①违反：MESSAGE_SENT(seq ${e.seq}) 的 affectsDerivedState 必须为 false（模型不写身份）`);
+      }
+      break;
     case 'AUTONOMOUS_TICK':
       applyTick(st, e as LifeEvent<'AUTONOMOUS_TICK'>);
       break;
