@@ -129,3 +129,27 @@ export async function reachOut(
   ]);
   return { utterance, modelId: mouth.id, verdict };
 }
+
+// 公开心声（§8.1 B）：她偶尔把一念说给世界听——【不针对任何人、不含私密】。
+// grounding 走 r_square（无 bond）→ deriveWorkspace 只出她的自我+同类，零用户私密。落 MESSAGE_SENT 到 r_square（审计、不写状态）。
+export const PUBLIC_SQUARE = 'r_square';
+export async function muse(store: DurableEventStore, mouth: Mouth, occurredAt: string): Promise<OutreachResult> {
+  const snapshot = reconstruct(store.list());
+  const ws = deriveWorkspace(snapshot, PUBLIC_SQUARE);
+  const musing: Workspace = {
+    ...ws,
+    intent: '把此刻心里一个【不针对任何具体的人】的念头，简短、真诚地说给世界听',
+    fallback: snapshot.feeling ? `此刻我${snapshot.feeling}。` : '此刻，我在。',
+  };
+  let raw = '';
+  try {
+    raw = await mouth.speak({ ...musing, lastUserMessage: '（无人发起，你想对世界说一句）', recentContext: [] });
+  } catch {
+    raw = '';
+  }
+  const { verdict, utterance } = critique(raw, musing);
+  store.appendTurn(store.version(), [
+    { type: 'MESSAGE_SENT', source: 'autonomous_loop', relationshipId: PUBLIC_SQUARE, occurredAt, payload: { relationshipId: PUBLIC_SQUARE, utterance, modelId: mouth.id, criticVerdict: verdict, affectsDerivedState: false, unprompted: true } },
+  ]);
+  return { utterance, modelId: mouth.id, verdict };
+}

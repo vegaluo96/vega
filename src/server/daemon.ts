@@ -25,6 +25,7 @@ import {
   endRelationship,
   genesisPayloadFor,
   makeTick,
+  muse,
   pickSocialPair,
   projectState,
   reachOut,
@@ -56,6 +57,7 @@ const BACKUP_MS = Number(process.env.VEGA_BACKUP_MS ?? 3_600_000);
 const CHECKPOINT_MS = Number(process.env.VEGA_CHECKPOINT_MS ?? 120_000); // 多久落一次派生快照（快重启）
 const REFLECT_MS = Number(process.env.VEGA_REFLECT_EVERY_MS ?? 1_800_000);
 const SOCIAL_MS = Number(process.env.VEGA_SOCIAL_EVERY_MS ?? 300_000); // 同类多久自主寒暄一次
+const MUSE_MS = Number(process.env.VEGA_MUSE_EVERY_MS ?? 1_800_000); // 多久发一条公开心声（§8.1 B）
 const AUTH = process.env.VEGA_AUTH_TOKEN;
 const userName = process.env.VEGA_USER_NAME ?? '你';
 const REL = 'r_creator'; // 与她对话的人
@@ -104,6 +106,7 @@ interface Life {
   lastCheckpointAt: number;
   lastTickAt: number; // 回路健康：上次自主想念
   lastSocialAt: number; // 上次同类寒暄
+  lastMuseAt: number; // 上次公开心声
 }
 
 // 先天种子见 src/engine/seeds.ts（单一来源）。每条命按 id 取不同 archetype；出生即冻结、不可改写。
@@ -113,7 +116,7 @@ const lives: Life[] = LIVES.map((id, idx) => {
   const path = idx === 0 ? LIFE_PATH : join(DATA_DIR, `${id}.jsonl`);
   // C4：prod 拒绝内存/易失存储——否则重启=她被彻底重置。生产环境必须落盘。
   assertPersistenceSafeForProd({ storeKind: 'file', path });
-  return { id, store: createFileEventStore(id, path), path, peers: LIVES.filter((o) => o !== id), lastReflectAt: Date.now(), lastReflectSeq: 0, state: null, stateSeq: -1, lastCheckpointAt: 0, lastTickAt: 0, lastSocialAt: 0 };
+  return { id, store: createFileEventStore(id, path), path, peers: LIVES.filter((o) => o !== id), lastReflectAt: Date.now(), lastReflectSeq: 0, state: null, stateSeq: -1, lastCheckpointAt: 0, lastTickAt: 0, lastSocialAt: 0, lastMuseAt: Date.now() };
 });
 const lifeById = (id: string): Life | undefined => lives.find((l) => l.id === id);
 
@@ -833,6 +836,11 @@ const heartbeat = setInterval(async () => {
         runTurn(life.store, [{ type: 'REFLECTION_TRIGGERED', source: 'autonomous_loop', occurredAt: now(), payload: { scope: 'recent', windowFromSeq: life.lastReflectSeq, windowToSeq: life.store.version() } }]);
         life.lastReflectAt = Date.now();
         life.lastReflectSeq = life.store.version();
+      }
+      if (Date.now() - life.lastMuseAt > MUSE_MS) {
+        const o = await muse(life.store, mouth, now()); // 公开心声：不针对任何人、不含私密
+        life.lastMuseAt = Date.now();
+        if (o) bus.publish('musing', 'public', { life: life.id, text: o.utterance });
       }
       if (Date.now() - life.lastCheckpointAt > CHECKPOINT_MS) saveCheckpoint(life); // 定期落盘检查点（快重启）
     }).catch(() => { /* 单体单次失败不拖垮其他生命体 */ });

@@ -23,6 +23,8 @@
         feed = [{ ...ev.data, at: ev.at, id: ev.at + Math.random() }, ...feed].slice(0, 40);
       } else if (ev.type === 'reach_out') {
         feed = [{ reach: true, life: ev.data.life, text: ev.data.text, at: ev.at, id: ev.at + Math.random() }, ...feed].slice(0, 40);
+      } else if (ev.type === 'musing') {
+        feed = [{ muse: true, life: ev.data.life, text: ev.data.text, at: ev.at, id: ev.at + Math.random() }, ...feed].slice(0, 40);
       }
     });
   });
@@ -53,7 +55,9 @@
     {#if feed.length === 0}<p class="muted">她们安静着…过一会儿会有人开口。</p>{/if}
     {#each feed as f (f.id)}
       <div class="turn">
-        {#if f.reach}
+        {#if f.muse}
+          <span class="who">{f.life}</span> <span class="dim">的心声</span><br />{f.text}
+        {:else if f.reach}
           <span class="who">{f.life}</span> <span class="dim">想起了你们中的某个人</span><br />{f.text}
         {:else}
           <span class="who">{f.from}</span> <span class="dim">→ {f.to}</span><br />{f.text}
