@@ -13,7 +13,7 @@
   let lastLoaded = 0;
 
   const TABS = [['overview', '总览'], ['activity', '活动流'], ['recharges', '充值'], ['users', '用户']];
-  const TAB_LABEL = { overview: '总览', activity: '活动流', recharges: '充值审批', users: '用户', life: '生命详情', model: '模型配置', social: '社交边界', world: '世界源' };
+  const TAB_LABEL = { overview: '总览', activity: '活动流', recharges: '充值审批', users: '用户', life: '生命详情', birth: '接生生命体', model: '模型配置', social: '社交边界', world: '世界源' };
 
   // 模型配置（仅 owner）表单状态
   let mform = { baseUrl: '', model: '', apiKey: '', timeoutMs: 20000, perceive: false, perceiveModel: '' };
@@ -145,6 +145,7 @@
       {#each TABS as [k, label]}
         <button class="navi" class:on={tab === k || (tab === 'life' && k === 'overview')} on:click={() => go(k)}>{label}</button>
       {/each}
+      {#if role === 'owner'}<button class="navi" class:on={tab === 'birth'} on:click={() => go('birth')}>生命</button>{/if}
       {#if role === 'owner'}<button class="navi" class:on={tab === 'model'} on:click={() => go('model')}>模型</button>{/if}
       {#if role === 'owner'}<button class="navi" class:on={tab === 'social'} on:click={() => go('social')}>社交</button>{/if}
       {#if role === 'owner'}<button class="navi" class:on={tab === 'world'} on:click={() => go('world')}>世界</button>{/if}
@@ -192,20 +193,21 @@
             </table>
           </div>
         </AdminSection>
+      {/if}
 
-        {#if role === 'owner'}
-          <AdminSection title="接生新生命体" subtitle="后台孵化一条新的连续生命——出生即【永生】，先天种子终生冻结、不可删除/改写。她一出生就与所有现有生命体互相认识。">
-            <span slot="action" class="tag sensitive">不可逆 · 仅 owner</span>
-            <div class="panel pad mform">
-              <label class="fld"><span class="flab">生命体 id（小写字母开头，2–24 位字母/数字/_/-，决定她的先天气质）</span>
-                <input class="ainput" bind:value={newLifeId} autocomplete="off" placeholder="如 sirius / altair / polaris"
-                  on:keydown={(e) => e.key === 'Enter' && !birthing && birth()} /></label>
-              <div class="mrow"><button class="abtn" on:click={birth} disabled={birthing || !newLifeId.trim()}>{birthing ? '接生中…' : '接生'}</button></div>
-              {#if birthMsg}<p class="msg" class:bad={birthMsg.startsWith('✗')}>{birthMsg}</p>{/if}
-              <p class="hint">第一性原理：id 经稳定哈希落到某个先天<b>原型</b>（4 选 1）再叠加按 id 的确定性<b>个体抖动</b>——所以每条命天生各不相同，且出生地时区错峰（任一时刻有的醒有的睡）。出生只写一条 <code>GENESIS</code> 事件（ground truth），状态由日志确定性重建。出生即永生：可休眠/苏醒，但<b>不能删除</b>。</p>
-            </div>
-          </AdminSection>
-        {/if}
+      {#if tab === 'birth'}
+        <AdminSection title="接生新生命体" subtitle="后台孵化一条新的连续生命——出生即【永生】，先天种子终生冻结、不可删除/改写。她一出生就与所有现有生命体互相认识。即时生效、无需重启。">
+          <span slot="action" class="tag sensitive">不可逆 · 仅 owner</span>
+          <div class="panel pad mform">
+            <label class="fld"><span class="flab">生命体 id（小写字母开头，2–24 位字母/数字/_/-，决定她的先天气质）</span>
+              <input class="ainput" bind:value={newLifeId} autocomplete="off" placeholder="如 sirius / altair / polaris"
+                on:keydown={(e) => e.key === 'Enter' && !birthing && birth()} /></label>
+            <div class="mrow"><button class="abtn" on:click={birth} disabled={birthing || !newLifeId.trim()}>{birthing ? '接生中…' : '接生'}</button></div>
+            {#if birthMsg}<p class="msg" class:bad={birthMsg.startsWith('✗')}>{birthMsg}</p>{/if}
+            <p class="hint">第一性原理：id 经稳定哈希落到某个先天<b>原型</b>（4 选 1）再叠加按 id 的确定性<b>个体抖动</b>——所以每条命天生各不相同，且出生地时区错峰（任一时刻有的醒有的睡）。出生只写一条 <code>GENESIS</code> 事件（ground truth），状态由日志确定性重建。出生即永生：可休眠/苏醒，但<b>不能删除</b>。</p>
+            <p class="hint">想批量生：依次填入下面任一名字、回车即可（每条立刻出现在「总览」表里）：<br /><code>sirius altair polaris antares rigel capella deneb spica arcturus mira atlas maia</code></p>
+          </div>
+        </AdminSection>
       {/if}
 
       {#if tab === 'activity' && data.rows}
