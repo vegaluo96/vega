@@ -129,7 +129,8 @@
           <button class="btn-ghost btn" on:click={disconnectWx}>断开微信连接</button>
         {:else if qrImg}
           <p class="caption note">用<b>微信扫这个码</b>授权连接，扫完确认后稍等几秒自动完成。</p>
-          <img class="wxqr" src={qrSrc(qrImg)} alt="微信连接二维码" />
+          <img class="wxqr" src={qrSrc(qrImg)} alt="微信连接二维码" on:error={() => (wxMsg = '⚠️ 二维码图加载失败。它的地址/内容是（请把这串发我）：' + qrImg)} />
+          <p class="qraddr">{qrImg}</p>
           {#if qrPolling}<p class="caption">等待你扫码…</p>{/if}
         {:else}
           <p class="caption note">把微信接到 ZSKY：用微信扫码授权，之后在微信里就能和生命体聊。</p>
@@ -187,6 +188,7 @@
   .sel { flex: 1; min-height: 46px; }
   .ok { color: var(--success); font-size: 13px; margin: 12px 0 0; }
   .wxqr { display: block; width: 200px; height: 200px; margin: 12px auto 6px; background: #fff; border-radius: var(--r-sm); padding: 8px; image-rendering: pixelated; }
+  .qraddr { font-size: 11px; color: var(--faint); word-break: break-all; user-select: all; margin: 4px 0 0; }
 
   .row { display: flex; justify-content: space-between; align-items: center; padding: 13px 16px; border-bottom: 1px solid var(--border-subtle); }
   .row:last-child { border-bottom: 0; }
