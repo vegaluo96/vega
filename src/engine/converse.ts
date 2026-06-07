@@ -105,7 +105,11 @@ export async function reachOut(
   const bond = snapshot.bonds[relationshipId];
   if (!bond) return null;
   const ws = deriveWorkspace(snapshot, relationshipId);
-  const outreach: Workspace = { ...ws, intent: `你很想念${ws.relationshipDisplay}，主动、简短地跟ta说一句你此刻想ta了` };
+  const outreach: Workspace = {
+    ...ws,
+    intent: `你很想念${ws.relationshipDisplay}，主动、简短地跟ta说一句你此刻想ta了`, // 给"嘴"的语气指引（不会外露）
+    fallback: `${ws.relationshipDisplay}，我突然有点想你了。`, // 模型挂了也说人话（而非这条指令）
+  };
   let raw = '';
   try {
     raw = await mouth.speak({ ...outreach, lastUserMessage: '（此刻无人发起，是你自己想开口）', recentContext: recentTurns(store, relationshipId, 6) });

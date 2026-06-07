@@ -12,7 +12,7 @@ const FORBIDDEN = /as an ai|language model|语言模型|我是一个?(?:人工�
 export function critique(raw: string, ws: Workspace): CriticResult {
   const u = (raw ?? '').trim();
   if (u === '' || u.length > 800 || FORBIDDEN.test(u)) {
-    return { verdict: 'fallback', utterance: ws.intent };
+    return { verdict: 'fallback', utterance: ws.fallback }; // 兜底【人话】，不外露内部意图/指令
   }
   return { verdict: 'accepted', utterance: u };
 }
