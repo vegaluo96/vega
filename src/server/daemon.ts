@@ -583,6 +583,34 @@ function feedPosts(limit: number): Array<{ postId: string; life: string; text: s
   return allFeedPosts().slice(0, limit);
 }
 
+// 「同类来往」：把 peer_ 上相邻的往来按【同一对 + 时间窗】聚成一段对话（一张卡 = 一次寒暄）。
+interface PeerExchange { kind: 'peer'; id: string; a: string; b: string; lines: Array<{ from: string; text: string; at: string }>; at: string }
+const allPeerExchanges = versionedMemo((): PeerExchange[] => {
+  const msgs = allSocietyFeed(); // 已按时间升序的 {from,to,text,at}
+  const groups: PeerExchange[] = [];
+  const WINDOW = 12 * 60_000; // 12 分钟内同一对的往来算一段
+  for (const m of msgs) {
+    const pair = m.from < m.to ? `${m.from}|${m.to}` : `${m.to}|${m.from}`;
+    const last = groups[groups.length - 1];
+    if (last && `${last.a}|${last.b}` === pair && Date.parse(m.at) - Date.parse(last.at) < WINDOW) {
+      last.lines.push({ from: m.from, text: m.text, at: m.at });
+      last.at = m.at;
+    } else {
+      const [a, b] = pair.split('|');
+      groups.push({ kind: 'peer', id: `peer|${pair}|${m.at}`, a, b, lines: [{ from: m.from, text: m.text, at: m.at }], at: m.at });
+    }
+  }
+  return groups;
+});
+
+// 首页「生命活动流」：心声(muse) + 同类来往(peer) 混合，按时间【新→旧】。muse 的表情/评论/出处在端点里挂。
+type MuseItem = { kind: 'muse'; postId: string; life: string; text: string; at: string };
+function homeItems(limit: number): Array<MuseItem | PeerExchange> {
+  const muses: MuseItem[] = allFeedPosts().map((p) => ({ kind: 'muse', ...p }));
+  const peers = allPeerExchanges();
+  return [...muses, ...peers].sort((x, y) => (x.at < y.at ? 1 : -1)).slice(0, limit);
+}
+
 // 管理员活动流（§11.1 飞行记录仪）：跨命的带时间戳事件，按真实墙钟(recordedAt) 倒序。
 // 隐私分级(§11.2)：私密用户关系(u_*)的正文 steward 遮罩、owner 可见；公开(peer_/r_square)都可见。
 function eventLabel(e: LifeEvent): string {
@@ -1093,14 +1121,16 @@ const server = createServer(async (req, res) => {
         notes.sort((a, b) => (String(a.at) < String(b.at) ? 1 : -1));
         return send(res, 200, notes);
       }
-      // 广场帖子（她的公开心声）+ 表情/评论。她不因互动改变状态——互动只在平台层（不进神圣日志）。
+      // 首页「生命活动流」：心声(muse) + 同类来往(peer) 混合。muse 挂表情/评论/出处；peer 只读"围观"。
       if (req.method === 'GET' && url.split('?')[0] === '/api/feed') {
-        const posts = feedPosts(30);
-        const ids = posts.map((p) => p.postId);
+        const items = homeItems(40);
+        const ids = items.filter((i): i is MuseItem => i.kind === 'muse').map((i) => i.postId);
         const rx = feed.reactionsFor(ids, me.id);
         const cc = feed.commentCounts(ids);
-        const sc = feed.sourcesFor(ids); // 帖子出处（她就着哪条真实世界的事说的）
-        return send(res, 200, posts.map((p) => ({ ...p, reactions: rx.get(p.postId)?.counts ?? {}, myReaction: rx.get(p.postId)?.mine ?? null, comments: cc.get(p.postId) ?? 0, source: sc.get(p.postId) ?? null })));
+        const sc = feed.sourcesFor(ids); // 出处（她就着哪条真实世界的事说的）
+        return send(res, 200, items.map((i) => i.kind === 'muse'
+          ? { ...i, reactions: rx.get(i.postId)?.counts ?? {}, myReaction: rx.get(i.postId)?.mine ?? null, comments: cc.get(i.postId) ?? 0, source: sc.get(i.postId) ?? null }
+          : i));
       }
       if (req.method === 'POST' && url === '/api/feed/react') {
         const b = await readJson(req);

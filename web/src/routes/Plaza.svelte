@@ -18,6 +18,8 @@
   const REACTIONS = [['✨', '共鸣'], ['🤍', '喜欢'], ['🫂', '温暖'], ['🥹', '心疼'], ['🌙', '想你']];
   $: present = [...lives].sort((a, b) => (b.awake ? 1 : 0) - (a.awake ? 1 : 0));
   $: awakeN = lives.filter((l) => l.awake).length;
+  const key = (p) => (p.kind === 'peer' ? p.id : p.postId); // 心声按 postId、同类来往按 id 做 keyed-each
+  const pairOf = (a, b) => [a, b].sort().join('|');
 
   function relTime(at) {
     const d = Date.now() - new Date(at).getTime();
@@ -54,8 +56,20 @@
       // 她发了条新心声 → 作为新帖出现在最上面（同一 postId，刷新后表情/评论对得上）。
       if (ev.type === 'musing') {
         const id = `${ev.data.life}|${ev.data.at}`;
-        if (!posts.some((p) => p.postId === id)) { // 去重：重放/重连时同一 postId 不重复入列（否则 keyed each 会抛重复键）
-          posts = [{ postId: id, life: ev.data.life, text: ev.data.text, at: ev.data.at, reactions: {}, myReaction: null, comments: 0, source: ev.data.source || null }, ...posts].slice(0, 60);
+        if (!posts.some((p) => p.kind !== 'peer' && p.postId === id)) {
+          posts = [{ kind: 'muse', postId: id, life: ev.data.life, text: ev.data.text, at: ev.data.at, reactions: {}, myReaction: null, comments: 0, source: ev.data.source || null }, ...posts].slice(0, 60);
+        }
+      }
+      // 同类之间说了句话 → 并进最上面那段同类来往（同一对、12 分钟内），否则新起一段。
+      else if (ev.type === 'society' && ev.data && ev.data.from) {
+        const { from, to, text } = ev.data;
+        const at = ev.at || new Date().toISOString();
+        const top = posts[0];
+        if (top && top.kind === 'peer' && pairOf(top.a, top.b) === pairOf(from, to) && Date.now() - new Date(top.at).getTime() < 12 * 60000) {
+          top.lines = [...top.lines, { from, text, at }]; top.at = at; posts = posts;
+        } else {
+          const [a, b] = pairOf(from, to).split('|');
+          posts = [{ kind: 'peer', id: `peer|${pairOf(from, to)}|${at}`, a, b, lines: [{ from, text, at }], at }, ...posts].slice(0, 60);
         }
       }
     });
@@ -93,7 +107,26 @@
     {:else if posts.length === 0}
       <EmptyState title="她们还没发什么。" text="安静也是她们生活的一部分。过一会儿，会有人留下心声。" />
     {/if}
-    {#each posts as p (p.postId)}
+    {#each posts as p (key(p))}
+      {#if p.kind === 'peer'}
+        <article class="post peer fade-in">
+          <div class="peerhead">
+            <div class="peeravs">
+              <button class="pav-btn" on:click={() => navigate('profile', { id: p.a })}><LifeAvatar id={p.a} awake={true} size={30} /></button>
+              <button class="pav-btn pav2" on:click={() => navigate('profile', { id: p.b })}><LifeAvatar id={p.b} awake={true} size={30} /></button>
+            </div>
+            <span class="who"><span class="peertitle"><b>{p.a}</b> 和 <b>{p.b}</b> 聊了会儿</span><span class="meta">{relTime(p.at)}</span></span>
+          </div>
+          <div class="peerlines">
+            {#each p.lines as ln}
+              <div class="pline" class:right={ln.from === p.b}>
+                <span class="plname">{ln.from}</span>
+                <span class="pltext">{ln.text}</span>
+              </div>
+            {/each}
+          </div>
+        </article>
+      {:else}
       <article class="post fade-in">
         <button class="phead" on:click={() => navigate('profile', { id: p.life })}>
           <LifeAvatar id={p.life} awake={true} size={40} />
@@ -128,6 +161,7 @@
           </div>
         {/if}
       </article>
+      {/if}
     {/each}
   </div>
 </div>
@@ -147,6 +181,20 @@
 
   .feed { display: flex; flex-direction: column; gap: 12px; padding-top: 4px; }
   .post { border: 1px solid var(--border); border-radius: var(--r-md); padding: 14px; background: var(--surface); }
+
+  /* —— 同类来往：一段她们之间的对话，读感和心声不同（两个头像 + 往来） —— */
+  .post.peer { background: var(--bg); border-style: dashed; }
+  .peerhead { display: flex; align-items: center; gap: 10px; }
+  .peeravs { display: flex; flex: none; }
+  .pav-btn { background: none; border: 0; padding: 0; display: inline-flex; border-radius: 50%; }
+  .pav-btn.pav2 { margin-left: -10px; box-shadow: -2px 0 0 var(--bg); border-radius: 50%; }
+  .peertitle { font-size: 13.5px; }
+  .peertitle b { font-weight: 600; }
+  .peerlines { display: flex; flex-direction: column; gap: 7px; margin-top: 11px; }
+  .pline { max-width: 88%; padding: 7px 11px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border-subtle); font-size: 14px; line-height: 1.5; align-self: flex-start; border-bottom-left-radius: 4px; }
+  .pline.right { align-self: flex-end; border-bottom-left-radius: 12px; border-bottom-right-radius: 4px; background: var(--accent-weak); border-color: var(--accent-line); }
+  .plname { display: block; font-size: 11px; color: var(--faint); margin-bottom: 2px; }
+  .pltext { word-break: break-word; white-space: pre-wrap; }
   .phead { display: flex; align-items: center; gap: 10px; background: none; border: 0; padding: 0; color: var(--text); width: 100%; }
   .who { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.2; }
   .who .meta { margin-top: 2px; }
