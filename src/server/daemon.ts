@@ -79,7 +79,10 @@ const accounts = createAccountStore(ACCOUNTS_DB, {
 });
 const bearer = (req: IncomingMessage): string => {
   const h = req.headers.authorization ?? '';
-  return h.startsWith('Bearer ') ? h.slice(7) : '';
+  if (h.startsWith('Bearer ')) return h.slice(7);
+  // SSE：EventSource 不能设自定义 header，允许 ?token= 兜底（同源）。
+  const qs = (req.url ?? '').split('?')[1];
+  return qs ? (new URLSearchParams(qs).get('token') ?? '') : '';
 };
 const sessionAccount = (req: IncomingMessage): Account | null => accounts.authenticate(bearer(req));
 const publicAccount = (a: Account): Record<string, unknown> => ({ id: a.id, handle: a.handle, role: a.role, email: a.email, emailVerified: a.emailVerified });

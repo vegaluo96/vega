@@ -1,0 +1,52 @@
+// ZSKY API 客户端：吃 vega 引擎的 /api。会话令牌存 localStorage，所有请求带 Bearer。
+import { writable } from 'svelte/store';
+
+const TOKEN_KEY = 'zsky-token';
+export const session = writable(localStorage.getItem(TOKEN_KEY) || '');
+session.subscribe((t) => {
+  if (t) localStorage.setItem(TOKEN_KEY, t);
+  else localStorage.removeItem(TOKEN_KEY);
+});
+
+let token = localStorage.getItem(TOKEN_KEY) || '';
+session.subscribe((t) => (token = t));
+
+async function req(method, path, body) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw Object.assign(new Error(data.error || `HTTP ${res.status}`), { status: res.status, data });
+  return data;
+}
+
+export const api = {
+  register: (email, password, handle) => req('POST', '/api/auth/register', { email, password, handle }),
+  login: (email, password) => req('POST', '/api/auth/login', { email, password }),
+  logout: () => req('POST', '/api/auth/logout'),
+  me: () => req('GET', '/api/me'),
+  lives: () => req('GET', '/api/lives'),
+  say: (lifeId, content) => req('POST', `/api/lives/${lifeId}/say`, { content }),
+  bind: (lifeId) => req('POST', '/api/bindings', { lifeId }),
+};
+
+export function setSession(t) {
+  session.set(t || '');
+}
+export function clearSession() {
+  session.set('');
+}
+
+// SSE 实时流（广场/她想你了）。返回 EventSource，调用方负责 close。
+export function stream(onEvent) {
+  // EventSource 不支持自定义 header，故用 query 传令牌（同源；生产可改 cookie）。
+  const es = new EventSource(`/api/stream?token=${encodeURIComponent(token)}`);
+  es.onmessage = (e) => {
+    try {
+      onEvent(JSON.parse(e.data));
+    } catch {
+      /* ignore */
+    }
+  };
+  return es;
+}

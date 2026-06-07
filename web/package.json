@@ -1,0 +1,17 @@
+{
+  "name": "zsky-web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "ZSKY 用户前台（Vite + Svelte）。吃 vega 引擎的 /api。内核仍零依赖，前端自带 devDeps。",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^3.1.2",
+    "svelte": "^4.2.19",
+    "vite": "^5.4.10"
+  }
+}
