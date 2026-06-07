@@ -67,6 +67,8 @@ export interface AccountStore {
   issueEmailVerification(userId: string): string;
   verifyEmail(token: string): boolean;
   setStatus(userId: string, status: AccountStatus): void;
+  listUsers(): Array<Account & { balance: number }>; // 管理后台：账号元数据 + 余额（无口令/无私聊）
+  pendingRechargeCount(): number;
   // 微信绑定（§12）：二维码一次性令牌 → openid↔user↔life。openid 等 PII 只在账号层，绝不进神圣日志。
   createBindToken(userId: string, lifeId: string): string;
   bindWechat(token: string, openid: string): { userId: string; lifeId: string } | null;
@@ -213,6 +215,14 @@ export function createAccountStore(path = ':memory:', opts: AccountStoreOptions 
     setStatus(userId, status) {
       db.prepare('UPDATE users SET status=? WHERE id=?').run(status, userId);
       if (status === 'blocked') db.prepare('DELETE FROM sessions WHERE user_id=?').run(userId); // 封禁即踢下线
+    },
+    listUsers() {
+      const rows = db.prepare('SELECT * FROM users ORDER BY created_at DESC').all() as unknown as UserRow[];
+      return rows.map((r) => ({ ...toAccount(r), balance: balance(r.id) }));
+    },
+    pendingRechargeCount() {
+      const r = db.prepare("SELECT COUNT(*) AS n FROM recharge_requests WHERE status='pending'").get() as { n: number };
+      return Number(r.n);
     },
     createBindToken(userId, lifeId) {
       const token = genToken();

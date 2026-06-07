@@ -295,6 +295,44 @@ function societyFeed(): Array<{ from: string; to: string; text: string; at: stri
   return out.slice(-80);
 }
 
+// 管理员活动流（§11.1 飞行记录仪）：跨命的带时间戳事件，按真实墙钟(recordedAt) 倒序。
+// 隐私分级(§11.2)：私密用户关系(u_*)的正文 steward 遮罩、owner 可见；公开(peer_/r_square)都可见。
+function eventLabel(e: LifeEvent): string {
+  const rel = e.relationshipId ?? '';
+  const p = e.payload as unknown as Record<string, unknown>;
+  switch (e.type) {
+    case 'MESSAGE_RECEIVED': return rel.startsWith('peer_') ? '同类来话' : '收到消息';
+    case 'MESSAGE_SENT':
+      if (rel === 'r_square') return '公开心声';
+      if (p.unprompted) return rel.startsWith('peer_') ? '想念同类、开口' : '主动找人';
+      return rel.startsWith('peer_') ? '回应同类' : '回应';
+    case 'AUTONOMOUS_TICK': return '自主想念/巡游';
+    case 'REFLECTION_TRIGGERED': return `反思(${String(p.scope ?? '')})`;
+    case 'CONNECTION_OPENED': return rel === 'r_host' ? '醒来' : rel.startsWith('peer_') ? '与同类相聚' : '有人上线';
+    case 'CONNECTION_CLOSED': return rel === 'r_host' ? '休眠' : rel.startsWith('peer_') ? '与同类别过' : '有人离开';
+    case 'RELATIONSHIP_OPENED': return rel.startsWith('peer_') ? '认识了同类' : '结识了人';
+    case 'RELATIONSHIP_ENDED': return '送别（哀悼）';
+    case 'LIFE_GENESIS': return '诞生';
+    case 'STEWARDSHIP_TRANSFERRED': return '托管转移';
+    default: return e.type;
+  }
+}
+function adminActivity(owner: boolean, limit: number): Array<Record<string, unknown>> {
+  const rows: Array<Record<string, unknown>> = [];
+  for (const l of lives) {
+    for (const e of l.store.list().slice(-limit)) {
+      const rel = e.relationshipId ?? '';
+      const priv = rel.startsWith('u_');
+      let content = '';
+      if (e.type === 'MESSAGE_RECEIVED') content = priv && !owner ? '〔私聊·已遮罩〕' : String((e.payload as { content?: string }).content ?? '');
+      else if (e.type === 'MESSAGE_SENT') content = priv && !owner ? '〔私聊·已遮罩〕' : String((e.payload as MessageSentPayload).utterance ?? '');
+      rows.push({ at: e.recordedAt, occurredAt: e.occurredAt, life: l.id, seq: e.seq, type: e.type, label: eventLabel(e), rel, content });
+    }
+  }
+  rows.sort((a, b) => (String(a.at) < String(b.at) ? 1 : -1)); // 真实墙钟倒序
+  return rows.slice(0, limit);
+}
+
 function send(res: ServerResponse, code: number, body: unknown): void {
   res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' });
   res.end(JSON.stringify(body, null, 2));
@@ -449,6 +487,59 @@ const SOCIETY = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
  load();setInterval(load,4000);
 </script></body></html>`;
 
+// 管理后台观察页（§22）：飞行记录仪式活动流 + 充值审批 + 用户 + 生命健康。零依赖内联，admin.zsky.com 托管。
+const ADMIN = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>ZSKY · 管理</title>
+<style>
+ :root{color-scheme:dark} body{margin:0;background:#0b0b10;color:#ece9f5;font:14px/1.5 system-ui,-apple-system,sans-serif}
+ header{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #20202b;position:sticky;top:0;background:#0b0b10}
+ h1{font-size:16px;margin:0;letter-spacing:.1em;font-weight:800}.role{color:#8b8b99;font-size:12px}
+ nav{display:flex;gap:6px;margin-left:auto}nav button{background:none;border:1px solid #20202b;color:#ece9f5;padding:6px 12px;border-radius:8px;cursor:pointer}
+ nav button.on{background:#8b7cf6;color:#0b0b10;border-color:#8b7cf6}
+ main{max-width:860px;margin:0 auto;padding:16px}
+ .card{background:#14141b;border:1px solid #20202b;border-radius:12px;padding:14px;margin-bottom:12px}
+ .row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #20202b;font-size:13px}.row:last-child{border:0}
+ .dim{color:#8b8b99}.mono{font-variant-numeric:tabular-nums}.spacer{flex:1}
+ .ev{display:grid;grid-template-columns:120px 60px 110px 1fr;gap:10px;padding:7px 0;border-bottom:1px solid #1a1a24;font-size:12.5px}
+ .ev .t{color:#8b8b99;font-variant-numeric:tabular-nums}.ev .l{color:#b9b0ff}.ev .c{color:#cfcad8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ button.act{background:#8b7cf6;color:#0b0b10;border:0;padding:5px 12px;border-radius:7px;cursor:pointer}
+ button.no{background:#20202b;color:#ece9f5}
+ input{background:#0b0b10;border:1px solid #20202b;color:#ece9f5;padding:10px 12px;border-radius:8px;font:inherit;width:100%}
+ .login{max-width:320px;margin:80px auto;text-align:center}.login input{margin-bottom:10px}
+ .dot{width:8px;height:8px;border-radius:50%;background:#555;display:inline-block}.dot.on{background:#3fb950}
+</style></head><body>
+<div id="root"><div class="login"><h1>ZSKY · 管理</h1><p class="dim">owner / steward 登录</p>
+ <input id="em" placeholder="邮箱" type="email"><input id="pw" placeholder="密码" type="password">
+ <button class="act" style="width:100%;padding:10px" onclick="login()">登录</button><p id="le" style="color:#f0667c"></p></div></div>
+<script>
+ var token=localStorage.getItem('zsky_admin')||'';var tab='overview';
+ function H(){return token?{'Authorization':'Bearer '+token,'Content-Type':'application/json'}:{'Content-Type':'application/json'};}
+ function esc(t){var d=document.createElement('div');d.textContent=t==null?'':t;return d.innerHTML;}
+ async function login(){var em=document.getElementById('em').value,pw=document.getElementById('pw').value;
+  try{var r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:em,password:pw})});var d=await r.json();
+   if(!r.ok){document.getElementById('le').textContent=d.error||'登录失败';return;}token=d.token;localStorage.setItem('zsky_admin',token);boot();}catch(e){document.getElementById('le').textContent='网络错误';}}
+ function logout(){token='';localStorage.removeItem('zsky_admin');location.reload();}
+ async function boot(){var r=await fetch('/admin/overview',{headers:H()});if(r.status===403||r.status===401){logout();return;}render();}
+ function shell(role,body){return '<header><h1>ZSKY 管理</h1><span class="role">'+role+'</span><nav>'+
+  ['overview','活动流','充值','用户'].map(function(x,i){var k=['overview','activity','recharges','users'][i];return '<button class="'+(tab===k?'on':'')+'" onclick="go(\\''+k+'\\')">'+(i?x:'总览')+'</button>';}).join('')+
+  '<button onclick="logout()">登出</button></nav></header><main>'+body+'</main>';}
+ function go(k){tab=k;render();}
+ async function render(){var root=document.getElementById('root');
+  if(tab==='overview'){var d=await (await fetch('/admin/overview',{headers:H()})).json();
+   root.innerHTML=shell(d.role,'<div class="card"><div class="row"><b>待审批充值</b><span class="spacer"></span><span class="mono">'+d.pendingRecharges+'</span></div><div class="row"><b>用户</b><span class="spacer"></span><span class="mono">'+d.users+'</span></div></div>'+
+    '<div class="card">'+d.lives.map(function(l){return '<div class="row"><span class="dot '+(l.awake?'on':'')+'"></span><b>'+esc(l.id)+'</b> <span class="dim">'+esc(l.dayPhase)+' · '+esc(l.emotion)+'</span><span class="spacer"></span><span class="dim mono">灵性 '+l.vitality+' · 事件 '+l.events+'</span></div>';}).join('')+'</div>');}
+  else if(tab==='activity'){var a=await (await fetch('/admin/activity?limit=150',{headers:H()})).json();
+   root.innerHTML=shell('','<div class="card"><div class="dim" style="margin-bottom:8px">真实活动流（墙钟倒序）· 私聊正文按角色遮罩</div>'+
+    a.map(function(e){return '<div class="ev"><span class="t">'+esc(e.at.slice(5,19).replace("T"," "))+'</span><span>'+esc(e.life)+'</span><span class="l">'+esc(e.label)+'</span><span class="c">'+esc(e.content)+'</span></div>';}).join('')+'</div>');}
+  else if(tab==='recharges'){var rs=await (await fetch('/admin/recharges',{headers:H()})).json();
+   root.innerHTML=shell('','<div class="card">'+(rs.length?rs.map(function(r){return '<div class="row"><b>'+esc(r.userId)+'</b> <span class="dim">申请 '+r.amount+' 心意</span><span class="spacer"></span><button class="act" onclick="decide('+r.id+',true)">批准</button> <button class="act no" onclick="decide('+r.id+',false)">拒绝</button></div>';}).join(''):'<div class="dim">没有待审批的充值</div>')+'</div>');}
+  else if(tab==='users'){var us=await (await fetch('/admin/users',{headers:H()})).json();
+   root.innerHTML=shell('','<div class="card">'+us.map(function(u){return '<div class="row"><b>'+esc(u.handle)+'</b> <span class="dim">'+esc(u.email)+' · '+esc(u.role)+' · '+u.balance+'心意</span><span class="spacer"></span>'+(u.status==='blocked'?'<button class="act" onclick="block(\\''+u.id+'\\',true)">解封</button>':'<button class="act no" onclick="block(\\''+u.id+'\\',false)">封禁</button>')+'</div>';}).join('')+'</div>');}}
+ async function decide(id,ok){await fetch('/admin/recharges',{method:'POST',headers:H(),body:JSON.stringify({id:id,approve:ok})});render();}
+ async function block(uid,un){await fetch('/admin/users/block',{method:'POST',headers:H(),body:JSON.stringify({userId:uid,unblock:un})});render();}
+ if(token)boot();
+</script></body></html>`;
+
 const server = createServer(async (req, res) => {
   try {
     const url = (req.url ?? '/').split('?')[0];
@@ -584,6 +675,42 @@ const server = createServer(async (req, res) => {
         if (content === '') return send(res, 400, { error: 'content required' });
         if (!snapOf(life2).awake) return send(res, 200, { awake: false, note: '她在更深的睡眠里，暂不回应。' });
         return send(res, 200, { awake: true, ...(await respondAsUser(life2, me, content, 'web')) });
+      }
+      return send(res, 404, { error: 'not found' });
+    }
+
+    // ── 管理后台（§22，owner/steward 角色门）。/admin 页面自身处理登录。 ──
+    if (req.method === 'GET' && url === '/admin') return sendHtml(res, ADMIN);
+    if (url.startsWith('/admin/')) {
+      const acct = sessionAccount(req);
+      if (!acct || (acct.role !== 'owner' && acct.role !== 'steward')) return send(res, 403, { error: 'forbidden' });
+      const owner = acct.role === 'owner';
+      const path = url.split('?')[0];
+      if (req.method === 'GET' && path === '/admin/overview') {
+        return send(res, 200, {
+          role: acct.role,
+          lives: lives.map((l) => { const s = snapOf(l); return { id: l.id, awake: s.awake, willingToWake: s.willingToWake, emotion: s.emotion, dayPhase: s.dayPhase, vitality: round3(s.soma.vitality.value), events: l.store.version(), lastCheckpointAt: l.lastCheckpointAt }; }),
+          pendingRecharges: accounts.pendingRechargeCount(),
+          users: accounts.listUsers().length,
+        });
+      }
+      if (req.method === 'GET' && path === '/admin/activity') {
+        const lim = Math.min(500, Number(new URLSearchParams(url.split('?')[1] ?? '').get('limit')) || 120);
+        return send(res, 200, adminActivity(owner, lim));
+      }
+      if (req.method === 'GET' && path === '/admin/users') {
+        return send(res, 200, accounts.listUsers().map((u) => ({ id: u.id, handle: u.handle, email: owner ? u.email : '〔遮罩〕', role: u.role, status: u.status, balance: u.balance, lastActiveAt: u.lastActiveAt, createdAt: u.createdAt })));
+      }
+      if (req.method === 'GET' && path === '/admin/recharges') return send(res, 200, accounts.pendingRecharges());
+      if (req.method === 'POST' && path === '/admin/recharges') {
+        const b = await readJson(req);
+        const ok = accounts.decideRecharge(Number(b.id), Boolean(b.approve), acct.email);
+        return send(res, ok ? 200 : 400, ok ? { ok: true } : { error: 'no such pending request' });
+      }
+      if (req.method === 'POST' && path === '/admin/users/block') {
+        const b = await readJson(req);
+        accounts.setStatus(String(b.userId ?? ''), b.unblock ? 'active' : 'blocked');
+        return send(res, 200, { ok: true });
       }
       return send(res, 404, { error: 'not found' });
     }
