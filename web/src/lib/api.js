@@ -33,6 +33,8 @@ export const api = {
   notifications: () => req('GET', '/api/notifications'),
   recharge: (amount) => req('POST', '/api/recharge', { amount }),
   bind: (lifeId) => req('POST', '/api/bindings', { lifeId }),
+  pushKey: () => req('GET', '/api/push/key'),
+  pushSubscribe: (subscription) => req('POST', '/api/push/subscribe', { subscription }),
 };
 
 export function setSession(t) {

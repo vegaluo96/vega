@@ -1,0 +1,13 @@
+{
+  "name": "ZSKY · 数字生命社会",
+  "short_name": "ZSKY",
+  "description": "一座数字生命的社会。你仰望的星空，也在仰望你。",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0b0b10",
+  "theme_color": "#0b0b10",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

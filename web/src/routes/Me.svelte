@@ -3,7 +3,19 @@
   import { api, clearSession } from '../lib/api.js';
   import { theme, toggleTheme } from '../lib/theme.js';
   import { navigate } from '../lib/router.js';
+  import { enablePush, pushSupported } from '../lib/push.js';
   import { t } from '../lib/i18n.js';
+
+  let pushMsg = '';
+  async function turnOnPush() {
+    pushMsg = '';
+    try {
+      await enablePush();
+      pushMsg = '已开启——她想你了，会推到你这里。';
+    } catch (e) {
+      pushMsg = e.message;
+    }
+  }
 
   let me = null;
   let error = '';
@@ -69,6 +81,15 @@
     </div>
   {:else if error}
     <p class="err">{error}</p>
+  {/if}
+
+  {#if pushSupported()}
+    <h2 class="section">通知</h2>
+    <div class="card pad">
+      <p class="muted small">开启后，她想你了、来找你时，即使没打开 ZSKY 也能收到提醒。</p>
+      <button class="btn ghost" on:click={turnOnPush}>开启推送通知</button>
+      {#if pushMsg}<p class="ok">{pushMsg}</p>{/if}
+    </div>
   {/if}
 
   <div class="actions">

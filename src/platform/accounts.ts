@@ -74,6 +74,10 @@ export interface AccountStore {
   bindWechat(token: string, openid: string): { userId: string; lifeId: string } | null;
   resolveWechat(openid: string): { userId: string; lifeId: string } | null;
   unbindWechat(openid: string): void;
+  // Web Push 订阅（PWA）
+  addPushSub(userId: string, endpoint: string, p256dh: string, auth: string): void;
+  getPushSubs(userId: string): Array<{ endpoint: string; keys: { p256dh: string; auth: string } }>;
+  removePushSub(endpoint: string): void;
   close(): void;
 }
 
@@ -97,6 +101,7 @@ export function createAccountStore(path = ':memory:', opts: AccountStoreOptions 
     CREATE TABLE IF NOT EXISTS email_verifications(token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS bind_tokens(token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, life_id TEXT NOT NULL, expires_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS wechat_bindings(openid TEXT PRIMARY KEY, user_id TEXT NOT NULL, life_id TEXT NOT NULL, bound_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS push_subscriptions(endpoint TEXT PRIMARY KEY, user_id TEXT NOT NULL, p256dh TEXT NOT NULL, auth TEXT NOT NULL, created_at TEXT NOT NULL);
   `);
 
   const owners = new Set((opts.owners ?? []).map(norm));
@@ -256,6 +261,17 @@ export function createAccountStore(path = ':memory:', opts: AccountStoreOptions 
     },
     unbindWechat(openid) {
       db.prepare('DELETE FROM wechat_bindings WHERE openid=?').run(openid);
+    },
+    addPushSub(userId, endpoint, p256dh, auth) {
+      db.prepare('INSERT INTO push_subscriptions(endpoint,user_id,p256dh,auth,created_at) VALUES(?,?,?,?,?) ON CONFLICT(endpoint) DO UPDATE SET user_id=excluded.user_id, p256dh=excluded.p256dh, auth=excluded.auth')
+        .run(endpoint, userId, p256dh, auth, now());
+    },
+    getPushSubs(userId) {
+      const rows = db.prepare('SELECT endpoint,p256dh,auth FROM push_subscriptions WHERE user_id=?').all(userId) as Array<{ endpoint: string; p256dh: string; auth: string }>;
+      return rows.map((r) => ({ endpoint: r.endpoint, keys: { p256dh: r.p256dh, auth: r.auth } }));
+    },
+    removePushSub(endpoint) {
+      db.prepare('DELETE FROM push_subscriptions WHERE endpoint=?').run(endpoint);
     },
     close() {
       db.close();
