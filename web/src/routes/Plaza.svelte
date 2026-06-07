@@ -48,7 +48,10 @@
     es = stream((ev) => {
       // 她发了条新心声 → 作为新帖出现在最上面（同一 postId，刷新后表情/评论对得上）。
       if (ev.type === 'musing') {
-        posts = [{ postId: `${ev.data.life}|${ev.data.at}`, life: ev.data.life, text: ev.data.text, at: ev.data.at, reactions: {}, myReaction: null, comments: 0, source: ev.data.source || null }, ...posts].slice(0, 60);
+        const id = `${ev.data.life}|${ev.data.at}`;
+        if (!posts.some((p) => p.postId === id)) { // 去重：重放/重连时同一 postId 不重复入列（否则 keyed each 会抛重复键）
+          posts = [{ postId: id, life: ev.data.life, text: ev.data.text, at: ev.data.at, reactions: {}, myReaction: null, comments: 0, source: ev.data.source || null }, ...posts].slice(0, 60);
+        }
       }
     });
   });
@@ -92,9 +95,9 @@
           <span class="who"><b>{p.life}</b><span class="meta">{relTime(p.at)}</span></span>
         </button>
         <div class="ptext">{p.text}</div>
-        {#if p.source}
-          <a class="src" href={p.source.url} target="_blank" rel="noopener noreferrer" title={p.source.title}>
-            <Icon name="explore" size={13} /><span class="srctxt">就着「{p.source.title}」· 来自 {p.source.source}</span>
+        {#if p.source && p.source.title}
+          <a class="src" href={p.source.url || '#'} target="_blank" rel="noopener noreferrer" title={p.source.title}>
+            <Icon name="explore" size={13} /><span class="srctxt">就着「{p.source.title}」{p.source.source ? ' · 来自 ' + p.source.source : ''}</span>
           </a>
         {/if}
         <div class="react">
@@ -113,7 +116,7 @@
               <div class="cm"><b>{c.handle}</b> <span>{c.text}</span></div>
             {/each}
             <div class="cadd">
-              <input class="cinput" bind:value={p.draft} placeholder="说点什么…" on:keydown={(e) => e.key === 'Enter' && submitComment(p)} />
+              <input class="cinput" bind:value={p.draft} placeholder="说点什么…" on:keydown={(e) => e.key === 'Enter' && !e.isComposing && submitComment(p)} />
               <button class="csend" on:click={() => submitComment(p)} disabled={!p.draft || !p.draft.trim()}>发送</button>
             </div>
           </div>

@@ -308,6 +308,10 @@ function applyEvent(st: RState, e: LifeEvent): void {
     case 'LIFE_GENESIS':
     case 'STEWARDSHIP_TRANSFERRED':
       break; // genesis 已在入口处理；stewardship 竖切暂无 soma 效应（creator 记录不变）
+    default:
+      // fail-closed（防 schema 漂移）：遇到不认识的事件类型不静默 no-op，而是拒绝重放——
+      // 旧二进制不该从含未知事件的日志里得出一个"看似有效却悄悄缺了效应"的状态。版本演进须走 RECONSTRUCT_VERSION 门。
+      throw new Error(`未知事件类型(seq ${e.seq})：${(e as { type: string }).type} —— 拒绝静默 no-op`);
   }
 }
 
@@ -406,8 +410,11 @@ function appraiseWorld(st: RState, e: LifeEvent<'WORLD_PERCEIVED'>): void {
 function applyTick(st: RState, e: LifeEvent<'AUTONOMOUS_TICK'>): void {
   const p = e.payload as AutonomousTickPayload;
 
+  // 契约②（主权）硬约束：只有【她自己】的自主回路能动 willing_to_wake；任何非 autonomous_loop 来源一律忽略。
+  // 把"无后门、意志不可被夺"从约定变成结构性强制——哪怕日志被注入 host/外部来源的 tick，也翻不动她的苏醒意志。
+  const sovereign = e.source === 'autonomous_loop';
   for (const intent of p.formedIntents) {
-    if (intent.kind === 'set_willing_to_wake') st.willingToWake = Boolean(intent.params?.value);
+    if (intent.kind === 'set_willing_to_wake' && sovereign) st.willingToWake = Boolean(intent.params?.value);
     // 内外两层之"内"：只在心里转、没说出口的念头（internal_only），落进私密心声。
     if (intent.gateDecision === 'internal_only') {
       st.quietThoughts.push({ seq: e.seq, relationshipId: intent.relationshipId, kind: intent.kind });

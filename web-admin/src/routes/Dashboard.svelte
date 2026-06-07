@@ -293,7 +293,7 @@
       {#if tab === 'world' && data.world}
         {@const w = data.world}
         <AdminSection title="世界源" subtitle="她们读的「真实世界」——新闻 / 预测市场。读到的事会轻轻染色她的状态，也成为同类讨论与发帖的话题。即时生效，无需重启。">
-          <span slot="action" class="tag {w.enabled ? 'ok' : 'sensitive'}">{w.enabled ? '已接入 · ' + w.rss.length + ' RSS' + (w.polymarket ? ' + Polymarket' : '') : '未接世界（站内自处）'}</span>
+          <span slot="action" class="tag {w.enabled ? 'ok' : 'sensitive'}">{w.enabled ? '已接入 · ' + (w.rss || []).length + ' RSS' + (w.polymarket ? ' + Polymarket' : '') : '未接世界（站内自处）'}</span>
           <div class="panel pad mform">
             <label class="fld"><span class="flab">新闻 RSS 地址（每行一个，可多个）</span>
               <textarea class="ainput wta" rows="5" bind:value={wform.rss} placeholder={"https://feeds.bbci.co.uk/news/world/rss.xml\nhttps://www.zhihu.com/rss"}></textarea></label>
@@ -472,9 +472,6 @@
   .cbar { height: 5px; border-radius: 999px; background: var(--panel-2); overflow: hidden; }
   .cfill { display: block; height: 100%; background: var(--accent); border-radius: 999px; }
   .cmeta { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .prow { padding: 11px 16px; border-bottom: 1px solid var(--border-subtle); display: flex; gap: 10px; align-items: baseline; }
-  .prow:last-child { border-bottom: 0; }
-  .prow .dim { font-size: 12.5px; }
   .mem { padding: 9px 16px; border-bottom: 1px solid var(--border-subtle); font-size: 13px; line-height: 1.55; }
   .mem:last-child { border-bottom: 0; }
   .maff { color: var(--faint-c); font-size: 11.5px; }

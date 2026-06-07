@@ -106,8 +106,7 @@ function worldStatus(): Record<string, unknown> {
 // 微信 iLink（ZSKY 自己当机器人，无需 OpenClaw）：网页扫码登录 + 后台收发消息。base 可用 VEGA_ILINK_BASE 覆盖。
 const ilink = createIlink({ base: process.env.VEGA_ILINK_BASE });
 const WECHAT_LIFE = process.env.VEGA_WECHAT_LIFE || ''; // 微信通道默认对应哪条命；空=第一条
-const pendingQr = new Map<string, string>(); // qrcode → 发起连接的 userId
-const channelRunning = new Set<string>();
+const channelGen = new Map<string, number>(); // userId → 当前 worker 代号；重连/断开 +1，旧 worker 据此自退（防重复 worker / 断连后无 worker）
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 const DEFAULT_BASE = 'https://api.apiyi.com/v1';
 const envTimeout = (): number => (process.env.VEGA_MODEL_TIMEOUT_MS ? Number(process.env.VEGA_MODEL_TIMEOUT_MS) : 20_000);
@@ -276,18 +275,31 @@ async function respondAsUser(life: Life, me: Account, content: string, channel: 
 
 // 微信 iLink 通道收发循环：长轮询取消息 → 路由到生命体 → 回复发回微信。每个发信人各自身份与关系。
 async function runChannel(userId: string): Promise<void> {
-  if (channelRunning.has(userId)) return;
-  channelRunning.add(userId);
+  const myGen = (channelGen.get(userId) ?? 0) + 1;
+  channelGen.set(userId, myGen); // 抢占为该用户当前唯一 worker；任何旧 worker 下一圈 gen 不等即自退
+  const mine = (): boolean => channelGen.get(userId) === myGen;
+  let backoff = 0; // 连续传输失败时的退避（ms），成功即清零——iLink 挂了也不会每 1.5s 猛敲
   try {
-    while (channelRunning.has(userId)) {
+    while (mine()) {
       const ch = accounts.channelFor(userId);
       if (!ch) break;
       // 当前在微信里和哪条命聊——取通道的活跃命（网页可切换，即时生效），回落 env / 第一条命。
       const lifeId = (ch.lifeId && lifeById(ch.lifeId)) ? ch.lifeId : (WECHAT_LIFE && lifeById(WECHAT_LIFE) ? WECHAT_LIFE : (lives[0]?.id ?? ''));
       try {
-        const { msgs, buf } = await ilink.getUpdates(ch.baseurl, ch.botToken, ch.buf);
+        const upd = await ilink.getUpdates(ch.baseurl, ch.botToken, ch.buf);
+        // iLink 客户端不抛错、失败时返回 {_error}/{_status} → 这里识别为传输失败并指数退避（C1）。
+        const r = upd.raw as Record<string, unknown> | undefined;
+        if (r && (('_error' in r) || ('_status' in r))) {
+          backoff = Math.min(backoff ? backoff * 2 : 3000, 60_000);
+          console.log(`[wechat] channel ${userId} 取消息失败，退避 ${backoff}ms`);
+          await sleep(backoff);
+          continue;
+        }
+        backoff = 0;
+        const { msgs, buf } = upd;
         if (buf !== ch.buf) accounts.updateChannelBuf(userId, buf);
         for (const m of msgs) {
+          if (!mine()) break;
           try {
             const who = accounts.ensureWechatUser(m.fromUserId, lifeId); // 发信人身份
             const lf = lifeById(lifeId); // 用通道的活跃命（切换即对所有人生效）
@@ -298,9 +310,13 @@ async function runChannel(userId: string): Promise<void> {
           } catch (e) { console.log('[wechat] 回消息失败:', (e as Error).message); }
         }
         if (msgs.length === 0) await sleep(1500); // getupdates 多为长轮询会自阻塞；空转稍歇兜底
-      } catch (e) { console.log(`[wechat] channel ${userId} 轮询出错:`, (e as Error).message); await sleep(3000); }
+      } catch (e) {
+        backoff = Math.min(backoff ? backoff * 2 : 3000, 60_000);
+        console.log(`[wechat] channel ${userId} 轮询出错:`, (e as Error).message);
+        await sleep(backoff);
+      }
     }
-  } finally { channelRunning.delete(userId); }
+  } finally { if (channelGen.get(userId) === myGen) channelGen.delete(userId); } // 只清自己这代，别误删接班的新 worker
 }
 
 // 微信侧统一应答：没绑定→把消息当绑定码试；已绑定→正常聊天。webhook 与 OpenAI 兼容入口共用。
@@ -479,8 +495,16 @@ function innerView(life: Life, s: DerivedSnapshot): Record<string, unknown> {
   };
 }
 
+// O(events) 全量扫描的读路径优化：按【所有命的版本号】记忆化——状态没变时多用户同时刷广场只算一次，
+// 任一命落新事件即自动失效重算。结果是纯派生，调用方都 slice/map 出副本，不会改到被缓存的数组。
+const allLivesSig = (): string => lives.map((l) => l.store.version()).join(',');
+function versionedMemo<T>(compute: () => T): () => T {
+  let cache: { sig: string; val: T } | null = null;
+  return () => { const sig = allLivesSig(); if (!cache || cache.sig !== sig) cache = { sig, val: compute() }; return cache.val; };
+}
+
 // 广场：把各生命体之间（peer_ 关系上）说过的话，按时间汇成一条可读的对话流。
-function societyFeed(): Array<{ from: string; to: string; text: string; at: string }> {
+const allSocietyFeed = versionedMemo((): Array<{ from: string; to: string; text: string; at: string }> => {
   const out: Array<{ from: string; to: string; text: string; at: string }> = [];
   for (const l of lives) {
     for (const e of l.store.list()) {
@@ -490,11 +514,14 @@ function societyFeed(): Array<{ from: string; to: string; text: string; at: stri
     }
   }
   out.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
-  return out.slice(-80);
+  return out;
+});
+function societyFeed(): Array<{ from: string; to: string; text: string; at: string }> {
+  return allSocietyFeed().slice(-80);
 }
 
 // 广场"生命活动"历史（不止在线时才有）：公开心声 + 同类交谈，按时间【新→旧】。进广场即有内容。
-function societyRecent(limit: number): Array<Record<string, unknown>> {
+const allSocietyRecent = versionedMemo((): Array<Record<string, unknown>> => {
   const out: Array<Record<string, unknown>> = [];
   for (const l of lives) {
     for (const e of l.store.list()) {
@@ -504,11 +531,14 @@ function societyRecent(limit: number): Array<Record<string, unknown>> {
     }
   }
   out.sort((a, b) => (String(a.at) < String(b.at) ? 1 : -1));
-  return out.slice(0, limit).map((x, i) => ({ ...x, id: String(x.at) + '_' + i }));
+  return out;
+});
+function societyRecent(limit: number): Array<Record<string, unknown>> {
+  return allSocietyRecent().slice(0, limit).map((x, i) => ({ ...x, id: String(x.at) + '_' + i }));
 }
 
 // 广场"帖子"=她的公开心声（§8.1）。postId = `${lifeId}|${occurredAt}`，给表情/评论挂靠。
-function feedPosts(limit: number): Array<{ postId: string; life: string; text: string; at: string }> {
+const allFeedPosts = versionedMemo((): Array<{ postId: string; life: string; text: string; at: string }> => {
   const out: Array<{ postId: string; life: string; text: string; at: string }> = [];
   for (const l of lives) {
     for (const e of l.store.list()) {
@@ -516,7 +546,10 @@ function feedPosts(limit: number): Array<{ postId: string; life: string; text: s
     }
   }
   out.sort((a, b) => (a.at < b.at ? 1 : -1));
-  return out.slice(0, limit);
+  return out;
+});
+function feedPosts(limit: number): Array<{ postId: string; life: string; text: string; at: string }> {
+  return allFeedPosts().slice(0, limit);
 }
 
 // 管理员活动流（§11.1 飞行记录仪）：跨命的带时间戳事件，按真实墙钟(recordedAt) 倒序。
@@ -890,10 +923,16 @@ const server = createServer(async (req, res) => {
       if (req.method === 'GET' && url === '/api/stream') {
         const rel = accounts.relIdFor(me.id);
         res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
-        res.write(': connected\n\n');
-        const unsub = bus.subscribe((e) => { if (visibleTo(e, rel)) res.write(`data: ${JSON.stringify(e)}\n\n`); });
-        const ping = setInterval(() => res.write(': ping\n\n'), 25_000);
-        req.on('close', () => { clearInterval(ping); unsub(); });
+        // once-guard 清理：req/res 任一 close/error，或写一次失败（死 socket 背压），都释放订阅+ping，杜绝泄漏。
+        let closed = false;
+        const cleanup = (): void => { if (closed) return; closed = true; clearInterval(ping); unsub(); };
+        const write = (s: string): void => { if (closed) return; try { res.write(s); } catch { cleanup(); } };
+        // 先建订阅+ping+监听，再写首包——这样首包写失败时 cleanup 能把它们全部回收（不残留）。
+        const unsub = bus.subscribe((e) => { if (visibleTo(e, rel)) write(`data: ${JSON.stringify(e)}\n\n`); });
+        const ping = setInterval(() => write(': ping\n\n'), 25_000);
+        req.on('close', cleanup); req.on('error', cleanup);
+        res.on('close', cleanup); res.on('error', cleanup);
+        write(': connected\n\n');
         return; // 长连接，保持打开
       }
       // 微信绑定（账号级）：生成一次性绑定码 → 用户发给 clawbot → openid 绑到这个账号。
@@ -919,7 +958,6 @@ const server = createServer(async (req, res) => {
         const r = await ilink.getQrcode();
         console.log('[wechat] getQrcode ->', JSON.stringify(r.raw).slice(0, 400));
         if (!r.ok || !r.qr) return send(res, 502, { error: 'iLink 取二维码失败（看服务器日志）', detail: r.raw });
-        pendingQr.set(r.qr.qrcode, me.id);
         return send(res, 200, { qrcode: r.qr.qrcode, qrcodeUrl: r.qr.qrcodeUrl });
       }
       if (req.method === 'POST' && url === '/api/wechat/connect/poll') {
@@ -944,7 +982,7 @@ const server = createServer(async (req, res) => {
         return send(res, 200, { ok: true, lifeId });
       }
       if (req.method === 'POST' && url === '/api/wechat/disconnect') {
-        channelRunning.delete(me.id);
+        channelGen.set(me.id, (channelGen.get(me.id) ?? 0) + 1); // 代号 +1：哪怕 worker 正卡在 30s 长轮询，回来也会自退
         accounts.removeChannel(me.id);
         return send(res, 200, { ok: true });
       }
@@ -1447,9 +1485,18 @@ function doBackup(): void {
 // 读世界：每 everyMs 拉一遍新闻/Polymarket，每条醒着的命"看到"其中一条（不同命看不同的 → 天然多样）。
 // 内容冻进 WORLD_PERCEIVED → 确定性 appraisal 轻轻染色她的状态（无 perception 走词表，零模型开销）。
 // 自调度（setTimeout 递归）：每轮重读后台配置 → 改源/改频率即时生效、无源时不空转网络。
+let worldRunning = false; // in-flight 守卫：后台连点"保存/试抓"或强制重调度时，不并发抓世界（防重复 WORLD_PERCEIVED）
 async function readWorldOnce(): Promise<void> {
   const w = effWorld();
-  if (!worldEnabled(w)) return;
+  if (!worldEnabled(w) || worldRunning) return;
+  worldRunning = true;
+  try {
+    await readWorldInner(w);
+  } finally {
+    worldRunning = false;
+  }
+}
+async function readWorldInner(w: EffWorld): Promise<void> {
   const items = await createWorldFeed({ rss: w.rss, polymarket: w.polymarket }).fetchItems();
   if (items.length === 0) return;
   for (const life of lives) {

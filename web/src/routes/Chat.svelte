@@ -123,7 +123,7 @@
   </div>
 
   <footer class="composer">
-    <input class="ci" bind:value={input} placeholder={t('common.placeholder')} on:keydown={(e) => e.key === 'Enter' && send()} />
+    <input class="ci" bind:value={input} placeholder={t('common.placeholder')} on:keydown={(e) => e.key === 'Enter' && !e.isComposing && send()} />
     <button class="btn send" on:click={send} disabled={sending || !input.trim()}>{t('common.send')}</button>
   </footer>
 </div>

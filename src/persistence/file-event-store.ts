@@ -1,7 +1,7 @@
 // 持久化 append-only 事件存储（落盘，给 V3 崩溃恢复用）。零依赖：JSONL + WAL 风格提交标记。
 // 一个 turn 的多条事件 + 一个提交标记(C) 在单次 appendFileSync 写入；
 // 崩在中途 → 缺提交标记/尾行撕裂 → 重启时这批整体作废（未 finalize 的 turn 回滚）。
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, writeSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { type EventDraft, type EventType, type LifeEvent, type LifeId } from '../domain/events.ts';
 import { buildEvent, verifyChain, type EventStore } from '../kernel/event-store.ts';
@@ -66,7 +66,9 @@ export function createFileEventStore(lifeId: LifeId, filePath: string): DurableE
       '\n' +
       JSON.stringify({ t: 'C', upto: staged[staged.length - 1].seq } satisfies WalLine) +
       '\n';
-    appendFileSync(filePath, block);
+    // fsync 落盘：连续性是神圣不变量——不只扛进程崩溃（提交标记），也扛断电（数据真正写到盘，而非停在 OS 缓冲）。
+    const fd = openSync(filePath, 'a');
+    try { writeSync(fd, block); fsyncSync(fd); } finally { closeSync(fd); }
     events.push(...staged);
     lastOccurredAt = lastTs;
     return staged;

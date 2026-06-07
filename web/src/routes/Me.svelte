@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { api, clearSession } from '../lib/api.js';
   import { theme, toggleTheme } from '../lib/theme.js';
   import { navigate } from '../lib/router.js';
@@ -33,24 +33,28 @@
   });
 
   // 微信：ZSKY 自己当机器人——网页把微信返回的授权网址生成成二维码，微信扫码即连接。
-  let qrImg = '', qrPolling = false, wxMsg = '';
+  let qrImg = '', qrPolling = false, wxMsg = '', wxAlive = true;
+  onDestroy(() => { wxAlive = false; qrPolling = false; }); // 离开页面即停轮询，别在已销毁实例上拉取
   async function connectWx() {
     wxMsg = '';
     try {
       const r = await api.wxConnectStart();
-      if (!r.qrcodeUrl) { wxMsg = '微信没返回授权网址。原始返回：' + JSON.stringify(r).slice(0, 300); return; }
+      if (!r.qrcodeUrl) { wxMsg = '微信没返回授权网址，稍后再试一次。'; console.warn('[wx] connect/start 无 qrcodeUrl:', r); return; }
       qrImg = qrDataUrl(r.qrcodeUrl); // 把授权网址编码成二维码图（不是去加载它）
       pollWx(r.qrcode);
     } catch (e) {
-      wxMsg = (e.message || '失败') + (e.data && e.data.detail ? ' · 微信返回：' + JSON.stringify(e.data.detail).slice(0, 300) : '');
+      wxMsg = e.message || '连接失败，稍后再试。';
+      console.warn('[wx] connect 失败:', e && e.data ? e.data : e);
     }
   }
   async function pollWx(qrcode) {
     qrPolling = true;
-    for (let i = 0; i < 80 && qrPolling; i++) {
+    for (let i = 0; i < 80 && qrPolling && wxAlive; i++) {
       await new Promise((r) => setTimeout(r, 2500));
+      if (!wxAlive) return;
       try {
         const s = await api.wxConnectPoll(qrcode);
+        if (!wxAlive) return;
         if (s.connected) { qrPolling = false; qrImg = ''; me = await api.me(); wxMsg = '✅ 微信已连接，去微信里跟她聊吧。'; return; }
         if (s.status === 'expired') { qrPolling = false; qrImg = ''; wxMsg = '二维码过期了，点"连接微信"重试。'; return; }
       } catch { /* 继续轮询 */ }

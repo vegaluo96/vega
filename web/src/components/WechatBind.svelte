@@ -1,7 +1,7 @@
 <script>
   // 在「她的对话框」里就地开启/切换微信——一个微信只绑一条命，换谁就在谁的对话里点一下。
   // 自包含：自己拉 channel 状态、自己处理扫码/轮询/切换/断开；变化后向上 dispatch('change')。
-  import { onMount, createEventDispatcher } from 'svelte';
+  import { onMount, onDestroy, createEventDispatcher } from 'svelte';
   import { api } from '../lib/api.js';
   import { qrDataUrl } from '../lib/qr.js';
   import Icon from './Icon.svelte';
@@ -11,11 +11,13 @@
 
   let channel = undefined; // undefined=加载中 / null=未连接 / { lifeId }=已连接（绑着某条命）
   let qrImg = '', polling = false, msg = '', busy = false;
+  let alive = true; // 组件还在吗——离开页面后停止轮询，别在已销毁的实例上继续拉取/绑定
 
   async function refresh() {
-    try { const me = await api.me(); channel = me.wechatChannel || null; } catch { channel = null; }
+    try { const me = await api.me(); if (alive) channel = me.wechatChannel || null; } catch { if (alive) channel = null; }
   }
   onMount(refresh);
+  onDestroy(() => { alive = false; polling = false; }); // 关键：终止 pollConnect 循环，避免离开后还静默绑定
 
   async function connectHere() {
     msg = ''; busy = true;
@@ -29,10 +31,12 @@
   }
   async function pollConnect(qrcode) {
     polling = true;
-    for (let i = 0; i < 80 && polling; i++) {
+    for (let i = 0; i < 80 && polling && alive; i++) {
       await new Promise((r) => setTimeout(r, 2500));
+      if (!alive) return; // 离开了就别再绑定/改状态
       try {
         const s = await api.wxConnectPoll(qrcode);
+        if (!alive) return;
         if (s.connected) {
           polling = false; qrImg = '';
           try { await api.setChannelLife(lifeId); } catch { /* 默认命也行，下面 refresh 会显示真值 */ } // 从她的对话连的 → 就绑她
