@@ -75,6 +75,9 @@ export interface AccountStore {
   bindWechat(token: string, openid: string): { userId: string; lifeId: string } | null;
   resolveWechat(openid: string): { userId: string; lifeId: string } | null;
   unbindWechat(openid: string): void;
+  // 账号级绑定：微信只绑账号一次；"在微信里和哪条命聊"在网页随时切换，不用重绑。
+  setWechatLife(userId: string, lifeId: string): void;
+  wechatBindingFor(userId: string): { lifeId: string } | null;
   // Web Push 订阅（PWA）
   addPushSub(userId: string, endpoint: string, p256dh: string, auth: string): void;
   getPushSubs(userId: string): Array<{ endpoint: string; keys: { p256dh: string; auth: string } }>;
@@ -266,6 +269,13 @@ export function createAccountStore(path = ':memory:', opts: AccountStoreOptions 
     },
     unbindWechat(openid) {
       db.prepare('DELETE FROM wechat_bindings WHERE openid=?').run(openid);
+    },
+    setWechatLife(userId, lifeId) {
+      db.prepare('UPDATE wechat_bindings SET life_id=? WHERE user_id=?').run(lifeId, userId);
+    },
+    wechatBindingFor(userId) {
+      const r = db.prepare('SELECT life_id FROM wechat_bindings WHERE user_id=?').get(userId) as { life_id: string } | undefined;
+      return r ? { lifeId: r.life_id } : null;
     },
     addPushSub(userId, endpoint, p256dh, auth) {
       db.prepare('INSERT INTO push_subscriptions(endpoint,user_id,p256dh,auth,created_at) VALUES(?,?,?,?,?) ON CONFLICT(endpoint) DO UPDATE SET user_id=excluded.user_id, p256dh=excluded.p256dh, auth=excluded.auth')

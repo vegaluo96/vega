@@ -832,7 +832,7 @@ const server = createServer(async (req, res) => {
       const me = sessionAccount(req);
       if (!me) return send(res, 401, { error: 'unauthorized' });
       if (req.method === 'POST' && url === '/api/auth/logout') { accounts.logout(bearer(req)); return send(res, 200, { ok: true }); }
-      if (req.method === 'GET' && url === '/api/me') return send(res, 200, { account: publicAccount(me), balance: accounts.balance(me.id), lives: livesMetBy(me) });
+      if (req.method === 'GET' && url === '/api/me') return send(res, 200, { account: publicAccount(me), balance: accounts.balance(me.id), lives: livesMetBy(me), wechat: accounts.wechatBindingFor(me.id) });
       // SSE 实时流：公开动态（广场/醒睡）+ 只属于我的（她想我了）。绝不推别人的私密事件（visibleTo 作用域）。
       if (req.method === 'GET' && url === '/api/stream') {
         const rel = accounts.relIdFor(me.id);
@@ -843,13 +843,23 @@ const server = createServer(async (req, res) => {
         req.on('close', () => { clearInterval(ping); unsub(); });
         return; // 长连接，保持打开
       }
-      // 微信绑定：登录用户为某条命生成一次性绑定令牌 → 前端渲染二维码 → 微信扫码由 clawbot 调 /api/wechat/bind。
+      // 微信绑定（账号级）：生成一次性绑定码 → 用户发给 clawbot → openid 绑到这个账号。
+      // 初始"在微信里和谁聊"= body.lifeId（有则用），否则第一条遇见的命/第一条命；之后在网页随时切换。
       if (req.method === 'POST' && url === '/api/bindings') {
+        const b = await readJson(req);
+        const initLife = (lifeById(String(b.lifeId ?? '')) ?? lifeById(livesMetBy(me)[0]?.id ?? '') ?? lives[0]);
+        if (!initLife) return send(res, 404, { error: 'no life' });
+        const token = accounts.createBindToken(me.id, initLife.id);
+        return send(res, 200, { bindToken: token, qr: `zsky-bind:${token}`, expiresInSec: 600 });
+      }
+      // 切换"在微信里和哪条命聊"——账号已绑微信即可，不用重绑。
+      if (req.method === 'POST' && url === '/api/wechat/active-life') {
         const b = await readJson(req);
         const lifeId = String(b.lifeId ?? '');
         if (!lifeById(lifeId)) return send(res, 404, { error: 'no such life' });
-        const token = accounts.createBindToken(me.id, lifeId);
-        return send(res, 200, { bindToken: token, qr: `zsky-bind:${token}`, expiresInSec: 600 });
+        if (!accounts.wechatBindingFor(me.id)) return send(res, 400, { error: '尚未绑定微信' });
+        accounts.setWechatLife(me.id, lifeId);
+        return send(res, 200, { ok: true, lifeId });
       }
       // 生命体公开主页（§8.1）：她的公开自我——气质/年龄/此刻状态/同类朋友/公开心声。
       // 【严格脱敏】：绝不含任何人类用户的关系/私聊（socialWorld 只含 peer；不暴露 narrative/chapters，那些会带用户名）。

@@ -37,7 +37,8 @@ export const api = {
   chats: () => req('GET', '/api/chats'),
   notifications: () => req('GET', '/api/notifications'),
   recharge: (amount) => req('POST', '/api/recharge', { amount }),
-  bind: (lifeId) => req('POST', '/api/bindings', { lifeId }),
+  bind: (lifeId) => req('POST', '/api/bindings', lifeId ? { lifeId } : {}),
+  setWechatLife: (lifeId) => req('POST', '/api/wechat/active-life', { lifeId }),
   pushKey: () => req('GET', '/api/push/key'),
   pushSubscribe: (subscription) => req('POST', '/api/push/subscribe', { subscription }),
 };

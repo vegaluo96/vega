@@ -2,7 +2,6 @@
   import { onMount, onDestroy, tick } from 'svelte';
   import { api, stream } from '../lib/api.js';
   import { navigate } from '../lib/router.js';
-  import { qrDataUrl } from '../lib/qr.js';
   import { t } from '../lib/i18n.js';
   import RelationshipPanel from '../components/RelationshipPanel.svelte';
   import Icon from '../components/Icon.svelte';
@@ -62,25 +61,6 @@
   let lowBalance = false;
   let showRel = false;
 
-  // 绑定微信：为这条命生成一次性令牌 → 渲染二维码，微信扫一扫在 clawbot 里继续。
-  // 同一段关系、同一个她，跨端同步。
-  let bind = null;
-  let binding = false;
-  let bindMsg = '';
-  async function bindWechat() {
-    if (binding) return;
-    bindMsg = '';
-    binding = true;
-    try {
-      const r = await api.bind(lifeId);
-      bind = { code: r.qr, dataUrl: qrDataUrl(r.qr), minutes: Math.max(1, Math.round((r.expiresInSec ?? 600) / 60)) };
-    } catch (e) {
-      bindMsg = e.message;
-    } finally {
-      binding = false;
-    }
-  }
-
   $: relAge = rel && rel.bornAt ? agoStr(rel.bornAt) : '';
   function agoStr(iso) {
     const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
@@ -115,17 +95,7 @@
   {#if showRel && rel}
     <div class="relwrap">
       <RelationshipPanel {rel} {relAge} feeling={life && life.awake ? life.feeling || life.emotion : ''} tension={life ? life.tension : ''}>
-        {#if !bind}
-          <button class="wx-btn" on:click={bindWechat} disabled={binding}><Icon name="qr" size={16} /> {binding ? '生成中…' : '绑定微信 · 在微信里也能和 ' + (life ? life.id : '她') + ' 聊'}</button>
-        {:else}
-          <div class="wx">
-            <p class="wx-tip">在微信里打开 <b>clawbot</b> 机器人，把下面这串绑定码<b>发给它</b>，就能在微信里和 {life ? life.id : '她'} 聊——同一段关系、同一个她，跨端同步。{bind.minutes} 分钟内有效。</p>
-            <code class="wx-code">{bind.code}</code>
-            <img class="qr" src={bind.dataUrl} alt="微信绑定二维码" />
-            <p class="wx-sub">（若你的机器人支持扫码绑定，也可让它扫上面的码）</p>
-          </div>
-        {/if}
-        {#if bindMsg}<p class="wx-err">{bindMsg}</p>{/if}
+        <button class="wx-link" on:click={() => navigate('me')}><Icon name="qr" size={15} /> 在微信里也能和她聊 · 去「我」绑定/切换</button>
       </RelationshipPanel>
     </div>
   {/if}
@@ -176,15 +146,8 @@
   .bal { flex: none; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 
   .relwrap { max-width: var(--maxw); width: 100%; margin: 0 auto; padding: 10px 14px 0; }
-  .wx-btn { width: 100%; min-height: 42px; margin-top: 6px; padding: 0 14px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface); color: var(--text); font: inherit; display: inline-flex; align-items: center; justify-content: center; gap: 8px; transition: border-color var(--t-hover) ease; }
-  .wx-btn:hover { border-color: var(--accent-line); }
-  .wx-btn:disabled { opacity: 0.6; }
-  .wx { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 14px 8px 4px; }
-  .wx .qr { width: 196px; height: 196px; image-rendering: pixelated; background: #fff; border-radius: var(--r-sm); padding: 8px; }
-  .wx-tip { color: var(--muted); font-size: 12.5px; line-height: 1.65; text-align: center; margin: 0; }
-  .wx-code { font-size: 13px; color: var(--text); word-break: break-all; user-select: all; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 8px 10px; width: 100%; text-align: center; }
-  .wx-sub { color: var(--faint); font-size: 11.5px; text-align: center; margin: 0; }
-  .wx-err { color: var(--danger); font-size: 12.5px; padding: 8px 10px 0; margin: 0; }
+  .wx-link { width: 100%; min-height: 40px; margin-top: 6px; padding: 0 14px; border: 1px solid var(--border); border-radius: var(--r-sm); background: none; color: var(--muted); font: inherit; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; transition: border-color var(--t-hover) ease, color var(--t-hover) ease; }
+  .wx-link:hover { border-color: var(--accent-line); color: var(--accent); }
 
   .banner { max-width: var(--maxw); margin: 10px auto 0; padding: 11px 14px; background: var(--accent-weak); color: var(--text); font-size: 13px; text-align: center; border-radius: var(--r-sm); }
 

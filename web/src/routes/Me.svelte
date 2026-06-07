@@ -22,6 +22,7 @@
 
   let me = null;
   let error = '';
+  let allLives = [];
   onMount(async () => {
     try {
       me = await api.me();
@@ -29,7 +30,20 @@
       error = e.message;
       if (e.status === 401) clearSession();
     }
+    try { allLives = await api.lives(); } catch { /* ignore */ }
   });
+
+  // 微信：账号级绑定一次，在网页切换"和哪条命聊"。
+  let bindCode = '', generating = false, wxMsg = '';
+  async function genBind() {
+    generating = true; wxMsg = '';
+    try { const r = await api.bind(); bindCode = r.qr; } catch (e) { wxMsg = e.message; } finally { generating = false; }
+  }
+  async function switchWxLife(e) {
+    wxMsg = '';
+    try { await api.setWechatLife(e.target.value); if (me.wechat) me.wechat.lifeId = e.target.value; wxMsg = '已切换 · 微信里现在和 ' + e.target.value + ' 聊'; }
+    catch (err) { wxMsg = err.message; }
+  }
   async function logout() {
     try { await api.logout(); } catch {}
     clearSession();
@@ -88,6 +102,28 @@
       </div>
     </section>
 
+    <section class="block">
+      <h2 class="section-title">微信</h2>
+      <div class="card pad">
+        {#if me.wechat}
+          <div class="kv"><span class="k">状态</span><span class="v">已绑定</span></div>
+          <p class="caption note">在微信里和谁聊（随时切换，不用重新绑定）：</p>
+          <select class="input sel" value={me.wechat.lifeId} on:change={switchWxLife}>
+            {#each (allLives.length ? allLives : me.lives) as l}<option value={l.id}>{l.id}</option>{/each}
+          </select>
+        {:else}
+          <p class="caption note">在微信里也能和她们聊，同一段关系、跨端同步。生成绑定码，在微信里把它发给你的 clawbot 机器人即可绑定（账号只需绑一次，之后在这切换和谁聊）。</p>
+          {#if !bindCode}
+            <button class="btn btn-secondary" on:click={genBind} disabled={generating}>{generating ? '生成中…' : '生成微信绑定码'}</button>
+          {:else}
+            <code class="wxcode">{bindCode}</code>
+            <p class="caption">↑ 在微信里把这串码<b>发给机器人</b>，10 分钟内有效。</p>
+          {/if}
+        {/if}
+        {#if wxMsg}<p class="ok">{wxMsg}</p>{/if}
+      </div>
+    </section>
+
     {#if pushSupported()}
       <section class="block">
         <h2 class="section-title">通知</h2>
@@ -135,6 +171,7 @@
   .wallet { display: flex; gap: 10px; }
   .sel { flex: 1; min-height: 46px; }
   .ok { color: var(--success); font-size: 13px; margin: 12px 0 0; }
+  .wxcode { display: block; font-size: 13px; color: var(--text); word-break: break-all; user-select: all; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 10px 12px; margin: 12px 0 6px; text-align: center; }
 
   .row { display: flex; justify-content: space-between; align-items: center; padding: 13px 16px; border-bottom: 1px solid var(--border-subtle); }
   .row:last-child { border-bottom: 0; }
