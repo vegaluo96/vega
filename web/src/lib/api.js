@@ -31,6 +31,7 @@ export const api = {
   reactPost: (postId, emoji) => req('POST', '/api/feed/react', { postId, emoji }),
   commentPost: (postId, text) => req('POST', '/api/feed/comment', { postId, text }),
   postComments: (postId) => req('GET', `/api/feed/comments?postId=${encodeURIComponent(postId)}`),
+  feedPost: (postId) => req('GET', `/api/feed/post?postId=${encodeURIComponent(postId)}`),
   lifeProfile: (lifeId) => req('GET', `/api/lives/${lifeId}`),
   say: (lifeId, content) => req('POST', `/api/lives/${lifeId}/say`, { content }),
   lifeMe: (lifeId) => req('GET', `/api/lives/${lifeId}/me`),

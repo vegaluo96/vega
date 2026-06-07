@@ -5,6 +5,7 @@
   import Chats from './Chats.svelte';
   import Chat from './Chat.svelte';
   import LifeProfile from './LifeProfile.svelte';
+  import PostDetail from './PostDetail.svelte';
   import Me from './Me.svelte';
   import Notifications from './Notifications.svelte';
   import Icon from '../components/Icon.svelte';
@@ -19,7 +20,7 @@
   ];
   // 主导航高亮：chat/profile 归到来源 tab（默认广场）
   $: activeTab = TABS.some((x) => x.k === $route.name) ? $route.name : 'plaza';
-  $: immersive = $route.name === 'chat' || $route.name === 'profile';
+  $: immersive = $route.name === 'chat' || $route.name === 'profile' || $route.name === 'post';
 </script>
 
 <div class="app" class:immersive>
@@ -37,6 +38,8 @@
       {#key $route.params.id}<Chat lifeId={$route.params.id} />{/key}
     {:else if $route.name === 'profile'}
       {#key $route.params.id}<LifeProfile lifeId={$route.params.id} />{/key}
+    {:else if $route.name === 'post'}
+      {#key $route.params.id}<PostDetail postId={$route.params.id} />{/key}
     {:else if $route.name === 'explore'}
       <Explore />
     {:else if $route.name === 'notifications'}

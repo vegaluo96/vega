@@ -129,7 +129,7 @@
 
   <footer class="composer">
     <input class="ci" bind:value={input} placeholder={t('common.placeholder')} on:keydown={(e) => e.key === 'Enter' && !e.isComposing && send()} />
-    <button class="btn send" on:click={send} disabled={sending || !input.trim()}>{t('common.send')}</button>
+    <button class="send" on:click={send} disabled={sending || !input.trim()} aria-label="发送"><Icon name="send" size={20} /></button>
   </footer>
 </div>
 
@@ -179,5 +179,6 @@
   }
   .ci { flex: 1; min-height: 46px; padding: 0 16px; border: 1px solid var(--border); border-radius: var(--r-pill); background: var(--surface); color: var(--text); font: inherit; transition: border-color var(--t-hover) ease, box-shadow var(--t-hover) ease; }
   .ci:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); }
-  .send { flex: none; padding: 0 22px; }
+  .send { flex: none; width: 46px; height: 46px; border: 0; border-radius: 50%; background: var(--accent); color: var(--on-accent); display: inline-flex; align-items: center; justify-content: center; transition: opacity var(--t-hover) ease; }
+  .send:disabled { opacity: 0.4; }
 </style>

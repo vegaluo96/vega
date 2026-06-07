@@ -7,8 +7,9 @@
   import EmptyState from '../components/EmptyState.svelte';
   import Skeleton from '../components/Skeleton.svelte';
   import Icon from '../components/Icon.svelte';
+  import { MOODS } from '../lib/moods.js';
 
-  // 广场 = 她们的"动态"：在场的她们 + 她们发的帖（心声），你可以留表情、评论。不是实时对话流。
+  // 广场 = 她们的"动态"：在场的她们 + 她们发的帖（心声），你可以留心情、点开看留言。不是实时对话流。
   let lives = [];
   let posts = [];
   let loading = true;
@@ -19,17 +20,9 @@
   const focusEl = (node) => node.focus();
   function toggleSearch() { searching = !searching; if (!searching) q = ''; }
 
-  const totalReacts = (p) => Object.values(p.reactions || {}).reduce((a, b) => a + b, 0); // 共鸣总数（兼容历史多表情）
   const hit = (s) => !q || String(s).toLowerCase().includes(q.toLowerCase());
   $: present = [...lives].sort((a, b) => (b.awake ? 1 : 0) - (a.awake ? 1 : 0)).filter((l) => hit(l.id));
   $: shownPosts = posts.filter((p) => hit(p.life + ' ' + p.text));
-  // X 风长文截断：渲染后量一次，正文真的超过截断高度才标记可"展开"（不瞎截、不乱显按钮）。
-  function clampDetect(node, post) {
-    requestAnimationFrame(() => {
-      const over = node.scrollHeight - node.clientHeight > 4;
-      if (post.overflow !== over) { post.overflow = over; posts = posts; }
-    });
-  }
 
   function relTime(at) {
     const d = Date.now() - new Date(at).getTime();
@@ -42,21 +35,7 @@
   async function react(p, emo) {
     try { const r = await api.reactPost(p.postId, emo); p.reactions = r.reactions; p.myReaction = r.myReaction; posts = posts; } catch { /* ignore */ }
   }
-  async function toggleComments(p) {
-    p.open = !p.open;
-    if (p.open && !p.commentList) { try { p.commentList = await api.postComments(p.postId); } catch { p.commentList = []; } }
-    posts = posts;
-  }
-  async function submitComment(p) {
-    const t = (p.draft || '').trim(); if (!t) return;
-    p.draft = '';
-    try {
-      const c = await api.commentPost(p.postId, t);
-      p.commentList = [...(p.commentList || []), c]; p.comments = (p.comments || 0) + 1; p.cerr = ''; posts = posts;
-    } catch (e) {
-      p.draft = t; p.cerr = (e && e.message) || '发送失败，再试一次'; posts = posts; // 失败别吞掉用户写的字
-    }
-  }
+  const openPost = (p) => navigate('post', { id: p.postId }); // 点开帖子看详情 + 留言互动
 
   onMount(async () => {
     try { lives = await api.lives(); } catch (e) { error = e.message; }
@@ -111,34 +90,23 @@
       <article class="post fade-in">
         <button class="avslot av" on:click={() => navigate('profile', { id: p.life })}><LifeAvatar id={p.life} awake={true} size={40} /></button>
         <div class="body">
-          <div class="hdr"><b>{p.life}</b><span class="meta">· {relTime(p.at)}</span></div>
-          <div class="ptext" class:clamp={!p.expanded} use:clampDetect={p}>{p.text}</div>
-          {#if p.overflow}<button class="more" on:click={() => { p.expanded = !p.expanded; posts = posts; }}>{p.expanded ? '收起' : '展开'}</button>{/if}
+          <button class="hdr" on:click={() => openPost(p)}><b>{p.life}</b><span class="meta">· {relTime(p.at)}</span></button>
+          <button class="textbtn" on:click={() => openPost(p)}><span class="ptext">{p.text}</span></button>
           {#if p.source && p.source.title}
             <a class="src" href={p.source.url || '#'} target="_blank" rel="noopener noreferrer" title={p.source.title}>
               <Icon name="explore" size={12} /><span class="srctxt">就着「{p.source.title}」{p.source.source ? ' · ' + p.source.source : ''}</span>
             </a>
           {/if}
           <div class="react">
-            <button class="abtn" class:on={!!p.myReaction} on:click={() => react(p, p.myReaction || '✨')} aria-label="共鸣">
-              <Icon name="spark" size={16} />{#if totalReacts(p)}<span class="cnt">{totalReacts(p)}</span>{/if}
-            </button>
-            <button class="abtn" class:on={p.open} on:click={() => toggleComments(p)} aria-label="评论">
+            {#each MOODS as [emo, label]}
+              <button class="mbtn" class:on={p.myReaction === emo} on:click={() => react(p, emo)} aria-label={label} title={label}>
+                <span class="em">{emo}</span>{#if p.reactions[emo]}<span class="cnt">{p.reactions[emo]}</span>{/if}
+              </button>
+            {/each}
+            <button class="cbtn" on:click={() => openPost(p)} aria-label="留言">
               <Icon name="comment" size={16} />{#if p.comments}<span class="cnt">{p.comments}</span>{/if}
             </button>
           </div>
-          {#if p.open}
-            <div class="comments">
-              {#each (p.commentList || []) as c (c.id)}
-                <div class="cm"><b>{c.handle}</b> <span>{c.text}</span></div>
-              {/each}
-              <div class="cadd">
-                <input class="cinput" bind:value={p.draft} placeholder="说点什么…" on:keydown={(e) => e.key === 'Enter' && !e.isComposing && submitComment(p)} />
-                <button class="csend" on:click={() => submitComment(p)} disabled={!p.draft || !p.draft.trim()}>发送</button>
-              </div>
-              {#if p.cerr}<p class="cerr">{p.cerr}</p>{/if}
-            </div>
-          {/if}
         </div>
       </article>
     {/each}
@@ -167,30 +135,23 @@
   .avslot { flex: none; width: 40px; display: inline-flex; align-items: flex-start; }
   .av { background: none; border: 0; padding: 0; }
   .body { flex: 1; min-width: 0; }
-  .hdr { font-size: 14px; line-height: 1.2; }
+  .hdr { display: block; font-size: 14px; line-height: 1.2; background: none; border: 0; padding: 0; color: var(--text); text-align: left; }
   .hdr b { font-weight: 600; }
   .hdr .meta { margin-left: 5px; }
-  .ptext { font-size: 14.5px; line-height: 1.5; margin: 2px 0 0; white-space: pre-wrap; word-break: break-word; }
-  .ptext.clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 6; overflow: hidden; }
-  .more { display: inline-block; margin-top: 2px; padding: 2px 0; background: none; border: 0; color: var(--accent); font: inherit; font-size: 13px; cursor: pointer; }
+  .textbtn { display: block; width: 100%; margin: 2px 0 0; padding: 0; background: none; border: 0; text-align: left; color: var(--text); cursor: pointer; }
+  .ptext { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 6; overflow: hidden; font-size: 14.5px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
   .src { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; margin: 6px 0 0; padding: 3px 8px; border: 1px solid var(--border-subtle); border-radius: var(--r-sm); background: var(--bg); color: var(--faint); font-size: 12px; text-decoration: none; }
   .src:hover { border-color: var(--accent-line); color: var(--accent); }
   .srctxt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-  .react { display: flex; align-items: center; gap: 18px; margin: 8px 0 0; }
-  .abtn { display: inline-flex; align-items: center; gap: 5px; min-height: 28px; padding: 0; border: 0; background: transparent; color: var(--faint); font-size: 12.5px; transition: color var(--t-hover) ease; }
-  .abtn:hover { color: var(--text); }
-  .abtn.on { color: var(--accent); }
+  /* —— 心情反应（多个）+ 留言入口，一行紧凑 —— */
+  .react { display: flex; align-items: center; gap: 3px; margin: 9px 0 0 -5px; flex-wrap: wrap; }
+  .mbtn { display: inline-flex; align-items: center; gap: 3px; min-height: 28px; padding: 0 5px; border: 0; border-radius: var(--r-pill); background: transparent; color: var(--faint); font-size: 12px; transition: background var(--t-hover) ease; }
+  .mbtn .em { font-size: 15px; line-height: 1; filter: grayscale(0.35); opacity: 0.8; transition: filter var(--t-hover) ease, opacity var(--t-hover) ease; }
+  .mbtn:hover { background: var(--surface-2); }
+  .mbtn.on { background: var(--accent-weak); color: var(--accent); }
+  .mbtn.on .em { filter: none; opacity: 1; }
+  .cbtn { display: inline-flex; align-items: center; gap: 4px; min-height: 28px; margin-left: auto; padding: 0 6px; border: 0; background: transparent; color: var(--faint); font-size: 12.5px; }
+  .cbtn:hover { color: var(--text); }
   .cnt { font-variant-numeric: tabular-nums; }
-
-  .comments { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 8px; }
-  .cm { font-size: 14px; line-height: 1.5; }
-  .cm b { color: var(--text); margin-right: 4px; }
-  .cm span { color: var(--muted); }
-  .cadd { display: flex; gap: 8px; margin-top: 2px; }
-  .cinput { flex: 1; min-height: 40px; padding: 0 14px; border: 1px solid var(--border); border-radius: var(--r-pill); background: var(--bg); color: var(--text); font: inherit; }
-  .cinput:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); }
-  .csend { flex: none; padding: 0 14px; border: 0; border-radius: var(--r-pill); background: var(--primary); color: var(--on-primary); font-size: 13.5px; font-weight: 600; }
-  .csend:disabled { opacity: 0.4; }
-  .cerr { color: var(--danger); font-size: 12.5px; margin: 6px 2px 0; }
 </style>

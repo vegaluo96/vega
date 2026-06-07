@@ -1138,8 +1138,16 @@ const server = createServer(async (req, res) => {
         return send(res, 200, feed.addComment(postId, me.id, me.handle, text));
       }
       if (req.method === 'GET' && url.split('?')[0] === '/api/feed/comments') {
-        const postId = new URLSearchParams(url.split('?')[1] ?? '').get('postId') ?? '';
+        const postId = new URLSearchParams((req.url ?? '').split('?')[1] ?? '').get('postId') ?? '';
         return send(res, 200, feed.commentsFor(postId, 50));
+      }
+      // 单条心声详情（点开帖子看留言互动）：正文 + 出处 + 表情 + 评论一次返回。
+      if (req.method === 'GET' && url.split('?')[0] === '/api/feed/post') {
+        const postId = new URLSearchParams((req.url ?? '').split('?')[1] ?? '').get('postId') ?? '';
+        const post = allFeedPosts().find((p) => p.postId === postId);
+        if (!post) return send(res, 404, { error: 'no such post' });
+        const rx = feed.reactionsFor([postId], me.id).get(postId);
+        return send(res, 200, { ...post, reactions: rx?.counts ?? {}, myReaction: rx?.mine ?? null, source: feed.sourcesFor([postId]).get(postId) ?? null, comments: feed.commentsFor(postId, 100) });
       }
       // 对话收件箱：我遇见的每条命 + 最近一句 + 她是否有未回的主动留言（按最近活跃排序）。
       if (req.method === 'GET' && url === '/api/chats') {
@@ -1293,7 +1301,7 @@ const server = createServer(async (req, res) => {
         });
       }
       if (req.method === 'GET' && path === '/admin/activity') {
-        const lim = Math.min(500, Number(new URLSearchParams(url.split('?')[1] ?? '').get('limit')) || 120);
+        const lim = Math.min(500, Number(new URLSearchParams((req.url ?? '').split('?')[1] ?? '').get('limit')) || 120);
         return send(res, 200, adminActivity(owner, lim));
       }
       if (req.method === 'GET' && path === '/admin/users') {
