@@ -16,9 +16,11 @@ import {
   createFileEventStore,
   createMouth,
   createPerceiver,
+  createEventBus,
   createSerializer,
   createTemplateMouth,
   meterMouth,
+  visibleTo,
   endRelationship,
   genesisPayloadFor,
   makeTick,
@@ -66,6 +68,7 @@ const perceiver = createPerceiver() ?? undefined;
 const MODEL_COST = Number(process.env.VEGA_MODEL_COST ?? 1); // 每条模型回应计费（额度单位）
 const CLAWBOT_SECRET = process.env.VEGA_CLAWBOT_SECRET; // 微信网关(clawbot)共享密钥；未配则微信端点禁用
 const serializer = createSerializer(); // 每命串行：并发用户的回合不穿插
+const bus = createEventBus(); // SSE 实时总线（广场/触达/醒睡）
 
 // 平台身份/账号层（多用户）：node:sqlite，与神圣日志物理分离。
 const ACCOUNTS_DB = process.env.VEGA_ACCOUNTS_DB ?? join(DATA_DIR, 'accounts.db');
@@ -481,6 +484,16 @@ const server = createServer(async (req, res) => {
       if (!me) return send(res, 401, { error: 'unauthorized' });
       if (req.method === 'POST' && url === '/api/auth/logout') { accounts.logout(bearer(req)); return send(res, 200, { ok: true }); }
       if (req.method === 'GET' && url === '/api/me') return send(res, 200, { account: publicAccount(me), balance: accounts.balance(me.id), lives: livesMetBy(me) });
+      // SSE 实时流：公开动态（广场/醒睡）+ 只属于我的（她想我了）。绝不推别人的私密事件（visibleTo 作用域）。
+      if (req.method === 'GET' && url === '/api/stream') {
+        const rel = accounts.relIdFor(me.id);
+        res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
+        res.write(': connected\n\n');
+        const unsub = bus.subscribe((e) => { if (visibleTo(e, rel)) res.write(`data: ${JSON.stringify(e)}\n\n`); });
+        const ping = setInterval(() => res.write(': ping\n\n'), 25_000);
+        req.on('close', () => { clearInterval(ping); unsub(); });
+        return; // 长连接，保持打开
+      }
       // 微信绑定：登录用户为某条命生成一次性绑定令牌 → 前端渲染二维码 → 微信扫码由 clawbot 调 /api/wechat/bind。
       if (req.method === 'POST' && url === '/api/bindings') {
         const b = await readJson(req);
@@ -566,7 +579,8 @@ const heartbeat = setInterval(async () => {
       const after = snapOf(life);
       const bond = after.bonds[REL];
       if (bond && bond.closeness >= REACH_CLOSENESS && !after.openConnections.includes(REL) && timeGone > REACH_AFTER_MS && pendingOutreach(life) === null) {
-        await reachOut(life.store, mouth, REL, now());
+        const o = await reachOut(life.store, mouth, REL, now());
+        if (o) bus.publish('reach_out', REL, { life: life.id, text: o.utterance }); // 她想你了——只推给那一个人
       }
       if (Date.now() - life.lastReflectAt > REFLECT_MS && life.store.version() - life.lastReflectSeq >= 3) {
         runTurn(life.store, [{ type: 'REFLECTION_TRIGGERED', source: 'autonomous_loop', occurredAt: now(), payload: { scope: 'recent', windowFromSeq: life.lastReflectSeq, windowToSeq: life.store.version() } }]);
@@ -606,7 +620,9 @@ const socialTimer = lives.length >= 2
         await serializer.run(b.id, () => meetPeer(b, a.id));
         const opener = await serializer.run(a.id, () => reachOut(a.store, mouth, peerId(b.id), now())); // A 主动开口
         if (opener) {
+          bus.publish('society', 'public', { from: a.id, to: b.id, text: opener.utterance }); // 广场实时
           const rb = await serializer.run(b.id, () => converse(b.store, mouth, peerId(a.id), opener.utterance, now(), perceiver)); // B 回应
+          bus.publish('society', 'public', { from: b.id, to: a.id, text: rb.utterance });
           await serializer.run(a.id, () => converse(a.store, mouth, peerId(b.id), rb.utterance, now(), perceiver)); // A 听到回应
         }
         await serializer.run(a.id, () => partPeer(a, b.id)); // 寒暄后各自离场
