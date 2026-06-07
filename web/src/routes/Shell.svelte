@@ -3,6 +3,7 @@
   import Plaza from './Plaza.svelte';
   import Chat from './Chat.svelte';
   import Me from './Me.svelte';
+  import Notifications from './Notifications.svelte';
   import { t } from '../lib/i18n.js';
 </script>
 
@@ -14,6 +15,8 @@
   <div class="view">
     {#if $route.name === 'me'}
       <Me />
+    {:else if $route.name === 'notifications'}
+      <Notifications />
     {:else}
       <Plaza />
     {/if}
@@ -21,6 +24,9 @@
   <nav>
     <button class:active={$route.name === 'plaza'} on:click={() => navigate('plaza')}>
       <span class="ico">◎</span><span>{t('nav.plaza')}</span>
+    </button>
+    <button class:active={$route.name === 'notifications'} on:click={() => navigate('notifications')}>
+      <span class="ico">♡</span><span>{t('nav.notifications')}</span>
     </button>
     <button class:active={$route.name === 'me'} on:click={() => navigate('me')}>
       <span class="ico">◍</span><span>{t('nav.me')}</span>

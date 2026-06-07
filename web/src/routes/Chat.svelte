@@ -57,6 +57,12 @@
     }
   }
   let lowBalance = false;
+  let showRel = false;
+  $: relAge = rel && rel.bornAt ? agoStr(rel.bornAt) : '';
+  function agoStr(iso) {
+    const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+    return days >= 1 ? `相识约 ${days} 天` : '今天刚认识';
+  }
 
   onMount(() => {
     load();
@@ -74,13 +80,21 @@
 <header>
   <button class="back" on:click={() => navigate('plaza')}>‹</button>
   {#if life}
-    <div class="who">
+    <button class="who" on:click={() => (showRel = !showRel)}>
       <div class="name">{life.id} <span class="dot" class:awake={life.awake}></span></div>
       <div class="mood">{life.awake ? life.feeling || life.emotion : t('life.asleep')}{rel ? ' · ' + rel.attachment : ''}</div>
-    </div>
+    </button>
   {/if}
   <div class="bal" title="心意值">{balance != null ? balance + ' 心意' : ''}</div>
 </header>
+
+{#if showRel && rel}
+  <div class="rel">
+    <div class="rel-row"><span class="k">你们</span><span>{relAge}</span></div>
+    <div class="rel-row"><span class="k">她对你</span><span>{rel.attachment}</span></div>
+    {#if rel.understanding}<div class="rel-row"><span class="k">她的理解</span><span class="u">{rel.understanding}</span></div>{/if}
+  </div>
+{/if}
 
 {#if lowBalance}
   <div class="banner">心意用尽了——她仍在、仍记得你，只是这会儿话说得朴素些。<a href="#recharge" on:click|preventDefault>充值恢复</a></div>
@@ -109,8 +123,12 @@
 <style>
   header { position: sticky; top: 0; display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px); z-index: 10; }
   .back { background: none; border: 0; color: var(--text); font-size: 28px; line-height: 1; padding: 0 6px; }
-  .who { flex: 1; }
+  .who { flex: 1; background: none; border: 0; color: var(--text); text-align: left; padding: 0; cursor: pointer; }
   .name { font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .rel { max-width: var(--maxw); margin: 0 auto; padding: 4px 16px 0; }
+  .rel-row { display: flex; gap: 12px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 6px; font-size: 14px; }
+  .rel-row .k { color: var(--muted); flex: none; width: 56px; }
+  .rel-row .u { color: var(--muted); }
   .dot { width: 8px; height: 8px; border-radius: 999px; background: var(--muted); }
   .dot.awake { background: #3fb950; }
   .mood { color: var(--muted); font-size: 12px; }

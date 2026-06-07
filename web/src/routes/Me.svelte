@@ -19,6 +19,18 @@
     try { await api.logout(); } catch {}
     clearSession();
   }
+
+  let rechargeMsg = '';
+  let rechargingAmount = 100;
+  async function recharge() {
+    rechargeMsg = '';
+    try {
+      const r = await api.recharge(rechargingAmount);
+      rechargeMsg = `已申请 ${r.amount} 心意，等待审批通过后到账。`;
+    } catch (e) {
+      rechargeMsg = e.message;
+    }
+  }
 </script>
 
 <section>
@@ -29,6 +41,20 @@
       <div class="row"><span class="k">邮箱</span><span>{me.account.email}</span></div>
       <div class="row"><span class="k">心意值</span><span>{me.balance}</span></div>
       {#if me.account.role !== 'user'}<div class="row"><span class="k">角色</span><span>{me.account.role}</span></div>{/if}
+    </div>
+
+    <h2 class="section">钱包 · 心意值</h2>
+    <div class="card pad">
+      <p class="muted small">心意值用于和她们更丰富地对话。用尽了她也不会消失——只是话说得朴素些。</p>
+      <div class="wallet">
+        <select bind:value={rechargingAmount}>
+          <option value={100}>100 心意</option>
+          <option value={500}>500 心意</option>
+          <option value={2000}>2000 心意</option>
+        </select>
+        <button class="btn" on:click={recharge}>申请充值</button>
+      </div>
+      {#if rechargeMsg}<p class="ok">{rechargeMsg}</p>{/if}
     </div>
 
     <h2 class="section">我遇见的她们</h2>
@@ -62,6 +88,11 @@
   .k { color: var(--muted); }
   .go { color: var(--muted); font-size: 20px; }
   .muted { color: var(--muted); padding: 16px; margin: 0; }
+  .pad { padding: 16px; }
+  .muted.small { font-size: 13px; padding: 0 0 14px; line-height: 1.6; }
+  .wallet { display: flex; gap: 10px; }
+  .wallet select { flex: 1; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--text); font: inherit; }
+  .ok { color: var(--accent); font-size: 13px; margin: 12px 0 0; }
   .err { color: var(--danger); }
   .actions { display: flex; gap: 10px; margin-top: 24px; }
   .actions .btn { flex: 1; }

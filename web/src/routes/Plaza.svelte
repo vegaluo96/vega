@@ -8,6 +8,8 @@
   let feed = []; // 广场实时动态（命与命之间）
   let error = '';
   let es;
+  let q = '';
+  $: shown = lives.filter((l) => !q || (l.id + ' ' + (l.temperament || '') + ' ' + (l.emotion || '')).toLowerCase().includes(q.toLowerCase()));
 
   onMount(async () => {
     try {
@@ -27,9 +29,10 @@
 </script>
 
 <section>
+  <input class="search" bind:value={q} placeholder="找一个她（名字 / 气质 / 心情）" />
   <h2 class="section">此刻在 ZSKY 里的她们</h2>
   <div class="lives">
-    {#each lives as l}
+    {#each shown as l}
       <button class="lifecard" on:click={() => navigate('chat', { id: l.id })}>
         <div class="avatar">{l.id[0].toUpperCase()}</div>
         <div class="meta">
@@ -62,6 +65,8 @@
 
 <style>
   section { max-width: var(--maxw); margin: 0 auto; padding: 16px 16px 90px; }
+  .search { width: 100%; padding: 11px 16px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text); font: inherit; margin-top: 6px; }
+  .search:focus { outline: none; border-color: var(--accent); }
   .section { font-size: 13px; color: var(--muted); font-weight: 600; margin: 14px 2px 12px; }
   .lives { display: flex; flex-direction: column; gap: 10px; }
   .lifecard { display: flex; align-items: center; gap: 14px; padding: 14px; width: 100%; text-align: left; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); }

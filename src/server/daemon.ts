@@ -4,6 +4,7 @@
 // env：VEGA_LIVES / VEGA_LIFE_PATH / VEGA_HOST(127.0.0.1) / VEGA_PORT(8787) / VEGA_TICK_MS /
 //      VEGA_SOCIAL_EVERY_MS / VEGA_AUTH_TOKEN / 模型见 .env.example
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import {
   advanceState,
@@ -302,6 +303,20 @@ function sendHtml(res: ServerResponse, html: string): void {
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
   res.end(html);
 }
+// 用户 SPA 静态托管（web/dist）：自含，无需 Caddy 也能跑；owner 面板仍在 /panel。
+const WEB_DIST = process.env.VEGA_WEB_DIST ?? join(process.cwd(), 'web', 'dist');
+const CT: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json', '.ico': 'image/x-icon', '.png': 'image/png', '.webp': 'image/webp', '.woff2': 'font/woff2' };
+function serveStatic(res: ServerResponse, file: string): boolean {
+  try {
+    const ext = file.slice(file.lastIndexOf('.'));
+    const body = readFileSync(file);
+    res.writeHead(200, { 'Content-Type': CT[ext] ?? 'application/octet-stream', 'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=31536000, immutable' });
+    res.end(body);
+    return true;
+  } catch {
+    return false;
+  }
+}
 function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
   return new Promise((resolve) => {
     let raw = '';
@@ -439,7 +454,15 @@ const server = createServer(async (req, res) => {
     const url = (req.url ?? '/').split('?')[0];
     const seg = url.split('/').filter(Boolean);
     if (req.method === 'GET' && url === '/health') return send(res, 200, { ok: true });
-    if (req.method === 'GET' && url === '/') return sendHtml(res, PAGE);
+    // 用户 SPA：/assets/* 静态资源 + / → index.html（dist 存在时）。owner 旧聊天页回退到 dist 缺失时。
+    if (req.method === 'GET' && url.startsWith('/assets/') && !url.includes('..')) {
+      if (serveStatic(res, join(WEB_DIST, url))) return;
+      return send(res, 404, { error: 'not found' });
+    }
+    if (req.method === 'GET' && url === '/') {
+      if (serveStatic(res, join(WEB_DIST, 'index.html'))) return;
+      return sendHtml(res, PAGE);
+    }
     if (req.method === 'GET' && url === '/panel') return sendHtml(res, PANEL);
     if (req.method === 'GET' && url === '/society') return sendHtml(res, SOCIETY);
 
@@ -518,13 +541,40 @@ const server = createServer(async (req, res) => {
           if (e.type === 'MESSAGE_RECEIVED') history.push({ role: 'me', text: (e.payload as { content?: string }).content ?? '', at: e.occurredAt });
           else if (e.type === 'MESSAGE_SENT') history.push({ role: 'her', text: (e.payload as MessageSentPayload).utterance, at: e.occurredAt, unprompted: Boolean((e.payload as MessageSentPayload).unprompted) });
         }
+        const sem = snap.semanticMemory.find((x) => x.relationshipId === rel);
         return send(res, 200, {
           life: { id: life3.id, emotion: snap.emotion, feeling: snap.feeling, awake: snap.awake, dayPhase: snap.dayPhase, temperament: tempLabel(snap.temperament) },
           met: Boolean(bond),
-          relationship: bond ? { closeness: round3(bond.closeness), attachment: bond.relationalSelf.attachment, style: bond.theoryOfMind.style } : null,
+          relationship: bond ? { closeness: round3(bond.closeness), attachment: bond.relationalSelf.attachment, style: bond.theoryOfMind.style, understanding: sem ? sem.understanding : null, bornAt: snap.bornAt } : null,
           history: history.slice(-50),
           balance: accounts.balance(me.id),
         });
+      }
+      // 通知中心：她在你不在时主动找过你的（跨我遇见的命，未被新消息盖过的最近一条）。
+      if (req.method === 'GET' && url === '/api/notifications') {
+        const rel = accounts.relIdFor(me.id);
+        const notes: Array<Record<string, unknown>> = [];
+        for (const l of lives) {
+          const es = l.store.list();
+          let lastRecv = -1;
+          for (let i = es.length - 1; i >= 0; i--) if (es[i].relationshipId === rel && es[i].type === 'MESSAGE_RECEIVED') { lastRecv = i; break; }
+          for (let i = es.length - 1; i > lastRecv; i--) {
+            const e = es[i];
+            if (e.type === 'MESSAGE_SENT' && e.relationshipId === rel && (e.payload as MessageSentPayload).unprompted) {
+              notes.push({ life: l.id, text: (e.payload as MessageSentPayload).utterance, at: e.occurredAt });
+              break;
+            }
+          }
+        }
+        notes.sort((a, b) => (String(a.at) < String(b.at) ? 1 : -1));
+        return send(res, 200, notes);
+      }
+      // 钱包：申请充值（暂后台审批）。
+      if (req.method === 'POST' && url === '/api/recharge') {
+        const b = await readJson(req);
+        const amount = Math.max(1, Math.min(100000, Math.round(Number(b.amount) || 0)));
+        const id = accounts.requestRecharge(me.id, amount);
+        return send(res, 200, { requested: true, id, amount });
       }
       if (req.method === 'POST' && seg[1] === 'lives' && seg[3] === 'say') {
         const life2 = lifeById(seg[2]);

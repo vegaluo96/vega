@@ -28,6 +28,8 @@ export const api = {
   lives: () => req('GET', '/api/lives'),
   say: (lifeId, content) => req('POST', `/api/lives/${lifeId}/say`, { content }),
   lifeMe: (lifeId) => req('GET', `/api/lives/${lifeId}/me`),
+  notifications: () => req('GET', '/api/notifications'),
+  recharge: (amount) => req('POST', '/api/recharge', { amount }),
   bind: (lifeId) => req('POST', '/api/bindings', { lifeId }),
 };
 
