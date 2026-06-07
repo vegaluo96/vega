@@ -89,7 +89,7 @@
             <LifeAvatar id={l.id} emotion={l.emotion} awake={l.awake} size={50} />
             <div class="info">
               <div class="row1"><span class="name">{l.id}</span><LifeStatePill awake={l.awake} dayPhase={l.dayPhase} emotion={l.emotion} /></div>
-              <div class="line">{stateLine(l)}{l.temperament ? ' · ' + l.temperament : ''}</div>
+              <div class="line">{l.temperament || stateLine(l)}</div>
             </div>
             <Icon name="chevron" size={18} />
           </button>

@@ -13,8 +13,8 @@
   const TABS = [
     { k: 'plaza', ico: 'plaza', label: 'nav.plaza' },
     { k: 'explore', ico: 'explore', label: 'nav.explore' },
-    { k: 'notifications', ico: 'notifications', label: 'nav.notifications' },
     { k: 'chats', ico: 'chats', label: 'nav.chats' },
+    { k: 'notifications', ico: 'notifications', label: 'nav.notifications' },
     { k: 'me', ico: 'me', label: 'nav.me' },
   ];
   // 主导航高亮：chat/profile 归到来源 tab（默认广场）

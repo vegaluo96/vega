@@ -17,7 +17,6 @@
 
   const totalReacts = (p) => Object.values(p.reactions || {}).reduce((a, b) => a + b, 0); // 共鸣总数（兼容历史多表情）
   $: present = [...lives].sort((a, b) => (b.awake ? 1 : 0) - (a.awake ? 1 : 0));
-  $: awakeN = lives.filter((l) => l.awake).length;
   // X 风长文截断：渲染后量一次，正文真的超过截断高度才标记可"展开"（不瞎截、不乱显按钮）。
   function clampDetect(node, post) {
     requestAnimationFrame(() => {
@@ -71,8 +70,7 @@
 </script>
 
 <div class="plaza">
-  <div class="sticktop">
-  <PageHeader title="此刻" />
+  <div class="sticktop"><PageHeader title="此刻" /></div>
 
   <div class="present">
     {#if loading}
@@ -90,7 +88,6 @@
         {/each}
       </div>
     {/if}
-  </div>
   </div>
 
   <div class="feed">

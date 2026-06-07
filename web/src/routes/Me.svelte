@@ -95,7 +95,7 @@
             <button class="metcard card-interactive" on:click={() => navigate('chat', { id: l.id })}>
               <LifeAvatar id={l.id} awake={false} pulse={false} size={44} />
               <span class="mname">{l.id}</span>
-              <span class="go">›</span>
+              <Icon name="chevron" size={18} />
             </button>
           {/each}
         </div>
@@ -181,7 +181,7 @@
   .met { display: grid; grid-template-columns: 1fr; gap: 8px; }
   .metcard { display: flex; align-items: center; gap: 12px; padding: 12px 14px; }
   .mname { flex: 1; font-weight: 600; font-size: 15px; }
-  .go { color: var(--faint); font-size: 20px; }
+  .metcard :global(.ico) { color: var(--faint); flex: none; }
 
   .kv { display: flex; justify-content: space-between; align-items: center; }
   .kv .k { color: var(--faint); font-size: 13px; }
