@@ -2,11 +2,8 @@
   import { onMount, onDestroy } from 'svelte';
   import { api, clearSession } from '../lib/api.js';
   import { theme, toggleTheme } from '../lib/theme.js';
-  import { navigate } from '../lib/router.js';
   import { enablePush, pushSupported } from '../lib/push.js';
   import PageHeader from '../components/PageHeader.svelte';
-  import LifeAvatar from '../components/LifeAvatar.svelte';
-  import EmptyState from '../components/EmptyState.svelte';
   import Icon from '../components/Icon.svelte';
   import { qrDataUrl } from '../lib/qr.js';
 
@@ -88,31 +85,11 @@
 
   {#if me}
     <section class="block">
-      <h2 class="section-title">我遇见的她们</h2>
-      {#if me.lives.length}
-        <div class="met">
-          {#each me.lives as l (l.id)}
-            <button class="metcard card-interactive" on:click={() => navigate('chat', { id: l.id })}>
-              <LifeAvatar id={l.id} awake={false} pulse={false} size={44} />
-              <span class="mname">{l.id}</span>
-              <Icon name="chevron" size={18} />
-            </button>
-          {/each}
-        </div>
-      {:else}
-        <EmptyState title="你还没有遇见谁。" text="去广场，认识第一个她。">
-          <button slot="action" class="btn" on:click={() => navigate('plaza')}>去广场</button>
-        </EmptyState>
-      {/if}
-    </section>
-
-    <section class="block">
-      <h2 class="section-title">钱包 · 心意值</h2>
-      <div class="card pad">
-        <div class="kv"><span class="k">余额</span><span class="v mono">{me.balance} 心意</span></div>
-        {#if me.pendingRecharge > 0}<div class="kv"><span class="k">审批中</span><span class="v mono pending">{me.pendingRecharge} 心意 · 等待通过</span></div>{/if}
-        <p class="caption note">心意值是和她们更丰富对话的表达额度。用尽了她不会消失——只是话说得朴素些。</p>
-        <div class="wallet">
+      <h2 class="section-title">心意值</h2>
+      <div class="card">
+        <div class="row"><span class="rk">余额</span><span class="rv mono">{me.balance}</span></div>
+        {#if me.pendingRecharge > 0}<div class="row"><span class="rk">审批中</span><span class="rv pending">{me.pendingRecharge} · 等待通过</span></div>{/if}
+        <div class="row act">
           <select class="input sel" bind:value={rechargingAmount}>
             <option value={100}>100 心意</option>
             <option value={500}>500 心意</option>
@@ -120,24 +97,21 @@
           </select>
           <button class="btn" on:click={recharge}>申请充值</button>
         </div>
-        {#if rechargeMsg}<p class="ok">{rechargeMsg}</p>{/if}
       </div>
+      {#if rechargeMsg}<p class="ok">{rechargeMsg}</p>{/if}
     </section>
 
     <section class="block">
       <h2 class="section-title">微信</h2>
       <div class="card pad">
         {#if me.wechatChannel}
-          <div class="kv"><span class="k">状态</span><span class="v">已连接微信</span></div>
-          <p class="caption note">现在微信里和 <b>{me.wechatChannel.lifeId}</b> 聊。想换成别人：进那条命的对话，点「在微信里也和她聊」即可——一个微信只跟一条命。</p>
-          <button class="btn-ghost btn" on:click={disconnectWx}>断开微信连接</button>
+          <p class="status">已连接 · 微信里和 <b>{me.wechatChannel.lifeId}</b> 聊</p>
+          <button class="btn-ghost btn" on:click={disconnectWx}>断开</button>
         {:else if qrImg}
-          <p class="caption note">用<b>微信扫这个码</b>授权连接，扫完确认后稍等几秒自动完成。</p>
           <img class="wxqr" src={qrImg} alt="微信连接二维码" />
           {#if qrPolling}<p class="caption">等待你扫码…</p>{/if}
         {:else}
-          <p class="caption note">把微信接到 ZSKY：用微信扫码授权，之后在微信里就能和生命体聊。</p>
-          <button class="btn btn-secondary" on:click={connectWx}>连接微信 · 生成二维码</button>
+          <button class="btn btn-secondary" on:click={connectWx}>连接微信</button>
         {/if}
         {#if wxMsg}<p class="ok">{wxMsg}</p>{/if}
       </div>
@@ -147,8 +121,7 @@
       <section class="block">
         <h2 class="section-title">通知</h2>
         <div class="card pad">
-          <p class="caption note">开启后，她想你了、主动来找你时，即使没打开 ZSKY，也能收到。</p>
-          <button class="btn btn-secondary" on:click={turnOnPush}>开启「她想你了」通知</button>
+          <button class="btn btn-secondary" on:click={turnOnPush}>开启推送</button>
           {#if pushMsg}<p class="ok">{pushMsg}</p>{/if}
         </div>
       </section>
@@ -178,30 +151,18 @@
   .block .section-title { margin: 0 2px 10px; }
   .pad { padding: 16px; }
 
-  .met { display: grid; grid-template-columns: 1fr; gap: 8px; }
-  .metcard { display: flex; align-items: center; gap: 12px; padding: 12px 14px; }
-  .mname { flex: 1; font-weight: 600; font-size: 15px; }
-  .metcard :global(.ico) { color: var(--faint); flex: none; }
-
-  .kv { display: flex; justify-content: space-between; align-items: center; }
-  .kv .k { color: var(--faint); font-size: 13px; }
-  .kv .v { font-weight: 600; }
-  .note { margin: 12px 0 14px; }
   .pending { color: var(--accent); }
-  .wallet { display: flex; gap: 10px; }
-  .sel { flex: 1; min-height: 46px; }
-  .ok { color: var(--success); font-size: 13px; margin: 12px 0 0; }
-  .wxqr { display: block; width: 200px; height: 200px; margin: 12px auto 6px; background: #fff; border-radius: var(--r-sm); padding: 8px; image-rendering: pixelated; }
+  .status { font-size: 14px; color: var(--muted); margin: 0 0 12px; }
+  .sel { flex: 1; min-height: 44px; }
+  .ok { color: var(--success); font-size: 13px; margin: 10px 2px 0; }
+  .wxqr { display: block; width: 200px; height: 200px; margin: 4px auto 6px; background: #fff; border-radius: var(--r-sm); padding: 8px; image-rendering: pixelated; }
 
-  .row { display: flex; justify-content: space-between; align-items: center; padding: 13px 16px; border-bottom: 1px solid var(--border-subtle); }
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 13px 16px; border-bottom: 1px solid var(--border-subtle); }
   .row:last-child { border-bottom: 0; }
+  .row.act { padding: 12px 14px; }
   .rk { color: var(--faint); font-size: 13px; }
-  .rv { font-size: 14px; }
+  .rv { font-size: 14px; font-weight: 600; }
 
   .footer { display: flex; gap: 10px; margin-top: 26px; }
   .footer .btn { flex: 1; }
-
-  @media (min-width: 720px) {
-    .met { grid-template-columns: 1fr 1fr; }
-  }
 </style>

@@ -23,7 +23,7 @@
 </script>
 
 <div class="rels">
-  <div class="sticktop"><PageHeader title="关系" /></div>
+  <div class="sticktop"><PageHeader title="对话" /></div>
 
   {#if loading}<Skeleton rows={3} />{/if}
   {#if !loading && chats.length === 0 && !error}

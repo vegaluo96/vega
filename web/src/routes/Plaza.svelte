@@ -14,9 +14,15 @@
   let loading = true;
   let error = '';
   let es;
+  let searching = false;
+  let q = '';
+  const focusEl = (node) => node.focus();
+  function toggleSearch() { searching = !searching; if (!searching) q = ''; }
 
   const totalReacts = (p) => Object.values(p.reactions || {}).reduce((a, b) => a + b, 0); // 共鸣总数（兼容历史多表情）
-  $: present = [...lives].sort((a, b) => (b.awake ? 1 : 0) - (a.awake ? 1 : 0));
+  const hit = (s) => !q || String(s).toLowerCase().includes(q.toLowerCase());
+  $: present = [...lives].sort((a, b) => (b.awake ? 1 : 0) - (a.awake ? 1 : 0)).filter((l) => hit(l.id));
+  $: shownPosts = posts.filter((p) => hit(p.life + ' ' + p.text));
   // X 风长文截断：渲染后量一次，正文真的超过截断高度才标记可"展开"（不瞎截、不乱显按钮）。
   function clampDetect(node, post) {
     requestAnimationFrame(() => {
@@ -70,7 +76,12 @@
 </script>
 
 <div class="plaza">
-  <div class="sticktop"><PageHeader title="此刻" /></div>
+  <div class="sticktop">
+    <PageHeader title="此刻">
+      <button slot="action" class="iconbtn" on:click={toggleSearch} aria-label="搜索"><Icon name={searching ? 'close' : 'search'} size={20} /></button>
+    </PageHeader>
+    {#if searching}<input class="input input-pill search" bind:value={q} use:focusEl placeholder="搜：名字 / 心声里的字…" />{/if}
+  </div>
 
   <div class="present">
     {#if loading}
@@ -93,10 +104,10 @@
   <div class="feed">
     {#if loading}
       <Skeleton rows={3} />
-    {:else if posts.length === 0}
-      <EmptyState title="她们还没发什么。" text="安静也是她们生活的一部分。过一会儿，会有人留下心声。" />
+    {:else if shownPosts.length === 0}
+      <EmptyState title={q ? '没搜到相关的。' : '她们还没发什么。'} text={q ? '换个词看看。' : '安静也是她们生活的一部分。过一会儿，会有人留下心声。'} />
     {/if}
-    {#each posts as p (p.postId)}
+    {#each shownPosts as p (p.postId)}
       <article class="post fade-in">
         <button class="avslot av" on:click={() => navigate('profile', { id: p.life })}><LifeAvatar id={p.life} awake={true} size={40} /></button>
         <div class="body">
@@ -136,6 +147,9 @@
 
 <style>
   .plaza { max-width: var(--maxw); margin: 0 auto; padding: 0 16px 96px; }
+  .iconbtn { background: none; border: 0; padding: 6px; margin: -6px; color: var(--muted); display: inline-flex; }
+  .iconbtn:hover { color: var(--text); }
+  .search { width: 100%; margin: 0 0 12px; }
 
   .present { padding: 4px 0 12px; border-bottom: 1px solid var(--border-subtle); }
   .strip { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
