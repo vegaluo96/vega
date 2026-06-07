@@ -19,6 +19,7 @@
     "daemon": "node --experimental-strip-types src/server/daemon.ts",
     "ab": "node --experimental-strip-types src/cli/ab.ts",
     "backup": "node --experimental-strip-types src/cli/backup.ts",
+    "restore": "node --experimental-strip-types src/cli/restore.ts",
     "check": "node --experimental-strip-types src/cli/selftest.ts"
   },
   "devDependencies": {

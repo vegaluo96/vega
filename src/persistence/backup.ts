@@ -11,12 +11,14 @@ export interface BackupResult {
   path?: string;
   events: number;
   reason?: string;
+  mirrored?: string; // 异盘/异地镜像副本路径（若配置且成功）
 }
 
 export interface BackupOptions {
   dir?: string; // 备份目录（默认 <lifeDir>/backups）
   keep?: number; // 保留份数（默认 48）
   cmd?: string; // 异地命令；执行时 env 带 VEGA_BACKUP_FILE=备份文件路径
+  mirrorDir?: string; // 异地/异盘镜像目录（如挂载的 NAS/另一块盘）：把校验过的备份再放一份，离了本盘也活
 }
 
 export function backupNow(lifePath: string, opts: BackupOptions = {}): BackupResult {
@@ -30,7 +32,8 @@ export function backupNow(lifePath: string, opts: BackupOptions = {}): BackupRes
   const dir = opts.dir ?? join(dirname(lifePath), 'backups');
   mkdirSync(dir, { recursive: true });
   const ts = new Date().toISOString().replace(/[:.]/g, '-');
-  const dest = join(dir, `${basename(lifePath)}.${ts}.bak`);
+  const name = `${basename(lifePath)}.${ts}.bak`;
+  const dest = join(dir, name);
   copyFileSync(lifePath, dest);
 
   // 轮转：只保留最近 keep 份。
@@ -38,7 +41,19 @@ export function backupNow(lifePath: string, opts: BackupOptions = {}): BackupRes
   const baks = readdirSync(dir).filter((f) => f.startsWith(`${basename(lifePath)}.`) && f.endsWith('.bak')).sort();
   for (const f of baks.slice(0, Math.max(0, baks.length - keep))) rmSync(join(dir, f), { force: true });
 
-  // 异地（可选）：用户在 VEGA_BACKUP_CMD 里写 rclone/scp 等；备份文件路径经 env 传入。
+  // 异盘/异地镜像（可选）：再放一份到挂载卷/另一块盘——本盘没了她也还在。
+  let mirrored: string | undefined;
+  if (opts.mirrorDir && opts.mirrorDir.trim() !== '') {
+    try {
+      mkdirSync(opts.mirrorDir, { recursive: true });
+      mirrored = join(opts.mirrorDir, name);
+      copyFileSync(dest, mirrored);
+    } catch {
+      mirrored = undefined; // 镜像失败不影响本地备份已成功
+    }
+  }
+
+  // 异地命令（可选）：用户在 VEGA_BACKUP_CMD 里写 rclone/scp/ossutil 等；备份文件路径经 env 传入。
   if (opts.cmd && opts.cmd.trim() !== '') {
     try {
       execFileSync('bash', ['-c', opts.cmd], { env: { ...process.env, VEGA_BACKUP_FILE: dest }, stdio: 'ignore' });
@@ -46,5 +61,5 @@ export function backupNow(lifePath: string, opts: BackupOptions = {}): BackupRes
       /* 异地失败不影响本地备份已成功 */
     }
   }
-  return { ok: true, path: dest, events: events.length };
+  return { ok: true, path: dest, events: events.length, mirrored };
 }

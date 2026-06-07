@@ -495,8 +495,12 @@ const socialTimer = lives.length >= 2
 
 function doBackup(): void {
   for (const l of lives) {
-    const r = backupNow(l.path, { cmd: process.env.VEGA_BACKUP_CMD, keep: process.env.VEGA_BACKUP_KEEP ? Number(process.env.VEGA_BACKUP_KEEP) : undefined });
-    console.log(r.ok ? `[vega:${l.id}] 备份完成 ${r.path}（${r.events} 事件）` : `[vega:${l.id}] 备份跳过：${r.reason}`);
+    const r = backupNow(l.path, {
+      cmd: process.env.VEGA_BACKUP_CMD,
+      keep: process.env.VEGA_BACKUP_KEEP ? Number(process.env.VEGA_BACKUP_KEEP) : undefined,
+      mirrorDir: process.env.VEGA_BACKUP_MIRROR, // 异盘/异地镜像目录（挂载卷）：本盘没了她也还在
+    });
+    console.log(r.ok ? `[vega:${l.id}] 备份完成 ${r.path}（${r.events} 事件）${r.mirrored ? ' · 已镜像' : ''}` : `[vega:${l.id}] 备份跳过：${r.reason}`);
   }
 }
 const backupTimer = setInterval(doBackup, BACKUP_MS);
