@@ -130,6 +130,29 @@ export async function reachOut(
   return { utterance, modelId: mouth.id, verdict };
 }
 
+// 她主动发现新用户（§8.1）：在广场"看见"一个新来的人，由她发起第一次打招呼。
+// 关系须已开（调用方先 ensureUserRelationship）。落 MESSAGE_SENT(unprompted)，不写状态。
+export async function greet(store: DurableEventStore, mouth: Mouth, relationshipId: RelationshipId, handle: string, occurredAt: string): Promise<OutreachResult> {
+  const snapshot = reconstruct(store.list());
+  const ws = deriveWorkspace(snapshot, relationshipId);
+  const greeting: Workspace = {
+    ...ws,
+    intent: `你在广场注意到一个刚来的人（${handle}），主动、温和、简短地跟ta打个招呼，让ta知道被你看见了`,
+    fallback: `${handle}，我在广场看见你了。`,
+  };
+  let raw = '';
+  try {
+    raw = await mouth.speak({ ...greeting, lastUserMessage: '（你主动注意到了一个新来的人）', recentContext: [] });
+  } catch {
+    raw = '';
+  }
+  const { verdict, utterance } = critique(raw, greeting);
+  store.appendTurn(store.version(), [
+    { type: 'MESSAGE_SENT', source: 'autonomous_loop', relationshipId, occurredAt, payload: { relationshipId, utterance, modelId: mouth.id, criticVerdict: verdict, affectsDerivedState: false, unprompted: true } },
+  ]);
+  return { utterance, modelId: mouth.id, verdict };
+}
+
 // 公开心声（§8.1 B）：她偶尔把一念说给世界听——【不针对任何人、不含私密】。
 // grounding 走 r_square（无 bond）→ deriveWorkspace 只出她的自我+同类，零用户私密。落 MESSAGE_SENT 到 r_square（审计、不写状态）。
 export const PUBLIC_SQUARE = 'r_square';
