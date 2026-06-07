@@ -181,3 +181,26 @@ test('管理后台元数据：listUsers（含余额、无口令） + pendingRech
     s.close();
   }
 });
+
+test('角色提升：先注册（user）→ 后加 VEGA_OWNERS → 下次登录自动升 owner', async () => {
+  const { mkdtempSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const dir = mkdtempSync(join(tmpdir(), 'vega-role-'));
+  const path = join(dir, 'a.db');
+  try {
+    // 没有白名单时注册 → user
+    const s1 = createAccountStore(path);
+    const r = s1.register('me@x.com', 'password1', 'me');
+    assert.equal(r.ok && r.account.role, 'user');
+    s1.close();
+    // 重开库、这次把该邮箱加进 owners → 登录即升 owner
+    const s2 = createAccountStore(path, { owners: ['me@x.com'] });
+    const l = s2.login('me@x.com', 'password1');
+    assert.equal(l.ok && l.account.role, 'owner', '登录后自动升 owner');
+    assert.equal(s2.authenticate(l.ok ? l.token : '')?.role, 'owner', '会话也是 owner');
+    s2.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

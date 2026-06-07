@@ -104,6 +104,16 @@ export function createAccountStore(path = ':memory:', opts: AccountStoreOptions 
   const starter = opts.starterCredits ?? 100;
   const ttl = opts.sessionTtlMs ?? 30 * 86_400_000;
   const roleFor = (email: string): Role => (owners.has(norm(email)) ? 'owner' : stewards.has(norm(email)) ? 'steward' : 'user');
+  // 白名单(VEGA_OWNERS/STEWARDS)是角色的真相源：每次鉴权按它校正存库角色。
+  // 这样"先注册、后加白名单"也能在下次登录自动升为 owner/steward（移出白名单则降回 user）。
+  const syncRole = (u: UserRow): UserRow => {
+    const want = roleFor(u.email);
+    if (want !== u.role) {
+      db.prepare('UPDATE users SET role=? WHERE id=?').run(want, u.id);
+      return { ...u, role: want };
+    }
+    return u;
+  };
 
   const userById = (id: string): UserRow | undefined => db.prepare('SELECT * FROM users WHERE id=?').get(id) as UserRow | undefined;
   const userByEmail = (email: string): UserRow | undefined => db.prepare('SELECT * FROM users WHERE email=?').get(norm(email)) as UserRow | undefined;
@@ -153,6 +163,7 @@ export function createAccountStore(path = ':memory:', opts: AccountStoreOptions 
       }
       if (!verifyPassword(password, u.pass_salt, u.pass_hash)) return { ok: false, error: '邮箱或密码错误' };
       if (u.status === 'blocked') return { ok: false, error: '账号已被封禁' };
+      syncRole(u); // 按白名单校正角色（处理"先注册后加 VEGA_OWNERS"）
       const token = genToken();
       const t = now();
       db.prepare('INSERT INTO sessions(token_hash,user_id,created_at,expires_at) VALUES(?,?,?,?)')
@@ -168,8 +179,9 @@ export function createAccountStore(path = ':memory:', opts: AccountStoreOptions 
         db.prepare('DELETE FROM sessions WHERE token_hash=?').run(sha256(token));
         return null;
       }
-      const u = userById(s.user_id);
+      let u = userById(s.user_id);
       if (!u || u.status === 'blocked') return null;
+      u = syncRole(u);
       db.prepare('UPDATE users SET last_active_at=? WHERE id=?').run(now(), u.id);
       return toAccount(u);
     },
