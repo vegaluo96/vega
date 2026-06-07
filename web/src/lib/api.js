@@ -42,6 +42,7 @@ export const api = {
   wxConnectStart: () => req('POST', '/api/wechat/connect/start'),
   wxConnectPoll: (qrcode) => req('POST', '/api/wechat/connect/poll', { qrcode }),
   wxDisconnect: () => req('POST', '/api/wechat/disconnect'),
+  setChannelLife: (lifeId) => req('POST', '/api/wechat/channel-life', { lifeId }),
   pushKey: () => req('GET', '/api/push/key'),
   pushSubscribe: (subscription) => req('POST', '/api/push/subscribe', { subscription }),
 };

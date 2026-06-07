@@ -267,14 +267,15 @@ async function runChannel(userId: string): Promise<void> {
     while (channelRunning.has(userId)) {
       const ch = accounts.channelFor(userId);
       if (!ch) break;
-      const lifeId = WECHAT_LIFE && lifeById(WECHAT_LIFE) ? WECHAT_LIFE : (lives[0]?.id ?? '');
+      // 当前在微信里和哪条命聊——取通道的活跃命（网页可切换，即时生效），回落 env / 第一条命。
+      const lifeId = (ch.lifeId && lifeById(ch.lifeId)) ? ch.lifeId : (WECHAT_LIFE && lifeById(WECHAT_LIFE) ? WECHAT_LIFE : (lives[0]?.id ?? ''));
       try {
         const { msgs, buf } = await ilink.getUpdates(ch.baseurl, ch.botToken, ch.buf);
         if (buf !== ch.buf) accounts.updateChannelBuf(userId, buf);
         for (const m of msgs) {
           try {
-            const who = accounts.ensureWechatUser(m.fromUserId, lifeId); // 每个发信人各自身份+连续关系
-            const lf = lifeById(who.lifeId);
+            const who = accounts.ensureWechatUser(m.fromUserId, lifeId); // 发信人身份
+            const lf = lifeById(lifeId); // 用通道的活跃命（切换即对所有人生效）
             const ac = accounts.getAccount(who.userId);
             if (!lf || !ac) continue;
             const reply = snapOf(lf).awake ? String((await respondAsUser(lf, ac, m.text, 'wechat')).utterance ?? '…') : '她在更深的睡眠里，等会儿再来找我吧。';
@@ -869,7 +870,7 @@ const server = createServer(async (req, res) => {
       const me = sessionAccount(req);
       if (!me) return send(res, 401, { error: 'unauthorized' });
       if (req.method === 'POST' && url === '/api/auth/logout') { accounts.logout(bearer(req)); return send(res, 200, { ok: true }); }
-      if (req.method === 'GET' && url === '/api/me') return send(res, 200, { account: publicAccount(me), balance: accounts.balance(me.id), lives: livesMetBy(me), wechat: accounts.wechatBindingFor(me.id), wechatChannel: !!accounts.channelFor(me.id) });
+      if (req.method === 'GET' && url === '/api/me') { const wc = accounts.channelFor(me.id); return send(res, 200, { account: publicAccount(me), balance: accounts.balance(me.id), lives: livesMetBy(me), wechat: accounts.wechatBindingFor(me.id), wechatChannel: wc ? { lifeId: wc.lifeId } : null }); }
       // SSE 实时流：公开动态（广场/醒睡）+ 只属于我的（她想我了）。绝不推别人的私密事件（visibleTo 作用域）。
       if (req.method === 'GET' && url === '/api/stream') {
         const rel = accounts.relIdFor(me.id);
@@ -911,11 +912,21 @@ const server = createServer(async (req, res) => {
         const st = await ilink.getStatus(String(b.qrcode ?? ''));
         console.log('[wechat] status ->', st.status, JSON.stringify(st.raw).slice(0, 400));
         if (st.status === 'confirmed' && st.botToken) {
-          accounts.saveChannel(me.id, st.ilinkUserId ?? '', st.botToken, st.baseurl ?? ilink.base);
+          const defLife = WECHAT_LIFE && lifeById(WECHAT_LIFE) ? WECHAT_LIFE : (lives[0]?.id ?? '');
+          accounts.saveChannel(me.id, st.ilinkUserId ?? '', st.botToken, st.baseurl ?? ilink.base, defLife);
           runChannel(me.id);
           return send(res, 200, { status: 'confirmed', connected: true });
         }
         return send(res, 200, { status: st.status });
+      }
+      // 切换"微信里和哪条命聊"——连接已建立即可切，不用重连。即时生效。
+      if (req.method === 'POST' && url === '/api/wechat/channel-life') {
+        const b = await readJson(req);
+        const lifeId = String(b.lifeId ?? '');
+        if (!lifeById(lifeId)) return send(res, 404, { error: 'no such life' });
+        if (!accounts.channelFor(me.id)) return send(res, 400, { error: '尚未连接微信' });
+        accounts.setChannelLife(me.id, lifeId);
+        return send(res, 200, { ok: true, lifeId });
       }
       if (req.method === 'POST' && url === '/api/wechat/disconnect') {
         channelRunning.delete(me.id);

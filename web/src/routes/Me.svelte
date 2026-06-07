@@ -62,6 +62,11 @@
   async function disconnectWx() {
     try { await api.wxDisconnect(); me = await api.me(); qrImg = ''; wxMsg = '已断开微信连接。'; } catch (e) { wxMsg = e.message; }
   }
+  async function switchChannelLife(e) {
+    wxMsg = '';
+    try { await api.setChannelLife(e.target.value); if (me.wechatChannel) me.wechatChannel.lifeId = e.target.value; wxMsg = '已切换 · 微信里现在和 ' + e.target.value + ' 聊。'; }
+    catch (err) { wxMsg = err.message; }
+  }
   async function logout() {
     try { await api.logout(); } catch {}
     clearSession();
@@ -125,8 +130,11 @@
       <div class="card pad">
         {#if me.wechatChannel}
           <div class="kv"><span class="k">状态</span><span class="v">已连接微信</span></div>
-          <p class="caption note">现在在微信里发消息，就能和生命体聊（跨端同一个她）。</p>
-          <button class="btn-ghost btn" on:click={disconnectWx}>断开微信连接</button>
+          <p class="caption note">在微信里和谁聊（随时切换，不用重连）：</p>
+          <select class="input sel" value={me.wechatChannel.lifeId} on:change={switchChannelLife}>
+            {#each (allLives.length ? allLives : me.lives) as l}<option value={l.id}>{l.id}</option>{/each}
+          </select>
+          <button class="btn-ghost btn" style="margin-top:12px" on:click={disconnectWx}>断开微信连接</button>
         {:else if qrImg}
           <p class="caption note">用<b>微信扫这个码</b>授权连接，扫完确认后稍等几秒自动完成。</p>
           <img class="wxqr" src={qrImg} alt="微信连接二维码" />
