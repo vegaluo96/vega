@@ -1485,10 +1485,12 @@ const heartbeat = setInterval(async () => {
       // 每跳限额 + 总上限 → token 随生命体数、不随用户数爆炸。其余只记得、不主动打扰。
       const sc = effSocial();
       const rs = reachState(life);
-      // 活跃圈跨【同类+人类】共享一份容量（第一性原理：人只有一份社交容量，按亲疏分层）。
-      // 同类占了位，人类的名额就少一个。这里只发人类的"想你了"；同类的主动走下面的寒暄回路。
+      // 人类的"想你了"圈只在【人类关系】里排名取前 activeCircle——否则同类(现在每条命有十几个、还自动越聊越近)
+      // 会把活跃圈占满，把真实用户挤出去 → 她不再主动找人(这正是加了 12 条命后"不主动找用户"的根因)。
+      // 同类的主动维系走下面独立的寒暄回路、不与人类争这份名额；每跳 reachPerTick + 各层频率上限仍兜住总成本
+      // （≤reachPerTick 次/跳/命，随生命体数、不随用户数爆炸——第一性原理不破）。
       const circle = Object.entries(after.bonds)
-        .filter(([rel]) => rel.startsWith('u_') || rel.startsWith('peer_') || rel === REL)
+        .filter(([rel]) => rel.startsWith('u_') || rel === REL)
         .filter(([, b]) => b.closeness >= sc.acquaintAt)
         .sort(([, a], [, b]) => b.closeness - a.closeness)
         .slice(0, sc.activeCircle);

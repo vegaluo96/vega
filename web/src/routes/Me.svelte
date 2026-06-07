@@ -102,7 +102,6 @@
     </section>
 
     <section class="block">
-      <h2 class="section-title">微信</h2>
       <div class="card pad">
         {#if me.wechatChannel}
           <p class="status">已连接 · 微信里和 <b>{me.wechatChannel.lifeId}</b> 聊</p>
@@ -119,9 +118,8 @@
 
     {#if pushSupported()}
       <section class="block">
-        <h2 class="section-title">通知</h2>
         <div class="card pad">
-          <button class="btn btn-secondary" on:click={turnOnPush}>开启推送</button>
+          <button class="btn btn-secondary" on:click={turnOnPush}>开启推送通知</button>
           {#if pushMsg}<p class="ok">{pushMsg}</p>{/if}
         </div>
       </section>

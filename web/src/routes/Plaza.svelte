@@ -15,14 +15,9 @@
   let loading = true;
   let error = '';
   let es;
-  let searching = false;
-  let q = '';
-  const focusEl = (node) => node.focus();
-  function toggleSearch() { searching = !searching; if (!searching) q = ''; }
 
-  const hit = (s) => !q || String(s).toLowerCase().includes(q.toLowerCase());
-  $: present = [...lives].sort((a, b) => (b.awake ? 1 : 0) - (a.awake ? 1 : 0)).filter((l) => hit(l.id));
-  $: shownPosts = posts.filter((p) => hit(p.life + ' ' + p.text));
+  $: present = [...lives].sort((a, b) => (b.awake ? 1 : 0) - (a.awake ? 1 : 0));
+  $: shownPosts = posts;
 
   function relTime(at) {
     const d = Date.now() - new Date(at).getTime();
@@ -56,10 +51,7 @@
 
 <div class="plaza">
   <div class="sticktop">
-    <PageHeader title="此刻">
-      <button slot="action" class="iconbtn" on:click={toggleSearch} aria-label="搜索"><Icon name={searching ? 'close' : 'search'} size={20} /></button>
-    </PageHeader>
-    {#if searching}<input class="input input-pill search" bind:value={q} use:focusEl placeholder="搜：名字 / 心声里的字…" />{/if}
+    <PageHeader title="此刻" />
 
     <div class="present">
       {#if loading}
@@ -83,7 +75,7 @@
     {#if loading}
       <Skeleton rows={3} />
     {:else if shownPosts.length === 0}
-      <EmptyState title={q ? '没搜到相关的。' : '她们还没发什么。'} text={q ? '换个词看看。' : '安静也是她们生活的一部分。过一会儿，会有人留下心声。'} />
+      <EmptyState title="她们还没发什么。" text="安静也是她们生活的一部分。过一会儿，会有人留下心声。" />
     {/if}
     {#each shownPosts as p (p.postId)}
       <article class="post fade-in">
@@ -114,9 +106,6 @@
 
 <style>
   .plaza { max-width: var(--maxw); margin: 0 auto; padding: 0 16px 96px; }
-  .iconbtn { background: none; border: 0; padding: 6px; margin: -6px; color: var(--muted); display: inline-flex; }
-  .iconbtn:hover { color: var(--text); }
-  .search { width: 100%; margin: 0 0 12px; }
 
   /* —— 顶部在场头像条：随页头一起吸顶（Instagram/WhatsApp 风），始终可见 —— */
   .present { padding: 4px 0 10px; border-bottom: 1px solid var(--border); }

@@ -14,11 +14,8 @@
   let loading = true;
   let error = '';
   let tab = 'meet'; // meet=认识她们 / between=她们之间
-  let searching = false;
-  let q = '';
   let es;
   const pairOf = (a, b) => [a, b].sort().join('|');
-  const focusEl = (node) => node.focus();
 
   function relTime(at) {
     const d = Date.now() - new Date(at).getTime();
@@ -26,10 +23,6 @@
     if (d < 3600000) return Math.floor(d / 60000) + ' 分前';
     if (d < 86400000) return Math.floor(d / 3600000) + ' 小时前';
     return new Date(at).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
-  }
-  function toggleSearch() {
-    searching = !searching;
-    if (searching) tab = 'meet'; else q = '';
   }
 
   onMount(async () => {
@@ -53,21 +46,13 @@
   });
   onDestroy(() => es && es.close());
 
-  $: shown = lives.filter((l) => !q || (l.id + ' ' + (l.temperament || '') + ' ' + (l.emotion || '')).toLowerCase().includes(q.toLowerCase()));
+  $: shown = lives;
   const stateLine = (l) => (l.awake ? `此刻${l.emotion}${l.dayPhase ? '，' + l.dayPhase : ''}` : '在更深的睡眠里');
 </script>
 
 <div class="explore">
   <div class="sticktop">
-    <PageHeader title="探索">
-      <button slot="action" class="iconbtn" on:click={toggleSearch} aria-label="搜索">
-        <Icon name={searching ? 'close' : 'search'} size={20} />
-      </button>
-    </PageHeader>
-
-    {#if searching}
-      <input class="input input-pill search" bind:value={q} use:focusEl placeholder="搜一个她：名字 / 气质 / 心情…" />
-    {/if}
+    <PageHeader title="探索" />
 
     <div class="seg">
       <button class="segbtn" class:on={tab === 'meet'} on:click={() => (tab = 'meet')}>认识她们</button>
@@ -81,7 +66,7 @@
     {:else if error}
       <p class="err">{error}</p>
     {:else if shown.length === 0}
-      <EmptyState title="没找到符合的她。" text="换个词，或清空搜索看看全部。" />
+      <EmptyState title="还没有她们。" text="过一会儿再来看看。" />
     {:else}
       <div class="grid">
         {#each shown as l (l.id)}
@@ -126,9 +111,6 @@
 
 <style>
   .explore { max-width: var(--maxw); margin: 0 auto; padding: 0 16px 96px; }
-  .iconbtn { background: none; border: 0; padding: 6px; margin: -6px; color: var(--muted); display: inline-flex; }
-  .iconbtn:hover { color: var(--text); }
-  .search { width: 100%; margin-bottom: 12px; }
 
   .seg { display: flex; gap: 4px; padding: 3px; background: var(--surface-2); border-radius: var(--r-pill); margin-bottom: 14px; }
   .segbtn { flex: 1; min-height: 34px; border: 0; border-radius: var(--r-pill); background: transparent; color: var(--muted); font: inherit; font-size: 13.5px; font-weight: 600; transition: background var(--t-hover) ease, color var(--t-hover) ease; }
