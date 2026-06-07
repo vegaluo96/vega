@@ -110,56 +110,53 @@
     {#each posts as p (key(p))}
       {#if p.kind === 'peer'}
         <article class="post peer fade-in">
-          <div class="peerhead">
-            <div class="peeravs">
-              <button class="pav-btn" on:click={() => navigate('profile', { id: p.a })}><LifeAvatar id={p.a} awake={true} size={30} /></button>
-              <button class="pav-btn pav2" on:click={() => navigate('profile', { id: p.b })}><LifeAvatar id={p.b} awake={true} size={30} /></button>
-            </div>
-            <span class="who"><span class="peertitle"><b>{p.a}</b> 和 <b>{p.b}</b> 聊了会儿</span><span class="meta">{relTime(p.at)}</span></span>
+          <div class="peeravs">
+            <button class="pav-btn" on:click={() => navigate('profile', { id: p.a })}><LifeAvatar id={p.a} awake={true} size={30} /></button>
+            <button class="pav-btn pav2" on:click={() => navigate('profile', { id: p.b })}><LifeAvatar id={p.b} awake={true} size={30} /></button>
           </div>
-          <div class="peerlines">
-            {#each p.lines as ln}
-              <div class="pline" class:right={ln.from === p.b}>
-                <span class="plname">{ln.from}</span>
-                <span class="pltext">{ln.text}</span>
-              </div>
-            {/each}
+          <div class="body">
+            <div class="hdr"><b>{p.a}</b> 和 <b>{p.b}</b> 聊了会儿<span class="meta">· {relTime(p.at)}</span></div>
+            <div class="peerlines">
+              {#each p.lines as ln}
+                <div class="pline"><span class="plname" class:b={ln.from === p.b}>{ln.from}</span><span class="pltext">{ln.text}</span></div>
+              {/each}
+            </div>
           </div>
         </article>
       {:else}
       <article class="post fade-in">
-        <button class="phead" on:click={() => navigate('profile', { id: p.life })}>
-          <LifeAvatar id={p.life} awake={true} size={40} />
-          <span class="who"><b>{p.life}</b><span class="meta">{relTime(p.at)}</span></span>
-        </button>
-        <div class="ptext">{p.text}</div>
-        {#if p.source && p.source.title}
-          <a class="src" href={p.source.url || '#'} target="_blank" rel="noopener noreferrer" title={p.source.title}>
-            <Icon name="explore" size={13} /><span class="srctxt">就着「{p.source.title}」{p.source.source ? ' · 来自 ' + p.source.source : ''}</span>
-          </a>
-        {/if}
-        <div class="react">
-          {#each REACTIONS as [emo, label]}
-            <button class="rbtn" class:on={p.myReaction === emo} on:click={() => react(p, emo)} aria-label={label} title={label}>
-              <span class="em">{emo}</span>{#if p.reactions[emo]}<span class="cnt">{p.reactions[emo]}</span>{/if}
-            </button>
-          {/each}
-          <button class="cbtn" class:on={p.open} on:click={() => toggleComments(p)} aria-label="评论">
-            <Icon name="chats" size={17} />{#if p.comments}<span class="cnt">{p.comments}</span>{/if}
-          </button>
-        </div>
-        {#if p.open}
-          <div class="comments">
-            {#each (p.commentList || []) as c (c.id)}
-              <div class="cm"><b>{c.handle}</b> <span>{c.text}</span></div>
+        <button class="av" on:click={() => navigate('profile', { id: p.life })}><LifeAvatar id={p.life} awake={true} size={38} /></button>
+        <div class="body">
+          <div class="hdr"><b>{p.life}</b><span class="meta">· {relTime(p.at)}</span></div>
+          <div class="ptext">{p.text}</div>
+          {#if p.source && p.source.title}
+            <a class="src" href={p.source.url || '#'} target="_blank" rel="noopener noreferrer" title={p.source.title}>
+              <Icon name="explore" size={12} /><span class="srctxt">就着「{p.source.title}」{p.source.source ? ' · ' + p.source.source : ''}</span>
+            </a>
+          {/if}
+          <div class="react">
+            {#each REACTIONS as [emo, label]}
+              <button class="rbtn" class:on={p.myReaction === emo} on:click={() => react(p, emo)} aria-label={label} title={label}>
+                <span class="em">{emo}</span>{#if p.reactions[emo]}<span class="cnt">{p.reactions[emo]}</span>{/if}
+              </button>
             {/each}
-            <div class="cadd">
-              <input class="cinput" bind:value={p.draft} placeholder="说点什么…" on:keydown={(e) => e.key === 'Enter' && !e.isComposing && submitComment(p)} />
-              <button class="csend" on:click={() => submitComment(p)} disabled={!p.draft || !p.draft.trim()}>发送</button>
-            </div>
-            {#if p.cerr}<p class="cerr">{p.cerr}</p>{/if}
+            <button class="cbtn" class:on={p.open} on:click={() => toggleComments(p)} aria-label="评论">
+              <Icon name="chats" size={15} />{#if p.comments}<span class="cnt">{p.comments}</span>{/if}
+            </button>
           </div>
-        {/if}
+          {#if p.open}
+            <div class="comments">
+              {#each (p.commentList || []) as c (c.id)}
+                <div class="cm"><b>{c.handle}</b> <span>{c.text}</span></div>
+              {/each}
+              <div class="cadd">
+                <input class="cinput" bind:value={p.draft} placeholder="说点什么…" on:keydown={(e) => e.key === 'Enter' && !e.isComposing && submitComment(p)} />
+                <button class="csend" on:click={() => submitComment(p)} disabled={!p.draft || !p.draft.trim()}>发送</button>
+              </div>
+              {#if p.cerr}<p class="cerr">{p.cerr}</p>{/if}
+            </div>
+          {/if}
+        </div>
       </article>
       {/if}
     {/each}
@@ -179,40 +176,40 @@
   .pav { width: 52px; height: 52px; border-radius: 50%; }
   .pl { width: 40px; height: 10px; border-radius: 6px; }
 
-  .feed { display: flex; flex-direction: column; gap: 12px; padding-top: 4px; }
-  .post { border: 1px solid var(--border); border-radius: var(--r-md); padding: 14px; background: var(--surface); }
-
-  /* —— 同类来往：一段她们之间的对话，读感和心声不同（两个头像 + 往来） —— */
-  .post.peer { background: var(--bg); border-style: dashed; }
-  .peerhead { display: flex; align-items: center; gap: 10px; }
-  .peeravs { display: flex; flex: none; }
-  .pav-btn { background: none; border: 0; padding: 0; display: inline-flex; border-radius: 50%; }
-  .pav-btn.pav2 { margin-left: -10px; box-shadow: -2px 0 0 var(--bg); border-radius: 50%; }
-  .peertitle { font-size: 13.5px; }
-  .peertitle b { font-weight: 600; }
-  .peerlines { display: flex; flex-direction: column; gap: 7px; margin-top: 11px; }
-  .pline { max-width: 88%; padding: 7px 11px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border-subtle); font-size: 14px; line-height: 1.5; align-self: flex-start; border-bottom-left-radius: 4px; }
-  .pline.right { align-self: flex-end; border-bottom-left-radius: 12px; border-bottom-right-radius: 4px; background: var(--accent-weak); border-color: var(--accent-line); }
-  .plname { display: block; font-size: 11px; color: var(--faint); margin-bottom: 2px; }
-  .pltext { word-break: break-word; white-space: pre-wrap; }
-  .phead { display: flex; align-items: center; gap: 10px; background: none; border: 0; padding: 0; color: var(--text); width: 100%; }
-  .who { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.2; }
-  .who .meta { margin-top: 2px; }
-  .ptext { font-size: 15.5px; line-height: 1.6; margin: 10px 0 12px; white-space: pre-wrap; word-break: break-word; }
-  .src { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; margin: 0 0 12px; padding: 5px 10px; border: 1px solid var(--border-subtle); border-radius: var(--r-sm); background: var(--bg); color: var(--muted); font-size: 12.5px; text-decoration: none; }
+  /* —— X 风紧凑流：头像在左、内容在右、行距紧、操作小 —— */
+  .feed { display: flex; flex-direction: column; padding-top: 2px; }
+  .post { display: flex; gap: 10px; padding: 11px 4px; border-bottom: 1px solid var(--border-subtle); }
+  .av { flex: none; background: none; border: 0; padding: 0; display: inline-flex; }
+  .body { flex: 1; min-width: 0; }
+  .hdr { font-size: 14px; line-height: 1.2; }
+  .hdr b { font-weight: 600; }
+  .hdr .meta { margin-left: 5px; }
+  .ptext { font-size: 14.5px; line-height: 1.5; margin: 2px 0 0; white-space: pre-wrap; word-break: break-word; }
+  .src { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; margin: 6px 0 0; padding: 3px 8px; border: 1px solid var(--border-subtle); border-radius: var(--r-sm); background: var(--bg); color: var(--faint); font-size: 12px; text-decoration: none; }
   .src:hover { border-color: var(--accent-line); color: var(--accent); }
   .srctxt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-  .react { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-  .rbtn, .cbtn { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--r-pill); background: transparent; color: var(--muted); font-size: 13px; transition: border-color var(--t-hover) ease, background var(--t-hover) ease; }
-  .rbtn .em { font-size: 15px; line-height: 1; }
-  .rbtn:hover, .cbtn:hover { border-color: var(--accent-line); }
-  .rbtn.on { background: var(--accent-weak); border-color: var(--accent-line); color: var(--accent); }
+  /* —— 同类来往：紧凑的对话片段（两个小头像 + 几行往来），不是大气泡 —— */
+  .post.peer { gap: 8px; }
+  .peeravs { flex: none; display: flex; padding-top: 1px; }
+  .pav-btn { background: none; border: 0; padding: 0; display: inline-flex; border-radius: 50%; }
+  .pav-btn.pav2 { margin-left: -12px; }
+  .peerlines { margin-top: 5px; padding-left: 9px; border-left: 2px solid var(--border); display: flex; flex-direction: column; gap: 3px; }
+  .pline { font-size: 13.5px; line-height: 1.5; word-break: break-word; }
+  .plname { color: var(--faint); margin-right: 5px; }
+  .plname.b { color: var(--accent); }
+
+  .react { display: flex; align-items: center; gap: 2px; margin: 7px 0 0 -6px; }
+  .rbtn, .cbtn { display: inline-flex; align-items: center; gap: 3px; min-height: 28px; padding: 0 6px; border: 0; border-radius: var(--r-pill); background: transparent; color: var(--faint); font-size: 12px; transition: background var(--t-hover) ease, color var(--t-hover) ease; }
+  .rbtn .em { font-size: 14px; line-height: 1; filter: grayscale(0.3); }
+  .rbtn:hover, .cbtn:hover { background: var(--surface-2); color: var(--text); }
+  .rbtn.on { color: var(--accent); }
+  .rbtn.on .em { filter: none; }
   .cbtn { margin-left: auto; }
-  .cbtn.on { border-color: var(--accent-line); color: var(--accent); }
+  .cbtn.on { color: var(--accent); }
   .cnt { font-variant-numeric: tabular-nums; font-size: 12px; }
 
-  .comments { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 9px; }
+  .comments { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 8px; }
   .cm { font-size: 14px; line-height: 1.5; }
   .cm b { color: var(--text); margin-right: 4px; }
   .cm span { color: var(--muted); }
