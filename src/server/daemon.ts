@@ -254,16 +254,18 @@ async function respondAsUser(life: Life, me: Account, content: string, channel: 
 
 // 微信侧统一应答：没绑定→把消息当绑定码试；已绑定→正常聊天。webhook 与 OpenAI 兼容入口共用。
 const cleanBindToken = (s: string): string => { const t = s.replace(/^[\s\S]*zsky-bind:/i, '').trim(); return (t.split(/\s+/).pop() ?? t).trim(); };
-async function wechatReply(openid: string, content: string): Promise<string> {
-  if (!openid) return '（没收到你的微信标识，没法认出你或绑定——让 OpenClaw 在请求里带上 user 字段就行。）';
-  const bound = accounts.resolveWechat(openid);
+async function wechatReply(openid: string, content: string, defaultLifeId?: string): Promise<string> {
+  if (!openid) return '（没收到你的微信标识，没法认出你——让 OpenClaw 在请求里带上 user 字段就行。）';
+  let bound = accounts.resolveWechat(openid);
   if (!bound) {
+    // 发的是绑定码 → 关联到已有网页账号；否则【零绑定】自动建身份，直接开聊（个人号最顺的方式）。
     const r = accounts.bindWechat(cleanBindToken(content), openid);
-    return r ? `✅ 绑定成功，我是 ${r.lifeId}。现在直接跟我说话就行～` : '你还没绑定我。去 ZSKY 网页（生命体对话页→绑定微信）生成绑定码，把那串码发给我就能绑定～';
+    if (r) return `✅ 已和你的 ZSKY 账号打通，我是 ${r.lifeId}。`;
+    bound = accounts.ensureWechatUser(openid, defaultLifeId ?? lives[0]?.id ?? '');
   }
   const lf = lifeById(bound.lifeId);
   const ac = accounts.getAccount(bound.userId);
-  if (!lf || !ac) return '绑定信息丢了，请去网页重新绑定。';
+  if (!lf || !ac) return '出了点问题，稍后再来找我。';
   if (content === '') return '（我在听你说）';
   if (!snapOf(lf).awake) return '她在更深的睡眠里，等会儿再来找我吧。';
   const rr = await respondAsUser(lf, ac, content, 'wechat');
@@ -750,7 +752,7 @@ const server = createServer(async (req, res) => {
       const lastUser = [...msgs].reverse().find((m) => m.role === 'user');
       const content = String(lastUser?.content ?? '').slice(0, 4000).trim();
       const openid = String((b.user ?? req.headers['x-wechat-openid'] ?? '') as string).trim();
-      const reply = await wechatReply(openid, content);
+      const reply = await wechatReply(openid, content, lifeById(String(b.model ?? ''))?.id);
       const modelName = lifeById(String(b.model ?? ''))?.id ?? (accounts.resolveWechat(openid) ? accounts.resolveWechat(openid)!.lifeId : (lives[0]?.id ?? 'zsky'));
       return send(res, 200, {
         id: `chatcmpl-${Date.now().toString(36)}`, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: modelName,

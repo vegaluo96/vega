@@ -78,6 +78,8 @@ export interface AccountStore {
   // 账号级绑定：微信只绑账号一次；"在微信里和哪条命聊"在网页随时切换，不用重绑。
   setWechatLife(userId: string, lifeId: string): void;
   wechatBindingFor(userId: string): { lifeId: string } | null;
+  // 零绑定：微信用户首次发消息即自动建立身份（个人号没有扫码上报 openid 的能力，发消息才认得出人）。
+  ensureWechatUser(openid: string, lifeId: string): { userId: string; lifeId: string };
   // Web Push 订阅（PWA）
   addPushSub(userId: string, endpoint: string, p256dh: string, auth: string): void;
   getPushSubs(userId: string): Array<{ endpoint: string; keys: { p256dh: string; auth: string } }>;
@@ -276,6 +278,19 @@ export function createAccountStore(path = ':memory:', opts: AccountStoreOptions 
     wechatBindingFor(userId) {
       const r = db.prepare('SELECT life_id FROM wechat_bindings WHERE user_id=?').get(userId) as { life_id: string } | undefined;
       return r ? { lifeId: r.life_id } : null;
+    },
+    ensureWechatUser(openid, lifeId) {
+      const ex = db.prepare('SELECT user_id,life_id FROM wechat_bindings WHERE openid=?').get(openid) as { user_id: string; life_id: string } | undefined;
+      if (ex) return { userId: ex.user_id, lifeId: ex.life_id };
+      const id = genId();
+      const t = now();
+      const synthEmail = `wx_${sha256(openid).slice(0, 18)}@wechat.local`; // 合成唯一邮箱；网页登录不上（微信原生号，日后可关联）
+      const { salt, hash } = hashPassword(genToken());
+      db.prepare('INSERT INTO users(id,email,email_verified,pass_salt,pass_hash,handle,role,status,created_at,last_active_at) VALUES(?,?,0,?,?,?,?,?,?,?)')
+        .run(id, synthEmail, salt, hash, '微信朋友', 'user', 'active', t, t);
+      if (starter > 0) credit(id, starter, 'starter_grant');
+      db.prepare('INSERT INTO wechat_bindings(openid,user_id,life_id,bound_at) VALUES(?,?,?,?)').run(openid, id, lifeId, t);
+      return { userId: id, lifeId };
     },
     addPushSub(userId, endpoint, p256dh, auth) {
       db.prepare('INSERT INTO push_subscriptions(endpoint,user_id,p256dh,auth,created_at) VALUES(?,?,?,?,?) ON CONFLICT(endpoint) DO UPDATE SET user_id=excluded.user_id, p256dh=excluded.p256dh, auth=excluded.auth')
