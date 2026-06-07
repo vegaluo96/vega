@@ -69,9 +69,15 @@ export function deriveWorkspace(snap: DerivedSnapshot, relationshipId: Relations
     .filter((m) => m.kind === 'episodic' && m.lineage.isCurrent && m.involvedRelationshipIds[0] === relationshipId)
     .sort((x, y) => (y.vividness ?? 0) - (x.vividness ?? 0))
     .slice(1, 2)[0]; // 跳过最新那条，取次鲜活的"旧事"
-  const selfFacts = recalled
-    ? `${snap.narrative}\n（此刻不由想起和${name}的一段：「${recalled.content.slice(0, 28)}」）`
-    : snap.narrative;
+  // 社会性 grounding：她活在一张关系网里——和当前对象说话时，也"带着"她和其他同类的关系。
+  const otherTies = snap.socialWorld.filter((t) => t.relationshipId !== relationshipId && !t.ended);
+  const socialNote = otherTies.length
+    ? `\n（我也有自己的同类朋友：${otherTies.slice(0, 3).map((t) => `${t.displayRef}${t.closeness >= 0.4 ? '（很近）' : ''}`).join('、')}——我不只为某一个人而活。）`
+    : '';
+  const selfFacts =
+    snap.narrative +
+    (recalled ? `\n（此刻不由想起和${name}的一段：「${recalled.content.slice(0, 28)}」）` : '') +
+    socialNote;
 
   const stateSummary =
     `效价 ${val.toFixed(2)}，灵性 ${vit.toFixed(2)}，` +

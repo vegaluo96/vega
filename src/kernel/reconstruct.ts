@@ -730,6 +730,11 @@ function project(st: RState, uptoSeq: number): DerivedSnapshot {
   const sortedValues = [...st.values].sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
   const emotion = nameEmotion(st.soma, st.vitalityFloor);
   const tension = buildTension(sortedValues);
+  // 社会性：她的同类社交网（按亲疏排序）——活在一张关系网里，有自己的朋友。
+  const socialWorld = Object.entries(enriched)
+    .filter(([, b]) => b.kind === 'peer')
+    .map(([rid, b]) => ({ relationshipId: rid, displayRef: b.displayRef, closeness: r3(b.closeness), attachment: b.relationalSelf.attachment, style: b.theoryOfMind.style, ended: Boolean(b.ended) }))
+    .sort((a, b) => b.closeness - a.closeness);
   return {
     lifeId: st.lifeId,
     uptoSeq,
@@ -753,6 +758,7 @@ function project(st: RState, uptoSeq: number): DerivedSnapshot {
     memory: decorated.map((m) => ({ ...m, involvedRelationshipIds: [...m.involvedRelationshipIds] })),
     semanticMemory: sem,
     bonds: enriched,
+    socialWorld,
     values: sortedValues,
     goals,
   };

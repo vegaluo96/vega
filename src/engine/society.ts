@@ -21,6 +21,28 @@ export interface PeerTurn {
   text: string;
 }
 
+// 谁和谁聊（emergent 友谊结构）：越亲越常聊（homophily），但越久没聊越该轮到（公平）。
+// 纯函数、确定性（无 RNG）——社会结构从架构里长出来，不是脚本排的。
+export interface SocialPair {
+  a: string;
+  b: string;
+  closeness: number; // 这对同类的互相亲密度（0..1）
+  lastPairedAt: number; // 上次寒暄的墙钟（ms）；从没聊过=0
+}
+export function pickSocialPair(pairs: readonly SocialPair[], nowMs: number, periodMs: number): SocialPair | null {
+  let best: SocialPair | null = null;
+  let bestScore = -Infinity;
+  for (const p of pairs) {
+    const staleness = (nowMs - p.lastPairedAt) / Math.max(1, periodMs); // 几个周期没聊了
+    const score = p.closeness * 2 + staleness; // 亲密优先、但久疏必补
+    if (score > bestScore) {
+      bestScore = score;
+      best = p;
+    }
+  }
+  return best;
+}
+
 function ensurePeer(store: DurableEventStore, peerRelId: string, displayRef: string, at: () => string): void {
   const opened = store.list().some((e) => e.type === 'RELATIONSHIP_OPENED' && (e.payload as RelationshipOpenedPayload).relationshipId === peerRelId);
   if (!opened) {

@@ -78,6 +78,17 @@ export interface SemanticMemory {
   understanding: string;
 }
 
+// 社会性（文明的种子）：她的【整个同类社交网】——不只当下这段对话，而是"我和谁近、和谁远"。
+// 由 peer 关系确定性派生（纯派生），让她活在一张关系网里、有自己的朋友。
+export interface SocialTie {
+  relationshipId: RelationshipId;
+  displayRef: string;
+  closeness: number;
+  attachment: string;
+  style: string; // 我怎么读这个同类
+  ended: boolean;
+}
+
 // 目标：反思之上由价值+求存+连接+好奇确定性加权生成、排序（纯派生）。
 export interface Goal {
   kind: 'connect' | 'repair' | 'grow' | 'restore' | 'explore' | 'remember';
@@ -110,6 +121,7 @@ export interface DerivedSnapshot {
   memory: MemoryEntry[];
   semanticMemory: SemanticMemory[]; // 经历压缩成的"理解"（遗忘即抽象，纯派生）
   bonds: Record<RelationshipId, Bond>;
+  socialWorld: SocialTie[]; // 她的同类社交网（亲疏分化、emergent 的朋友结构）
   values: ValueEntry[];
   goals: Goal[]; // 她此刻"想要"什么（排序后）
 }

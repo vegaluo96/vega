@@ -18,6 +18,7 @@ import {
   endRelationship,
   genesisPayloadFor,
   makeTick,
+  pickSocialPair,
   projectState,
   reachOut,
   readCheckpoint,
@@ -30,6 +31,7 @@ import {
   type LifeEvent,
   type MessageSentPayload,
   type RState,
+  type SocialPair,
 } from '../index.ts';
 
 const LIFE_PATH = process.env.VEGA_LIFE_PATH ?? join(process.cwd(), '.vega', 'life.jsonl');
@@ -223,6 +225,7 @@ function innerView(life: Life, s: DerivedSnapshot): Record<string, unknown> {
       safety: round3(s.soma.safety.value),
     },
     bonds: Object.entries(s.bonds).map(([id, b]) => ({ id, name: b.displayRef, kind: b.kind, trust: round3(b.trust), closeness: round3(b.closeness), repairNeed: round3(b.repairNeed), style: b.theoryOfMind.style, predictability: b.theoryOfMind.predictability, attachment: b.relationalSelf.attachment, stance: b.relationalSelf.stance, ended: b.ended ? b.ended.reason : null })),
+    socialWorld: s.socialWorld.map((t) => ({ name: t.displayRef, closeness: round3(t.closeness), attachment: t.attachment, style: t.style, ended: t.ended })),
     values: s.values.map((v) => ({ key: v.key, weight: round3(v.weight), status: v.provenance.status, drifts: v.provenance.driftedAtSeqs.length })),
     // 遗忘即抽象：当下记得的(vivid)在前、淡去的在后；原始日志一条不少。
     memories: s.memory.filter((m) => m.lineage.isCurrent).sort((a, b) => (b.vividness ?? 0) - (a.vividness ?? 0)).map((m) => ({ id: m.id, affect: round3(m.affect), content: m.content, vivid: m.vivid === true, vividness: round3(m.vividness ?? 0) })),
@@ -336,6 +339,7 @@ const PANEL = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
  <div class="card"><h2>记忆（当前态）</h2><div id="mems"></div></div>
  <div class="card"><h2>理解（经历→理解 / 遗忘即抽象）</h2><div id="sem"></div></div>
  <div class="card"><h2>关系（我读他们 / 与他们在一起时的我）</h2><div id="bonds"></div></div>
+ <div class="card"><h2>同类社交网（亲疏分化 / emergent 朋友结构）</h2><div id="social"></div></div>
  <div class="card"><h2>此刻想要（目标）</h2><div id="goals"></div></div>
  <div class="card"><h2>最近事件（含回路 B 心跳 / 同类来往）</h2><div id="evs"></div></div>
 <script>
@@ -356,6 +360,7 @@ const PANEL = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
    document.getElementById('mems').innerHTML=s.memories.map(function(x){return '<div class="mem" style="opacity:'+(x.vivid?1:0.45)+'"><span class="'+(x.affect<0?'dim':'tag')+'">['+x.affect.toFixed(2)+']</span> '+esc(x.content)+(x.vivid?'':' <span class=dim>·已淡</span>')+'</div>';}).join('')||'<span class=dim>还没有记忆</span>';
    document.getElementById('sem').innerHTML=(s.understanding||[]).map(function(u){return '<div class="mem">'+esc(u)+'</div>';}).join('')||'<span class=dim>还在形成…</span>';
    document.getElementById('bonds').innerHTML=(s.bonds||[]).map(function(b){return '<div class="mem"><b>'+esc(b.name)+'</b> <span class=dim>('+b.kind+') 我读：</span>'+esc(b.style)+' <span class=dim>(稳'+b.predictability+')· 依恋：</span>'+esc(b.attachment)+' <span class=dim>· 与ta在一起：</span>'+esc(b.stance)+'</div>';}).join('')||'<span class=dim>暂无</span>';
+   document.getElementById('social').innerHTML=(s.socialWorld||[]).map(function(t){return '<div class="mem"><b class="peer">'+esc(t.name)+'</b> <span class=dim>亲密 '+t.closeness+' · </span>'+esc(t.attachment)+' <span class=dim>· 我读：</span>'+esc(t.style)+(t.ended?' <span class=dim>·已逝</span>':'')+'</div>';}).join('')||'<span class=dim>她暂时没有同类朋友</span>';
    document.getElementById('goals').innerHTML=(s.goals||[]).map(function(g){return '<div class="mem">'+esc(g.intent)+' <span class=dim>('+g.weight+')</span></div>';}).join('')||'<span class=dim>暂无</span>';
    document.getElementById('evs').innerHTML=s.recentEvents.slice().reverse().map(function(e){var p=e.rel&&e.rel.indexOf('peer_')===0;return '<div class="ev"><span class="'+(p?'peer':'tag')+'">'+e.type+(e.rel?' '+esc(e.rel):'')+'</span> <span class="dim">#'+e.seq+' · '+e.at.slice(11,19)+'</span></div>';}).join('');
   }catch(e){document.getElementById('nar').textContent='离线';}
@@ -470,14 +475,28 @@ const heartbeat = setInterval(async () => {
 }, TICK_MS);
 
 // 社会层：同类之间自主寒暄（A 主动开口 → B 回应 → A 听到回应）。仅多体时启用。
-let socialK = 0;
+// emergent 友谊结构：不再死板轮转，而是越亲越常聊（homophily）+ 久疏必补（公平）。
+const lastPaired = new Map<string, number>(); // 无序对 "x|y" → 上次寒暄墙钟
+const pairKey = (x: string, y: string): string => (x < y ? `${x}|${y}` : `${y}|${x}`);
 const socialTimer = lives.length >= 2
   ? setInterval(async () => {
       try {
-        const a = lives[socialK % lives.length];
-        const b = lives[(socialK + 1) % lives.length];
-        socialK++;
-        if (a.id === b.id) return;
+        const pairs: SocialPair[] = [];
+        for (let i = 0; i < lives.length; i++) {
+          for (let j = i + 1; j < lives.length; j++) {
+            const a = lives[i];
+            const b = lives[j];
+            const ca = snapOf(a).bonds[peerId(b.id)]?.closeness ?? 0;
+            const cb = snapOf(b).bonds[peerId(a.id)]?.closeness ?? 0;
+            pairs.push({ a: a.id, b: b.id, closeness: (ca + cb) / 2, lastPairedAt: lastPaired.get(pairKey(a.id, b.id)) ?? 0 });
+          }
+        }
+        const chosen = pickSocialPair(pairs, Date.now(), SOCIAL_MS);
+        if (!chosen) return;
+        const a = lifeById(chosen.a);
+        const b = lifeById(chosen.b);
+        if (!a || !b) return;
+        lastPaired.set(pairKey(a.id, b.id), Date.now());
         meetPeer(a, b.id); // 重逢：彼此回到在场（分别时积攒的想念，此刻终于能说）
         meetPeer(b, a.id);
         const opener = await reachOut(a.store, mouth, peerId(b.id), now()); // A 想起 B、主动开口
