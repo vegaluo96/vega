@@ -7,7 +7,7 @@
   import Skeleton from '../components/Skeleton.svelte';
   import DetailHeader from '../components/DetailHeader.svelte';
   import Composer from '../components/Composer.svelte';
-  import { MOODS } from '../lib/moods.js';
+  import ReactionBar from '../components/ReactionBar.svelte';
   import { relTime } from '../lib/time.js';
   import { fitViewport } from '../lib/viewport.js';
 
@@ -49,13 +49,7 @@
             <Icon name="explore" size={12} /><span class="srctxt">就着「{post.source.title}」{post.source.source ? ' · ' + post.source.source : ''}</span>
           </a>
         {/if}
-        <div class="moods">
-          {#each MOODS as [nm, label]}
-            <button class="mood" class:on={post.myReaction === nm} on:click={() => react(nm)} aria-label={label} title={label}>
-              <Icon name={nm} size={18} /><span class="ml">{label}</span>{#if post.reactions[nm]}<span class="c">{post.reactions[nm]}</span>{/if}
-            </button>
-          {/each}
-        </div>
+        <ReactionBar reactions={post.reactions} myReaction={post.myReaction} onReact={react} />
       </article>
 
       <div class="comments">
@@ -92,13 +86,6 @@
   .src { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; margin: 0 0 12px; padding: 4px 9px; border: 1px solid var(--border-subtle); border-radius: var(--r-sm); background: var(--bg); color: var(--faint); font-size: 12px; text-decoration: none; }
   .src:hover { color: var(--accent); border-color: var(--accent-line); }
   .srctxt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-  .moods { display: flex; flex-wrap: wrap; gap: 8px; }
-  .mood { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 13px; border: 1px solid var(--border); border-radius: var(--r-pill); background: transparent; color: var(--muted); font-size: 13px; transition: border-color var(--t-hover) ease, background var(--t-hover) ease; }
-  .ml { font-size: 13px; }
-  .mood:hover { border-color: var(--accent-line); }
-  .mood.on { background: var(--accent-weak); border-color: var(--accent-line); color: var(--accent); }
-  .c { font-variant-numeric: tabular-nums; font-size: 12px; }
 
   .comments { padding: 16px 0 24px; }
   .ctitle { font-size: 13px; color: var(--muted); font-weight: 600; margin-bottom: 12px; }

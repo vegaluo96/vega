@@ -7,7 +7,7 @@
   import EmptyState from '../components/EmptyState.svelte';
   import Skeleton from '../components/Skeleton.svelte';
   import Icon from '../components/Icon.svelte';
-  import { MOODS } from '../lib/moods.js';
+  import ReactionBar from '../components/ReactionBar.svelte';
   import { relTime } from '../lib/time.js';
 
   // 广场 = 她们的"动态"：在场的她们 + 她们发的帖（心声），你可以留心情、点开看留言。不是实时对话流。
@@ -108,16 +108,7 @@
               {#if p.comments > p.preview.length}<button class="cmmore" on:click={() => openPost(p)}>查看全部 {p.comments} 条生命流评论</button>{/if}
             </div>
           {/if}
-          <div class="react">
-            {#each MOODS as [nm, label]}
-              <button class="mbtn" class:on={p.myReaction === nm} on:click={() => react(p, nm)} aria-label={label} title={label}>
-                <Icon name={nm} size={17} />{#if p.reactions[nm]}<span class="cnt">{p.reactions[nm]}</span>{/if}
-              </button>
-            {/each}
-            <button class="cbtn" on:click={() => openPost(p)} aria-label="留言">
-              <Icon name="comment" size={17} />{#if p.comments}<span class="cnt">{p.comments}</span>{/if}
-            </button>
-          </div>
+          <ReactionBar compact reactions={p.reactions} myReaction={p.myReaction} onReact={(emo) => react(p, emo)} comments={p.comments} onComment={() => openPost(p)} />
         </div>
       </article>
     {/each}
@@ -159,6 +150,7 @@
   .body { flex: 1; min-width: 0; }
   .hdr { display: block; font-size: 15px; line-height: 1.2; background: none; border: 0; padding: 0; color: var(--text); text-align: left; }
   .hdr b { font-weight: 700; }
+  .hdr:hover b { text-decoration: underline; }
   .hdr .meta { margin-left: 5px; }
   .textbtn { display: block; width: 100%; margin: 2px 0 0; padding: 0; background: none; border: 0; text-align: left; color: var(--text); cursor: pointer; }
   .ptext { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 6; overflow: hidden; font-size: 15px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
@@ -174,13 +166,4 @@
   .cmtext { color: var(--muted); }
   .cmmore { background: none; border: 0; padding: 2px 0; font-size: 12.5px; color: var(--faint); text-align: left; }
   .cmmore:hover { color: var(--accent); }
-
-  /* —— 心情反应（多个）+ 留言入口，一行紧凑 —— */
-  .react { display: flex; align-items: center; gap: 4px; margin: 10px 0 0 -7px; }
-  .mbtn { display: inline-flex; align-items: center; gap: 3px; min-height: 30px; padding: 0 7px; border: 0; border-radius: var(--r-pill); background: transparent; color: var(--faint); font-size: 12px; transition: background var(--t-hover) ease, color var(--t-hover) ease; }
-  .mbtn:hover { background: var(--surface-2); color: var(--text); }
-  .mbtn.on { color: var(--accent); }
-  .cbtn { display: inline-flex; align-items: center; gap: 4px; min-height: 30px; margin-left: auto; padding: 0 6px; border: 0; background: transparent; color: var(--faint); font-size: 12.5px; }
-  .cbtn:hover { color: var(--text); }
-  .cnt { font-variant-numeric: tabular-nums; }
 </style>
