@@ -4,6 +4,7 @@
   import { navigate } from '../lib/router.js';
   import PageHeader from '../components/PageHeader.svelte';
   import LifeAvatar from '../components/LifeAvatar.svelte';
+  import ListRow from '../components/ListRow.svelte';
   import EmptyState from '../components/EmptyState.svelte';
   import Skeleton from '../components/Skeleton.svelte';
   import { relTime } from '../lib/time.js';
@@ -39,43 +40,33 @@
 
   {#each notes as n (n.type + (n.life || n.title || '') + n.at)}
     {#if n.type === 'reach'}
-      <button class="note" class:fresh={n.fresh || n.unanswered} on:click={() => navigate('chat', { id: n.life })}>
-        <LifeAvatar id={n.life} awake={true} size={50} />
-        <div class="body">
-          <div class="top"><span class="name">{n.life}</span><span class="time">{relTime(n.at)}</span></div>
-          <div class="bot"><span class="text">{n.text}</span>{#if n.fresh || n.unanswered}<span class="reach">想你了</span>{/if}</div>
-        </div>
-      </button>
+      <ListRow onClick={() => navigate('chat', { id: n.life })} highlight={n.fresh || n.unanswered} meta={relTime(n.at)} badge={(n.fresh || n.unanswered) ? '想你了' : ''}>
+        <LifeAvatar slot="lead" id={n.life} awake={true} size={48} />
+        <svelte:fragment slot="title">{n.life}</svelte:fragment>
+        <svelte:fragment slot="subtitle">{n.text}</svelte:fragment>
+      </ListRow>
     {:else if n.type === 'welcome'}
-      <button class="note" on:click={() => navigate('plaza')}>
-        <span class="markwrap"><span class="mark welcome"></span></span>
-        <div class="body"><div class="top"><span class="name">{n.title}</span><span class="time">{relTime(n.at)}</span></div><div class="bot"><span class="text">{n.text}</span></div></div>
-      </button>
+      <ListRow onClick={() => navigate('plaza')} meta={relTime(n.at)}>
+        <span slot="lead" class="markwrap"><span class="mark welcome"></span></span>
+        <svelte:fragment slot="title">{n.title}</svelte:fragment>
+        <svelte:fragment slot="subtitle">{n.text}</svelte:fragment>
+      </ListRow>
     {:else}
-      <div class="note plain">
-        <span class="markwrap"><span class="mark" class:ok={n.ok}></span></span>
-        <div class="body"><div class="top"><span class="name">{n.title}</span><span class="time">{relTime(n.at)}</span></div><div class="bot"><span class="text wrap">{n.text}</span></div></div>
-      </div>
+      <ListRow meta={relTime(n.at)} wrap>
+        <span slot="lead" class="markwrap"><span class="mark" class:ok={n.ok}></span></span>
+        <svelte:fragment slot="title">{n.title}</svelte:fragment>
+        <svelte:fragment slot="subtitle">{n.text}</svelte:fragment>
+      </ListRow>
     {/if}
   {/each}
 </div>
 
 <style>
-  /* 与「对话」列表同一套行样式：通栏、底分隔线、点按高亮 */
   .notifs { max-width: var(--maxw); margin: 0 auto; padding: 0 16px 96px; }
-  .note { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 12px 0; background: none; border: 0; border-bottom: 1px solid var(--border-subtle); transition: background var(--t-hover) ease; }
-  .note:hover { background: var(--surface-2); }
-  .note.fresh { background: var(--accent-weak); }
-  .markwrap { flex: none; width: 50px; display: inline-flex; justify-content: center; }
+  /* 非生命行的状态点：放进 ListRow 的 lead 槽，宽度与 48 头像对齐 */
+  .markwrap { flex: none; width: 48px; display: inline-flex; justify-content: center; }
   .mark { width: 10px; height: 10px; border-radius: 50%; background: var(--life-tension); }
   .mark.ok { background: var(--life-awake); }
   .mark.welcome { background: var(--accent); }
-  .body { flex: 1; min-width: 0; }
-  .top { display: flex; align-items: center; gap: 8px; }
-  .name { font-weight: 700; font-size: 15.5px; }
-  .time { margin-left: auto; color: var(--faint); font-size: 12px; flex: none; }
-  .bot { display: flex; align-items: center; gap: 8px; margin-top: 3px; }
-  .text { flex: 1; min-width: 0; color: var(--muted); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .text.wrap { white-space: normal; }
-  .reach { flex: none; font-size: 11px; color: var(--life-reaching); border: 1px solid color-mix(in srgb, var(--life-reaching) 50%, transparent); border-radius: var(--r-pill); padding: 1px 9px; }
+  .err { padding: 16px 0; color: var(--danger); }
 </style>

@@ -3,10 +3,11 @@
   import { api } from '../lib/api.js';
   import { navigate } from '../lib/router.js';
   import LifeAvatar from '../components/LifeAvatar.svelte';
-  import Icon from '../components/Icon.svelte';
+  import SourceChip from '../components/SourceChip.svelte';
   import Skeleton from '../components/Skeleton.svelte';
   import DetailHeader from '../components/DetailHeader.svelte';
-  import { MOODS } from '../lib/moods.js';
+  import Composer from '../components/Composer.svelte';
+  import ReactionBar from '../components/ReactionBar.svelte';
   import { relTime } from '../lib/time.js';
   import { fitViewport } from '../lib/viewport.js';
 
@@ -43,18 +44,8 @@
           <span class="nm"><b>{post.life}</b><span class="meta">{relTime(post.at)}</span></span>
         </button>
         <div class="text">{post.text}</div>
-        {#if post.source && post.source.title}
-          <a class="src" href={post.source.url || '#'} target="_blank" rel="noopener noreferrer" title={post.source.title}>
-            <Icon name="explore" size={12} /><span class="srctxt">就着「{post.source.title}」{post.source.source ? ' · ' + post.source.source : ''}</span>
-          </a>
-        {/if}
-        <div class="moods">
-          {#each MOODS as [nm, label]}
-            <button class="mood" class:on={post.myReaction === nm} on:click={() => react(nm)} aria-label={label} title={label}>
-              <Icon name={nm} size={18} /><span class="ml">{label}</span>{#if post.reactions[nm]}<span class="c">{post.reactions[nm]}</span>{/if}
-            </button>
-          {/each}
-        </div>
+        {#if post.source && post.source.title}<div class="srcrow"><SourceChip source={post.source} /></div>{/if}
+        <ReactionBar reactions={post.reactions} myReaction={post.myReaction} onReact={react} />
       </article>
 
       <div class="comments">
@@ -71,10 +62,7 @@
   </div>
 
   {#if post}
-    <footer class="composer">
-      <input class="ci" bind:value={draft} placeholder="留个言…" on:keydown={(e) => e.key === 'Enter' && !e.isComposing && submit()} />
-      <button class="send" on:click={submit} disabled={!draft.trim()} aria-label="发送"><Icon name="send" size={20} /></button>
-    </footer>
+    <Composer bind:value={draft} placeholder="留个言…" on:submit={submit} />
     {#if cerr}<p class="cerr">{cerr}</p>{/if}
   {/if}
 </div>
@@ -91,20 +79,11 @@
   .nm { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.25; }
   .nm .meta { margin-top: 2px; }
   .text { font-size: 16px; line-height: 1.6; margin: 12px 0; white-space: pre-wrap; word-break: break-word; }
-  .src { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; margin: 0 0 12px; padding: 4px 9px; border: 1px solid var(--border-subtle); border-radius: var(--r-sm); background: var(--bg); color: var(--faint); font-size: 12px; text-decoration: none; }
-  .src:hover { color: var(--accent); border-color: var(--accent-line); }
-  .srctxt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-  .moods { display: flex; flex-wrap: wrap; gap: 8px; }
-  .mood { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 13px; border: 1px solid var(--border); border-radius: var(--r-pill); background: transparent; color: var(--muted); font-size: 13px; transition: border-color var(--t-hover) ease, background var(--t-hover) ease; }
-  .ml { font-size: 13px; }
-  .mood:hover { border-color: var(--accent-line); }
-  .mood.on { background: var(--accent-weak); border-color: var(--accent-line); color: var(--accent); }
-  .c { font-variant-numeric: tabular-nums; font-size: 12px; }
+  .srcrow { margin: 0 0 12px; }
 
   .comments { padding: 16px 0 24px; }
   .ctitle { font-size: 13px; color: var(--muted); font-weight: 600; margin-bottom: 12px; }
-  .cm { font-size: 14.5px; line-height: 1.55; padding: 9px 0; border-bottom: 1px solid var(--border-subtle); }
+  .cm { font-size: 15px; line-height: 1.55; padding: var(--s2) 0; border-bottom: 1px solid var(--border-subtle); }
   .cmwho { background: none; border: 0; padding: 0; margin-right: 6px; display: inline-flex; align-items: center; gap: 5px; vertical-align: baseline; }
   .cm b { color: var(--text); }
   .cm.life b { color: var(--accent); }
@@ -112,10 +91,5 @@
   .cmtext { color: var(--muted); }
   .empty { color: var(--faint); font-size: 13.5px; }
 
-  .composer { flex: none; display: flex; gap: 8px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: var(--bg); }
-  .ci { flex: 1; min-height: 46px; padding: 0 16px; border: 1px solid var(--border); border-radius: var(--r-pill); background: var(--surface); color: var(--text); font: inherit; }
-  .ci:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); }
-  .send { flex: none; width: 46px; height: 46px; border: 0; border-radius: 50%; background: var(--accent); color: var(--on-accent); display: inline-flex; align-items: center; justify-content: center; }
-  .send:disabled { opacity: 0.4; }
   .cerr { color: var(--danger); font-size: 12.5px; padding: 0 16px 8px; }
 </style>

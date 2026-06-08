@@ -86,7 +86,7 @@
       width: 76px; height: 100vh; padding: 20px 10px 18px;
       border-top: 0; border-right: 1px solid var(--border); backdrop-filter: none; background: var(--bg);
     }
-    nav .brand { display: block; font-weight: 800; letter-spacing: 0.08em; font-size: 13px; padding: 4px 0 16px; }
+    nav .brand { display: block; font-weight: 800; letter-spacing: 0.08em; font-size: 13px; padding: 4px 0 16px; color: var(--accent); }
     nav button {
       flex: none; max-width: none; width: 48px; height: 48px; min-height: 48px;
       border-radius: var(--r-md); color: var(--muted);

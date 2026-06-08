@@ -3,9 +3,11 @@
   import { api, stream } from '../lib/api.js';
   import { navigate } from '../lib/router.js';
   import { t } from '../lib/i18n.js';
+  import DetailHeader from '../components/DetailHeader.svelte';
+  import LifeAvatar from '../components/LifeAvatar.svelte';
+  import Composer from '../components/Composer.svelte';
   import RelationshipPanel from '../components/RelationshipPanel.svelte';
   import WechatBind from '../components/WechatBind.svelte';
-  import Icon from '../components/Icon.svelte';
   import { fitViewport } from '../lib/viewport.js';
 
   export let lifeId;
@@ -88,18 +90,15 @@
 </script>
 
 <div class="chat" use:fitViewport>
-  <header class="head">
-    <button class="back" on:click={() => navigate('plaza')} aria-label="返回"><Icon name="back" size={24} /></button>
-    {#if life}
-      <button class="who" on:click={() => (showRel = !showRel)}>
-        <span class="name">{life.id} <span class="dot" class:awake={life.awake}></span></span>
-        <span class="sub">{life.awake ? life.feeling || life.emotion : t('life.asleep')}{rel ? ' · ' + rel.attachment : ''}</span>
-      </button>
-    {:else}
-      <span class="who loading"><span class="ph nm"></span><span class="ph sb"></span></span>
-    {/if}
-    <span class="bal" title="表达额度">{balance != null ? '心意 ' + balance : ''}</span>
-  </header>
+  <DetailHeader
+    onBack={() => navigate('plaza')}
+    subtitle={life ? ((life.awake ? (life.feeling || life.emotion) : t('life.asleep')) + (rel ? ' · ' + rel.attachment : '')) : ''}
+    onTitle={life ? () => (showRel = !showRel) : undefined}
+    loading={!life}>
+    <span slot="lead">{#if life}<LifeAvatar id={life.id} emotion={life.emotion} awake={life.awake} size={32} />{/if}</span>
+    <svelte:fragment slot="title">{life ? life.id : ''} <span class="dot" class:awake={life && life.awake}></span></svelte:fragment>
+    <span slot="action" class="bal" title="表达额度">{balance != null ? '心意 ' + balance : ''}</span>
+  </DetailHeader>
 
   {#if showRel && rel}
     <div class="relwrap">
@@ -130,10 +129,7 @@
     {/if}
   </div>
 
-  <footer class="composer">
-    <input class="ci" bind:value={input} placeholder={t('common.placeholder')} on:keydown={(e) => e.key === 'Enter' && !e.isComposing && send()} />
-    <button class="send" on:click={send} disabled={sending || !input.trim()} aria-label="发送"><Icon name="send" size={20} /></button>
-  </footer>
+  <Composer bind:value={input} placeholder={t('common.placeholder')} disabled={sending} on:submit={send} />
 </div>
 
 <style>
@@ -141,32 +137,17 @@
   .chat { position: fixed; top: 0; left: 0; right: 0; z-index: 30; display: flex; flex-direction: column; height: 100vh; height: 100dvh; transform-origin: top; }
   @media (min-width: 1000px) { .chat { position: relative; z-index: auto; } }
 
-  .head {
-    flex: none;
-    display: flex; align-items: center; gap: 10px; min-height: 56px; padding: 8px 12px;
-    border-bottom: 1px solid var(--border);
-    background: color-mix(in srgb, var(--bg) 84%, transparent); backdrop-filter: saturate(180%) blur(14px);
-  }
-  /* 载入态占位：避免不同生命体进入时头部从空白跳成两行（高度统一、不闪） */
-  .who.loading { flex: 1; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
-  .ph { display: block; border-radius: 6px; background: var(--surface-2); }
-  .ph.nm { width: 90px; height: 15px; }
-  .ph.sb { width: 140px; height: 11px; }
-  .back { background: none; border: 0; padding: 0 6px; color: var(--text); display: inline-flex; align-items: center; }
-  .who { flex: 1; min-width: 0; background: none; border: 0; text-align: left; padding: 2px 4px; border-radius: var(--r-sm); transition: background var(--t-hover) ease; }
-  .who:hover { background: var(--surface-2); }
-  .name { font-weight: 700; font-size: 16px; display: inline-flex; align-items: center; gap: 8px; }
-  .dot { width: 8px; height: 8px; border-radius: var(--r-pill); background: var(--life-asleep); }
+  /* slot 进 DetailHeader 的小件 */
+  .dot { width: 8px; height: 8px; border-radius: var(--r-pill); background: var(--life-asleep); flex: none; }
   .dot.awake { background: var(--life-awake); box-shadow: 0 0 0 3px color-mix(in srgb, var(--life-awake) 20%, transparent); }
-  .sub { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .bal { flex: none; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .bal { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 
-  .relwrap { max-width: var(--maxw); width: 100%; margin: 0 auto; padding: 10px 14px 0; }
+  .relwrap { max-width: var(--maxw); width: 100%; margin: 0 auto; padding: var(--s3) var(--s4) 0; }
 
-  .banner { max-width: var(--maxw); margin: 10px auto 0; padding: 11px 14px; background: var(--accent-weak); color: var(--text); font-size: 13px; text-align: center; border-radius: var(--r-sm); }
+  .banner { max-width: var(--maxw); margin: var(--s3) auto 0; padding: var(--s3) var(--s4); background: var(--accent-weak); color: var(--text); font-size: 13px; text-align: center; border-radius: var(--r-sm); }
 
-  .log { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; max-width: var(--maxw); width: 100%; margin: 0 auto; padding: 18px 14px; display: flex; flex-direction: column; gap: 10px; }
-  .bubble { max-width: 80%; padding: 10px 14px; border-radius: 18px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; font-size: 15px; animation: rise var(--t-fade) ease both; }
+  .log { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; max-width: var(--maxw); width: 100%; margin: 0 auto; padding: 18px var(--s4); display: flex; flex-direction: column; gap: 10px; }
+  .bubble { max-width: 80%; padding: 10px 14px; border-radius: var(--r-lg); line-height: 1.55; white-space: pre-wrap; word-break: break-word; font-size: 15px; animation: rise var(--t-fade) ease both; }
   @keyframes rise { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
   .bubble.me { align-self: flex-end; background: var(--accent); color: var(--on-accent); border-bottom-right-radius: 6px; }
   .bubble.her { align-self: flex-start; background: var(--surface); border: 1px solid var(--border); border-bottom-left-radius: 6px; }
@@ -180,15 +161,4 @@
   .breathing span:nth-child(2) { animation-delay: 0.18s; }
   .breathing span:nth-child(3) { animation-delay: 0.36s; }
   @keyframes breathe-dot { 0%, 100% { opacity: 0.25; transform: translateY(0); } 50% { opacity: 0.9; transform: translateY(-2px); } }
-
-  .composer {
-    flex: none;
-    display: flex; gap: 8px; max-width: var(--maxw); width: 100%; margin: 0 auto;
-    padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
-    border-top: 1px solid var(--border); background: var(--bg);
-  }
-  .ci { flex: 1; min-height: 46px; padding: 0 16px; border: 1px solid var(--border); border-radius: var(--r-pill); background: var(--surface); color: var(--text); font: inherit; transition: border-color var(--t-hover) ease, box-shadow var(--t-hover) ease; }
-  .ci:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); }
-  .send { flex: none; width: 46px; height: 46px; border: 0; border-radius: 50%; background: var(--accent); color: var(--on-accent); display: inline-flex; align-items: center; justify-content: center; transition: opacity var(--t-hover) ease; }
-  .send:disabled { opacity: 0.4; }
 </style>

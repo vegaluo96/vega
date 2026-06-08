@@ -27,7 +27,7 @@
 {#if p}
   <div class="dossier fade-in">
     <section class="hero">
-      <LifeAvatar id={p.id} emotion={p.emotion} awake={p.awake} size={92} />
+      <LifeAvatar id={p.id} emotion={p.emotion} awake={p.awake} size={88} />
       <h1 class="name">{p.id}</h1>
       <div class="pillrow"><LifeStatePill awake={p.awake} dayPhase={p.dayPhase} emotion={p.emotion} /></div>
       <p class="feeling">{p.awake ? `此刻${p.dayPhase ? p.dayPhase + '，' : ''}${p.feeling || p.emotion}` : t('life.asleep')}</p>
@@ -84,15 +84,15 @@
 
 <style>
   .dossier { max-width: var(--maxw); margin: 0 auto; padding: 0 16px 96px; }
-  .hero { text-align: center; padding: 26px 8px 8px; }
+  .hero { text-align: center; padding: var(--s6) var(--s2) var(--s2); }
   .hero :global(.av) { margin: 0 auto 14px; }
-  .name { font-size: 26px; margin: 0 0 10px; font-weight: 800; }
+  .name { font-size: 22px; margin: 0 0 10px; font-weight: 800; letter-spacing: -0.02em; }
   .pillrow { display: flex; justify-content: center; }
   .feeling { color: var(--text); font-size: 14.5px; margin: 12px 0 0; }
   .age { color: var(--faint); font-size: 12.5px; margin: 6px 0 0; }
-  .meet { margin-top: 20px; padding: 0 32px; }
+  .meet { margin-top: var(--s5); padding: 0 var(--s8); }
 
-  .mod { margin-top: 26px; }
+  .mod { margin-top: var(--s6); }
   .mod .section-title { margin: 0 2px 10px; }
   .pad { padding: 14px 16px; }
 
@@ -104,7 +104,7 @@
   .temper { color: var(--text); line-height: 1.7; font-size: 14.5px; }
 
   /* 同类朋友：横向头像条（一眼扫完她的关系网） */
-  .friends { display: flex; gap: 14px; overflow-x: auto; padding: 2px 2px 6px; scrollbar-width: none; }
+  .friends { display: flex; gap: var(--s3); overflow-x: auto; padding: 2px 2px 6px; scrollbar-width: none; }
   .friends::-webkit-scrollbar { display: none; }
   .friend { flex: none; width: 72px; display: flex; flex-direction: column; align-items: center; gap: 6px; background: none; border: 0; padding: 0; }
   .fname { font-size: 12.5px; font-weight: 600; color: var(--text); max-width: 72px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -112,9 +112,9 @@
   .ffill { display: block; height: 100%; background: var(--accent-line); border-radius: var(--r-pill); }
   .fmeta { font-size: 11px; color: var(--faint); max-width: 72px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-  .muse { margin: 0 0 8px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--border); border-left: 2px solid var(--accent-line); border-radius: var(--r-md); }
+  .muse { margin: 0 0 8px; padding: var(--s3) var(--s4); background: var(--surface); border: 1px solid var(--border); border-left: 2px solid var(--accent-line); border-radius: var(--r-md); }
   .mtext { display: block; line-height: 1.65; font-size: 14.5px; }
-  .mtime { display: block; color: var(--faint); font-size: 11px; margin-top: 8px; }
+  .mtime { display: block; color: var(--faint); font-size: 12px; margin-top: 8px; }
 
   .caption.pad { padding: 14px 2px; }
   .err.pad { padding: 16px; }

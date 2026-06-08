@@ -146,8 +146,8 @@
 </div>
 
 <style>
-  .me { max-width: var(--maxw); margin: 0 auto; padding: 4px 16px 96px; }
-  .block { margin-top: 22px; }
+  .me { max-width: var(--maxw); margin: 0 auto; padding: 0 16px 96px; }
+  .block { margin-top: var(--s6); }
   .block .section-title { margin: 0 2px 10px; }
   .pad { padding: 16px; }
 
@@ -157,12 +157,12 @@
   .ok { color: var(--success); font-size: 13px; margin: 10px 2px 0; }
   .wxqr { display: block; width: 200px; height: 200px; margin: 4px auto 6px; background: #fff; border-radius: var(--r-sm); padding: 8px; image-rendering: pixelated; }
 
-  .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 13px 16px; border-bottom: 1px solid var(--border-subtle); }
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: var(--s3) var(--s4); border-bottom: 1px solid var(--border-subtle); }
   .row:last-child { border-bottom: 0; }
-  .row.act { padding: 12px 14px; }
+  .row.act { padding: var(--s3) var(--s4); }
   .rk { color: var(--faint); font-size: 13px; }
   .rv { font-size: 14px; font-weight: 600; }
 
-  .footer { display: flex; gap: 10px; margin-top: 26px; }
+  .footer { display: flex; gap: 10px; margin-top: var(--s6); }
   .footer .btn { flex: 1; }
 </style>

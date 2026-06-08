@@ -93,7 +93,7 @@
   .glow {
     position: absolute; top: -20%; left: 50%; transform: translateX(-50%);
     width: 680px; height: 680px; border-radius: 50%;
-    background: radial-gradient(circle, rgba(91,81,216,0.16), transparent 62%);
+    background: radial-gradient(circle, rgba(79,70,229,0.22), transparent 62%);
     animation: breathe 9s ease-in-out infinite;
   }
   @keyframes drift { to { transform: translate(50px, 34px); } }
@@ -110,11 +110,11 @@
   .headline { font-size: 40px; line-height: 1.15; font-weight: 800; letter-spacing: -0.01em; margin: 0 0 16px; }
   .sub { color: #b6b1d4; font-size: 16px; line-height: 1.75; margin: 0 0 28px; }
 
-  .enter { background: #fff; color: #0a0a12; padding: 0 30px; min-height: 48px; font-weight: 700; border-radius: var(--r-pill); }
-  .enter:hover { background: #ece9ff; }
+  .enter { background: var(--brand); color: var(--on-accent); padding: 0 30px; min-height: 48px; font-weight: 700; border-radius: var(--r-pill); }
+  .enter:hover { background: var(--brand-hover); }
 
   .features { display: grid; gap: 18px; margin: 40px 0 0; }
-  .feat { border-left: 2px solid rgba(139,124,246,0.4); padding-left: 14px; }
+  .feat { border-left: 2px solid rgba(109,106,245,0.5); padding-left: 14px; }
   .ft { font-size: 14.5px; font-weight: 600; color: #e9e8f0; }
   .fb { font-size: 13px; color: #8a86a8; line-height: 1.6; margin-top: 3px; }
 

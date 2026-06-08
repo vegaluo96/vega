@@ -6,6 +6,7 @@
   import PageHeader from '../components/PageHeader.svelte';
   import LifeAvatar from '../components/LifeAvatar.svelte';
   import LifeStatePill from '../components/LifeStatePill.svelte';
+  import ListRow from '../components/ListRow.svelte';
   import EmptyState from '../components/EmptyState.svelte';
   import Skeleton from '../components/Skeleton.svelte';
   import Icon from '../components/Icon.svelte';
@@ -43,13 +44,11 @@
   {:else}
     <div class="list">
       {#each shown as l (l.id)}
-        <button class="row" on:click={() => navigate('profile', { id: l.id })}>
-          <LifeAvatar id={l.id} emotion={l.emotion} awake={l.awake} size={50} />
-          <div class="info">
-            <div class="row1"><span class="name">{l.id}</span><LifeStatePill awake={l.awake} dayPhase={l.dayPhase} emotion={l.emotion} /></div>
-            <div class="line">{l.temperament || stateLine(l)}</div>
-          </div>
-        </button>
+        <ListRow onClick={() => navigate('profile', { id: l.id })}>
+          <LifeAvatar slot="lead" id={l.id} emotion={l.emotion} awake={l.awake} size={48} />
+          <svelte:fragment slot="title">{l.id} <LifeStatePill awake={l.awake} dayPhase={l.dayPhase} emotion={l.emotion} /></svelte:fragment>
+          <svelte:fragment slot="subtitle">{l.temperament || stateLine(l)}</svelte:fragment>
+        </ListRow>
       {/each}
     </div>
   {/if}
@@ -57,19 +56,11 @@
 
 <style>
   .explore { max-width: var(--maxw); margin: 0 auto; padding: 0 16px 96px; }
-  .searchbar { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 14px; margin-bottom: 8px; border: 1px solid var(--border); border-radius: var(--r-pill); background: var(--surface); color: var(--faint); }
+  .searchbar { display: flex; align-items: center; gap: var(--s2); height: 44px; padding: 0 var(--s4); margin-bottom: var(--s2); border: 1px solid var(--border); border-radius: var(--r-pill); background: var(--surface); color: var(--faint); }
   .searchbar:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); color: var(--accent); }
   .si { flex: 1; min-width: 0; border: 0; background: none; color: var(--text); font: inherit; outline: none; }
   .clr { flex: none; background: none; border: 0; color: var(--faint); display: inline-flex; padding: 4px; }
   .clr:hover { color: var(--text); }
-
-  /* 与「对话/通知」同一套通栏行：左缘 16px 对齐、底分隔线、点按高亮 */
   .list { display: flex; flex-direction: column; }
-  .row { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 12px 0; background: none; border: 0; border-bottom: 1px solid var(--border-subtle); color: var(--text); transition: background var(--t-hover) ease; }
-  .row:hover { background: var(--surface-2); }
-  .info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
-  .row1 { display: flex; align-items: center; gap: 9px; }
-  .name { font-weight: 700; font-size: 15.5px; flex: none; }
-  .line { color: var(--faint); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .err { padding: 16px 0; color: var(--danger); }
 </style>

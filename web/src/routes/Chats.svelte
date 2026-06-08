@@ -4,6 +4,7 @@
   import { navigate } from '../lib/router.js';
   import PageHeader from '../components/PageHeader.svelte';
   import LifeAvatar from '../components/LifeAvatar.svelte';
+  import ListRow from '../components/ListRow.svelte';
   import EmptyState from '../components/EmptyState.svelte';
   import Skeleton from '../components/Skeleton.svelte';
   import { relTime } from '../lib/time.js';
@@ -33,36 +34,19 @@
   {/if}
 
   {#each chats as c (c.life)}
-    <button class="rel" on:click={() => navigate('chat', { id: c.life })}>
-      <LifeAvatar id={c.life} emotion={c.emotion} awake={c.awake} size={50} />
-      <div class="body">
-        <div class="top">
-          <span class="name">{c.life}</span>
-          <span class="dot" class:awake={c.awake}></span>
-          <span class="time">{relTime(c.lastAt)}</span>
-        </div>
-        <div class="bot">
-          <span class="last">{c.lastFromHer ? '' : '我：'}{c.lastText}</span>
-          {#if c.pending}<span class="pending">想你了</span>{/if}
-        </div>
-      </div>
-    </button>
+    <ListRow onClick={() => navigate('chat', { id: c.life })} meta={relTime(c.lastAt)} badge={c.pending ? '想你了' : ''}>
+      <LifeAvatar slot="lead" id={c.life} emotion={c.emotion} awake={c.awake} size={48} />
+      <svelte:fragment slot="title">{c.life} <span class="dot" class:awake={c.awake}></span></svelte:fragment>
+      <svelte:fragment slot="subtitle">{c.lastFromHer ? '' : '我：'}{c.lastText}</svelte:fragment>
+    </ListRow>
   {/each}
   {#if error}<p class="err">{error}</p>{/if}
 </div>
 
 <style>
-  .rels { max-width: var(--maxw); margin: 0 auto; padding: 4px 16px 96px; }
-  /* X 风会话行：通栏、底分隔线、点按高亮；左缘与页头/全站统一在 16px（容器内 padding 0） */
-  .rel { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 12px 0; background: none; border: 0; border-bottom: 1px solid var(--border-subtle); transition: background var(--t-hover) ease; }
-  .rel:hover { background: var(--surface-2); }
-  .body { flex: 1; min-width: 0; }
-  .top { display: flex; align-items: center; gap: 8px; }
-  .name { font-weight: 700; font-size: 15.5px; }
+  .rels { max-width: var(--maxw); margin: 0 auto; padding: 0 16px 96px; }
+  /* 在场点：随标题（slot）一起进入 ListRow */
   .dot { width: 7px; height: 7px; border-radius: var(--r-pill); background: var(--life-asleep); flex: none; }
   .dot.awake { background: var(--life-awake); box-shadow: 0 0 0 3px color-mix(in srgb, var(--life-awake) 20%, transparent); }
-  .time { margin-left: auto; color: var(--faint); font-size: 12px; flex: none; }
-  .bot { display: flex; align-items: center; gap: 8px; margin-top: 3px; }
-  .last { flex: 1; min-width: 0; color: var(--muted); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .pending { flex: none; font-size: 11px; color: var(--life-reaching); border: 1px solid color-mix(in srgb, var(--life-reaching) 50%, transparent); border-radius: var(--r-pill); padding: 1px 9px; }
+  .err { padding: 16px 0; color: var(--danger); }
 </style>
