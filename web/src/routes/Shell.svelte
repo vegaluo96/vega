@@ -1,5 +1,9 @@
 <script>
+  import { onMount, onDestroy } from 'svelte';
+  import { get } from 'svelte/store';
   import { route, navigate } from '../lib/router.js';
+  import { stream } from '../lib/api.js';
+  import { unreadNotifs } from '../lib/notify.js';
   import Plaza from './Plaza.svelte';
   import Explore from './Explore.svelte';
   import Chats from './Chats.svelte';
@@ -21,6 +25,12 @@
   // 主导航高亮：chat/profile 归到来源 tab（默认广场）
   $: activeTab = TABS.some((x) => x.k === $route.name) ? $route.name : 'plaza';
   $: immersive = $route.name === 'chat' || $route.name === 'profile' || $route.name === 'post';
+
+  // 未读红点：她趁你不在时来找你 → 「通知」tab 标红；进入通知页即清。
+  let es;
+  onMount(() => { es = stream((ev) => { if (ev.type === 'reach_out' && get(route).name !== 'notifications') unreadNotifs.set(true); }); });
+  onDestroy(() => es && es.close());
+  $: if ($route.name === 'notifications') unreadNotifs.set(false);
 </script>
 
 <div class="app" class:immersive>
@@ -28,7 +38,10 @@
     <div class="brand">ZSKY</div>
     {#each TABS as tab}
       <button class:active={activeTab === tab.k} class:userentry={tab.k === 'me'} on:click={() => navigate(tab.k)} aria-label={t(tab.label)} title={t(tab.label)}>
-        <Icon name={tab.ico} size={24} sw={activeTab === tab.k ? 2.4 : 1.8} />
+        <span class="ic">
+          <Icon name={tab.ico} size={24} sw={activeTab === tab.k ? 2.4 : 1.8} />
+          {#if tab.k === 'notifications' && $unreadNotifs}<span class="reddot"></span>{/if}
+        </span>
       </button>
     {/each}
   </nav>
@@ -74,6 +87,8 @@
     transition: color var(--t-hover) ease, background var(--t-hover) ease;
   }
   nav button.active { color: var(--text); background: var(--surface-2); }
+  .ic { position: relative; display: inline-flex; }
+  .reddot { position: absolute; top: -3px; right: -4px; width: 8px; height: 8px; border-radius: 50%; background: var(--danger); border: 2px solid var(--bg); }
   .app.immersive nav { display: none; }
 
   /* ── 桌面端：左侧导航轨 + 居中内容栏 ── */

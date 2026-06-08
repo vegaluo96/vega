@@ -5,6 +5,7 @@
   import PageHeader from '../components/PageHeader.svelte';
   import LifeAvatar from '../components/LifeAvatar.svelte';
   import ListRow from '../components/ListRow.svelte';
+  import Icon from '../components/Icon.svelte';
   import EmptyState from '../components/EmptyState.svelte';
   import Skeleton from '../components/Skeleton.svelte';
   import { relTime } from '../lib/time.js';
@@ -47,13 +48,13 @@
       </ListRow>
     {:else if n.type === 'welcome'}
       <ListRow onClick={() => navigate('plaza')} meta={relTime(n.at)}>
-        <span slot="lead" class="markwrap"><span class="mark welcome"></span></span>
+        <span slot="lead" class="sysav"><Icon name="spark" size={22} /></span>
         <svelte:fragment slot="title">{n.title}</svelte:fragment>
         <svelte:fragment slot="subtitle">{n.text}</svelte:fragment>
       </ListRow>
     {:else}
       <ListRow meta={relTime(n.at)} wrap>
-        <span slot="lead" class="markwrap"><span class="mark" class:ok={n.ok}></span></span>
+        <span slot="lead" class="sysav"><Icon name="notifications" size={20} /></span>
         <svelte:fragment slot="title">{n.title}</svelte:fragment>
         <svelte:fragment slot="subtitle">{n.text}</svelte:fragment>
       </ListRow>
@@ -64,9 +65,6 @@
 <style>
   .notifs { max-width: var(--maxw); margin: 0 auto; padding: 0 16px 96px; }
   /* 非生命行的状态点：放进 ListRow 的 lead 槽，宽度与 48 头像对齐 */
-  .markwrap { flex: none; width: 48px; display: inline-flex; justify-content: center; }
-  .mark { width: 10px; height: 10px; border-radius: 50%; background: var(--life-tension); }
-  .mark.ok { background: var(--life-awake); }
-  .mark.welcome { background: var(--accent); }
+  .sysav { flex: none; width: 48px; height: 48px; border-radius: 50%; background: var(--surface-2); color: var(--muted); display: inline-flex; align-items: center; justify-content: center; }
   .err { padding: 16px 0; color: var(--danger); }
 </style>

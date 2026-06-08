@@ -7,8 +7,9 @@ export function fitViewport(node) {
   if (!vv) return {};
   const apply = () => {
     node.style.height = `${Math.round(vv.height)}px`;
-    // 键盘弹起时 iOS 会把可见区相对文档下移 offsetTop——容器(position:fixed)跟着平移，始终贴住可见区
-    node.style.transform = vv.offsetTop ? `translateY(${Math.round(vv.offsetTop)}px)` : '';
+    // 键盘弹起时 iOS 把可见区相对文档下移 offsetTop——容器(position:fixed)用 top 跟着平移，始终贴住可见区。
+    // 关键：用 top 而非 transform——transform 会让容器内 1px 边框在 iOS 上渲染断裂（输入栏外框断开）。
+    node.style.top = vv.offsetTop ? `${Math.round(vv.offsetTop)}px` : '';
   };
   vv.addEventListener('resize', apply);
   vv.addEventListener('scroll', apply);
