@@ -30,9 +30,10 @@
   --val: #6d6af5;
   --ene: #d6a85a;
 
-  --r-sm: 8px;
-  --r-md: 12px;
-  --r-lg: 16px;
+  --r-2xs: 6px; --r-xs: 4px; --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-pill: 999px;
+  /* —— 与用户端同名同值的一套令牌（间距/字号），便于全产品同一规范 —— */
+  --s0: 2px; --s-1: 6px; --s-2: 10px; --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px; --s6: 24px; --s8: 32px; --s12: 48px;
+  --fs-2xs: 11px; --fs-xs: 12px; --fs-sm: 13px; --fs-md: 14px; --fs-body: 15px; --fs-lg: 18px;
   color-scheme: dark;
 }
 

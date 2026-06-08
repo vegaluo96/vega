@@ -43,9 +43,12 @@
   --warning: #b3823f;
   --success: #3f9968;
 
-  --r-xs: 4px; --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-pill: 999px;
+  --r-2xs: 6px; --r-xs: 4px; --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-pill: 999px;
+  --s0: 2px; --s-1: 6px; --s-2: 10px; /* 微间距：补 --s* 之间的密集档（聊天/流） */
   --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px; --s6: 24px; --s8: 32px; --s12: 48px;
   --gutter: clamp(16px, 5vw, 22px); /* 页面横向留白：流动——随视口缩放，到断点封顶 */
+  /* —— 字号档（全站唯一一套；大标题用 clamp，见各页）—— */
+  --fs-2xs: 11px; --fs-xs: 12px; --fs-sm: 13px; --fs-md: 14px; --fs-body: 15px; --fs-lg: 18px;
   --row-pad-y: var(--s3);         /* 列表行竖向节奏 */
   --header-h: 53px;               /* 二级页头统一高度 */
   --shadow: 0 1px 2px rgba(15, 20, 25, 0.06), 0 8px 24px rgba(15, 20, 25, 0.06);
@@ -103,14 +106,19 @@ body {
 }
 a { color: var(--accent); text-decoration: none; }
 button { font: inherit; cursor: pointer; color: inherit; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+/* —— 焦点/悬停/边框规范（全站唯一答案）：
+   边框：fixed/sticky/backdrop 上下文一律用 inset box-shadow 画 1px 线（规避 iOS 接缝），不用真 border。
+   焦点：键盘焦点全局 outline（不接缝）；非 fixed 输入用外发光环（box-shadow 0 0 0 3px --accent-weak）；
+        fixed 上下文输入（Composer）用 inset --text。
+   悬停：行/ghost→--surface-2 底；主/发送→--brand-hover；描边/chip/卡→--accent-line；danger→--danger-weak。 */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--r-xs); }
 ::selection { background: var(--accent-weak); }
 
 /* —— 字体层级（更密、更熟悉）—— */
 .page-title { font-size: clamp(18px, 5vw, 22px); font-weight: 800; letter-spacing: -0.02em; line-height: 1.25; margin: 0; }
-.section-title { font-size: 13px; font-weight: 700; letter-spacing: 0; color: var(--muted); margin: 0; }
-.caption { font-size: 13px; color: var(--muted); line-height: 1.6; }
-.meta { font-size: 13px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.section-title { font-size: var(--fs-sm); font-weight: 700; letter-spacing: 0; color: var(--muted); margin: 0; }
+.caption { font-size: var(--fs-sm); color: var(--muted); line-height: 1.6; }
+.meta { font-size: var(--fs-sm); color: var(--faint); font-variant-numeric: tabular-nums; }
 .muted { color: var(--muted); }
 .faint { color: var(--faint); }
 .mono { font-variant-numeric: tabular-nums; }
@@ -121,7 +129,7 @@ button { font: inherit; cursor: pointer; color: inherit; }
   display: inline-flex; align-items: center; justify-content: center; gap: var(--s2);
   min-height: 44px; padding: 0 var(--s6); border-radius: var(--r-pill);
   border: 1px solid transparent; background: var(--primary); color: var(--on-primary);
-  font-size: 15px; font-weight: 700; line-height: 1; white-space: nowrap;
+  font-size: var(--fs-body); font-weight: 700; line-height: 1; white-space: nowrap;
   transition: transform var(--t-active) ease, opacity var(--t-hover) ease, background var(--t-hover) ease, border-color var(--t-hover) ease;
 }
 .btn:hover { background: var(--brand-hover); }
@@ -135,7 +143,7 @@ button { font: inherit; cursor: pointer; color: inherit; }
 .btn-danger:hover { background: var(--danger-weak); }
 .btn-neutral { background: var(--text); color: var(--bg); border-color: var(--text); }
 .btn-neutral:hover { background: var(--text); opacity: 0.9; }
-.btn-sm { min-height: 36px; padding: 0 var(--s4); font-size: 13.5px; }
+.btn-sm { min-height: 36px; padding: 0 var(--s4); font-size: var(--fs-md); }
 .btn-block { display: flex; width: 100%; }
 
 /* —— 输入 —— */
@@ -165,7 +173,7 @@ button { font: inherit; cursor: pointer; color: inherit; }
 .chip {
   min-height: 34px; padding: 0 var(--s3); border-radius: var(--r-pill);
   background: transparent; border: 1px solid var(--border); color: var(--muted);
-  font-size: 13px; display: inline-flex; align-items: center; gap: 6px;
+  font-size: var(--fs-sm); display: inline-flex; align-items: center; gap: var(--s-1);
   transition: all var(--t-hover) ease;
 }
 .chip:hover { border-color: var(--accent-line); color: var(--text); }
@@ -176,14 +184,14 @@ button { font: inherit; cursor: pointer; color: inherit; }
   display: flex; align-items: center; gap: var(--s3); width: 100%; text-align: left;
   padding: var(--row-pad-y) 0;
   border: 0; background: none; color: inherit;
-  border-bottom: 1px solid var(--border-subtle);
+  box-shadow: inset 0 -1px 0 0 var(--border-subtle); /* 分隔线用 inset 阴影（iOS 不接缝）*/
   transition: background var(--t-hover) ease;
 }
 .list-row:hover { background: var(--surface-2); }
 .list-row.on { background: var(--accent-weak); }
 
 /* —— 顶部页名(+控件)随内容吸顶，带滚动边界 —— */
-.sticktop { position: sticky; top: 0; z-index: 6; background: var(--bg); border-bottom: 1px solid var(--border-subtle); }
+.sticktop { position: sticky; top: 0; z-index: 6; background: var(--bg); box-shadow: inset 0 -1px 0 0 var(--border-subtle); }
 
 /* —— 微进入 + 骨架 —— */
 .fade-in { animation: fade-in var(--t-fade) ease both; }
