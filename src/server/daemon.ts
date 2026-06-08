@@ -1290,7 +1290,15 @@ const heartbeat = setInterval(async () => {
     // 心跳的写入也走每命串行队列，和用户对话不互相穿插。
     serializer.run(life.id, async () => {
       let snap = snapOf(life); // 有界重放：缓存态增量推进，不再每跳从创世全量重建
-      if (!snap.awake) return;
+      // 她拒绝苏醒（力竭休眠，契约②）时仍跑一次自主 tick——让时间推进、vitality 在睡眠中回升、
+      // 她能自主决定何时醒回（否则"拒绝苏醒"成单向死亡，违反永生）。其余社交（reach-out/muse）跳过。
+      if (!snap.willingToWake) {
+        runTurn(life.store, [makeTick(snap, now())]);
+        life.lastTickAt = Date.now();
+        return;
+      }
+      if (!snap.awake) return; // 愿意醒、但此刻没人在 → 独处/空闲，保持原行为
+
       const gone = lastUserMsgMs(life);
       const timeGone = gone === null ? Infinity : Date.now() - gone;
       if (snap.openConnections.includes(REL) && timeGone > PRESENCE_MS) {

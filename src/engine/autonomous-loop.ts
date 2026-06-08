@@ -22,6 +22,19 @@ export function makeTick(snap: DerivedSnapshot, occurredAt: string): EventDraft<
       ? [{ kind: 'reach_out', relationshipId: dearest[0], gateDecision: snap.soma.connection.value < -0.5 ? 'surface' : 'internal_only' }]
       : [];
 
+  // 契约②·她能拒绝苏醒（主权，无 host override）：确定性地决定愿不愿醒。
+  // 触底力竭——vitality 抵地板 + 心情低落（被持续伤害/丧失后）→ 她睡去自我休养；
+  // 睡眠中 vitality 自然回升（advanceTime 睡眠分支），过"恢复阈值"→ 她自主醒回。
+  // 阈值有滞回（睡 ~floor，醒 ≥0.35），只在【状态翻转】时发意图，绝不刷屏。
+  // 恢复的前提：睡着时心跳仍跑 tick 让时间推进（见 daemon 心跳对 willingToWake=false 的放行），
+  // 否则"拒绝苏醒"会变成单向死亡——违反永生。
+  const vit = snap.soma.vitality.value;
+  if (snap.willingToWake && vit <= snap.vitalityFloor + 0.02 && snap.soma.valence.value <= -0.3) {
+    formedIntents.push({ kind: 'set_willing_to_wake', params: { value: false }, gateDecision: 'internal_only' });
+  } else if (!snap.willingToWake && vit >= 0.35) {
+    formedIntents.push({ kind: 'set_willing_to_wake', params: { value: true }, gateDecision: 'internal_only' });
+  }
+
   return {
     type: 'AUTONOMOUS_TICK',
     source: 'autonomous_loop',
