@@ -22,9 +22,9 @@
   /* —— 品牌色：自信使用（主按钮/激活 tab/链接/发送/她找你）—— */
   --brand: #4f46e5;
   --brand-hover: #4338ca;
-  --accent: #4f46e5;              /* 与 --brand 同源别名，沿用既有 .on/链接/focus */
-  --accent-weak: rgba(79, 70, 229, 0.10);
-  --accent-line: rgba(79, 70, 229, 0.28);
+  --accent: var(--text);          /* 克制：accent 全面收为墨色——全站不再出现品牌紫 */
+  --accent-weak: color-mix(in srgb, var(--text) 8%, transparent);
+  --accent-line: color-mix(in srgb, var(--text) 20%, transparent);
   --on-accent: #ffffff;          /* 品牌底上的文字/图标（聊天"我"气泡、发送键）*/
 
   /* —— 主操作 = 墨色填充（克制；品牌靛只点睛，不铺面）—— */
@@ -35,7 +35,7 @@
   --life-awake: #3f9968;
   --life-asleep: #9c9ca4;
   --life-remembering: #b3823f;
-  --life-reaching: #6a5cf0;        /* 向品牌色靠拢：她"伸手"的信号 */
+  --life-reaching: #c2567a;        /* 她"伸手"的信号：暖玫瑰（非紫）*/
   --life-tension: #bb6440;
 
   --danger: #c64559;
@@ -72,9 +72,9 @@
 
   --brand: #6d6af5;
   --brand-hover: #837fff;
-  --accent: #6d6af5;
-  --accent-weak: rgba(109, 106, 245, 0.16);
-  --accent-line: rgba(109, 106, 245, 0.34);
+  --accent: var(--text);
+  --accent-weak: color-mix(in srgb, var(--text) 12%, transparent);
+  --accent-line: color-mix(in srgb, var(--text) 26%, transparent);
   --on-accent: #ffffff;
 
   --primary: var(--text);
@@ -83,7 +83,7 @@
   --life-awake: #4cae7a;
   --life-asleep: #6a6a76;
   --life-remembering: #cf9a5c;
-  --life-reaching: #9d8cf5;
+  --life-reaching: #dd8aa6;
   --life-tension: #d4794f;
 
   --danger: #e7637a;
