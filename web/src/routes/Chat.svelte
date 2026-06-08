@@ -91,12 +91,11 @@
 
 <div class="chat" use:fitViewport>
   <DetailHeader
-    subtitle={life ? ((life.awake ? (life.feeling || life.emotion) : t('life.asleep')) + (rel ? ' · ' + rel.attachment : '')) : ''}
+    subtitle={life ? (life.awake ? (life.feeling || life.emotion) : t('life.asleep')) : ''}
     onTitle={life ? () => (showRel = !showRel) : undefined}
     loading={!life}>
     <span slot="lead">{#if life}<button class="avbtn" on:click={() => navigate('profile', { id: life.id })} aria-label="她的主页"><LifeAvatar id={life.id} emotion={life.emotion} awake={life.awake} size={38} /></button>{/if}</span>
     <svelte:fragment slot="title">{life ? life.id : ''}</svelte:fragment>
-    <span slot="action" class="bal" title="表达额度">{balance != null ? '心意 ' + balance : ''}</span>
   </DetailHeader>
 
   {#if showRel && rel}
@@ -137,7 +136,6 @@
   @media (min-width: 1000px) { .chat { position: relative; z-index: auto; } }
 
   /* slot 进 DetailHeader 的小件 */
-  .bal { color: var(--muted); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
   .avbtn { background: none; border: 0; padding: 0; display: inline-flex; cursor: pointer; }
 
   .relwrap { max-width: var(--maxw); width: 100%; margin: 0 auto; padding: var(--s3) var(--gutter) 0; }

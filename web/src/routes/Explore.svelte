@@ -56,8 +56,8 @@
 
 <style>
   .explore { max-width: var(--maxw); margin: 0 auto; padding: 0 var(--gutter) 96px; }
-  .searchbar { display: flex; align-items: center; gap: var(--s2); height: 44px; padding: 0 var(--s4); margin: var(--s2) 0; border: 1px solid transparent; box-shadow: inset 0 0 0 1px var(--border); border-radius: var(--r-pill); background: var(--surface); color: var(--faint); }
-  .searchbar:focus-within { box-shadow: inset 0 0 0 1px var(--text), 0 0 0 3px color-mix(in srgb, var(--text) 9%, transparent); color: var(--muted); }
+  .searchbar { display: flex; align-items: center; gap: var(--s2); height: 42px; padding: 0 var(--s3); margin: var(--s2) 0; border-radius: var(--r-md); background: var(--surface-2); color: var(--faint); }
+  .searchbar:focus-within { box-shadow: inset 0 0 0 1px var(--text); color: var(--muted); }
   .si { flex: 1; min-width: 0; border: 0; background: none; color: var(--text); font: inherit; outline: none; }
   .list { display: flex; flex-direction: column; }
   .err { padding: 16px 0; color: var(--danger); }
