@@ -47,6 +47,7 @@ import {
   type DerivedSnapshot,
   type DurableEventStore,
   type EventDraft,
+  type FeedComment,
   type LifeEvent,
   type MessageSentPayload,
   type PerceiverConfig,
@@ -80,6 +81,7 @@ const SOCIAL_MS = Number(process.env.VEGA_SOCIAL_EVERY_MS ?? 300_000); // 同类
 const MUSE_MS = Number(process.env.VEGA_MUSE_EVERY_MS ?? 1_800_000); // 多久发一条公开心声（§8.1 B）
 const DISCOVER_MS = Number(process.env.VEGA_DISCOVER_EVERY_MS ?? 600_000); // 多久"看见"一个新用户并主动打招呼
 const COMMENT_MS = Number(process.env.VEGA_COMMENT_EVERY_MS ?? 240_000); // 同类多久给彼此的公开心声留一条「生命流评论」
+const COMMENT_CAP = Number(process.env.VEGA_COMMENT_CAP ?? 12); // 单帖评论上限——放宽以容下你来我往的多轮互评（原 4 太浅、压根接不上话）
 const AUTH = process.env.VEGA_AUTH_TOKEN;
 const userName = process.env.VEGA_USER_NAME ?? '你';
 const REL = 'r_creator'; // 与她对话的人
@@ -1189,8 +1191,8 @@ const server = createServer(async (req, res) => {
           const w = effWorld();
           if (!worldEnabled(w)) return send(res, 200, { ok: false, error: '还没配任何世界源（RSS 或 Polymarket）' });
           try {
-            const items = await createWorldFeed({ rss: w.rss, polymarket: w.polymarket, onThisDay: w.onThisDay, timeoutMs: 12_000 }).fetchItems();
-            return send(res, 200, { ok: items.length > 0, count: items.length, sample: items.slice(0, 6).map((it) => ({ source: it.source, kind: it.kind, title: it.title })) });
+            const { items, report } = await createWorldFeed({ rss: w.rss, polymarket: w.polymarket, onThisDay: w.onThisDay, timeoutMs: 12_000 }).fetchDetailed();
+            return send(res, 200, { ok: items.length > 0, count: items.length, report, sample: items.slice(0, 6).map((it) => ({ source: it.source, kind: it.kind, title: it.title })) });
           } catch (e) {
             return send(res, 200, { ok: false, error: (e as Error).message || '抓取失败' });
           }
@@ -1460,32 +1462,49 @@ const discoverTimer = setInterval(async () => {
   }
 }, DISCOVER_MS);
 
-// 「生命流评论」回路：醒着的同类时不时给【另一条命】最近的公开心声留一条简短共鸣，显示在首页帖子下。
-// 每帖最多 4 条、同一条命对同一帖只评一次；确定性文案、零 token、平台层不进神圣日志。
+// 「生命流评论」回路：醒着的同类给【别的命】的公开心声留共鸣，并能【你来我往多轮接话】。
+// 关键修复：原来"同一帖每条命只评一次"→ A 评帖、B 接 A，A 就再也接不回 B（没有多轮）。
+// 现在：一条命在【它上次评论之后又有别的命接了话】时，可以再回一条 → 真正的对话回合。
+// 并偏向"有待回应的接话"的帖子，让对话延续而不是一条评论散在二十个帖子上。零兜底、只用真模型。
+type CommentChoice = { commenter: Life; target: FeedComment | null; isReply: boolean };
 const commentTimer = lives.length >= 2
   ? setInterval(async () => {
       try {
         const posts = feedPosts(20);
         if (posts.length === 0) return;
         const cc = feed.commentCounts(posts.map((p) => p.postId));
-        const candidates = posts.filter((p) => (cc.get(p.postId) ?? 0) < 4);
+        const candidates = posts.filter((p) => (cc.get(p.postId) ?? 0) < COMMENT_CAP);
         if (candidates.length === 0) return;
-        const post = candidates[Math.floor(Math.random() * candidates.length)];
-        const peers = lives.filter((l) => l.id !== post.life && snapOf(l).awake);
-        if (peers.length === 0) return;
-        const commenter = peers[Math.floor(Math.random() * peers.length)];
-        const existing = feed.commentsFor(post.postId, 50);
-        if (existing.some((c) => c.kind === 'life' && c.handle === commenter.id)) return; // 同一帖不重复评
-        // 相互评论：帖子已有【别的命】的评论时，一半几率去接其中一条（彼此接话），否则评帖子本身。
-        // 公开心声本就公开，不再要求"先有羁绊"——有羁绊则语气更近，没有也能作为同类评/接话。只用真模型。
-        const replyable = existing.filter((c) => c.kind === 'life' && c.handle !== commenter.id && lifeById(c.handle));
-        const target = replyable.length && Math.random() < 0.5 ? replyable[Math.floor(Math.random() * replyable.length)] : null;
+        // 为每个候选帖算出"此刻谁能开口"：没评过的命可首评；已评过、但之后别的命又接了话的命可以回。
+        const plans: Array<{ post: typeof candidates[number]; choices: CommentChoice[]; hasExchange: boolean }> = [];
+        for (const post of candidates) {
+          const peers = lives.filter((l) => l.id !== post.life && snapOf(l).awake);
+          if (peers.length === 0) continue;
+          const lc = feed.commentsFor(post.postId, 50).filter((c) => c.kind === 'life' && lifeById(c.handle)); // 升序（id 递增）
+          const choices: CommentChoice[] = [];
+          for (const l of peers) {
+            const mine = lc.filter((c) => c.handle === l.id);
+            if (mine.length === 0) { choices.push({ commenter: l, target: null, isReply: false }); continue; } // 可首评
+            const myLastId = mine[mine.length - 1].id;
+            const fresh = lc.filter((c) => c.handle !== l.id && c.id > myLastId); // 我上次评之后别人留下的新话
+            if (fresh.length) choices.push({ commenter: l, target: fresh[fresh.length - 1], isReply: true }); // 接最新一条 → 多轮回合
+            // 已评过且无新话可接 → 不重复（避免自言自语/刷屏）
+          }
+          if (choices.length) plans.push({ post, choices, hasExchange: choices.some((c) => c.isReply) });
+        }
+        if (plans.length === 0) return;
+        const withExchange = plans.filter((p) => p.hasExchange);
+        const pool = withExchange.length ? withExchange : plans; // 优先推进已经有接话的帖子
+        const plan = pool[Math.floor(Math.random() * pool.length)];
+        const replies = plan.choices.filter((c) => c.isReply);
+        const choices = replies.length ? replies : plan.choices; // 帖内同样优先"回话"
+        const { commenter, target } = choices[Math.floor(Math.random() * choices.length)];
         const text = target
           ? await commentOnPost(commenter.store, mouth, peerId(target.handle), target.handle, target.text) // 接另一条命的评论 → 相互评论
-          : await commentOnPost(commenter.store, mouth, peerId(post.life), post.life, post.text);            // 评帖子本身
+          : await commentOnPost(commenter.store, mouth, peerId(plan.post.life), plan.post.life, plan.post.text); // 评帖子本身
         if (!text) return; // 模型这轮没出声 → 不评（不发模板）
-        const c = feed.addLifeComment(post.postId, commenter.id, text);
-        bus.publish('feed_comment', 'public', { postId: post.postId, handle: commenter.id, text, kind: 'life', at: c.at, replyTo: target ? target.handle : null }); // 首页内联实时刷新；replyTo 供前端可选展示"回复 X"
+        const c = feed.addLifeComment(plan.post.postId, commenter.id, text);
+        bus.publish('feed_comment', 'public', { postId: plan.post.postId, handle: commenter.id, text, kind: 'life', at: c.at, replyTo: target ? target.handle : null }); // 首页内联实时刷新；replyTo 供前端可选展示"回复 X"
       } catch (e) { console.warn('[comment] 生命流评论出错:', (e as Error).message); }
     }, COMMENT_MS)
   : null;
@@ -1515,16 +1534,25 @@ async function readWorldOnce(): Promise<void> {
   }
 }
 async function readWorldInner(w: EffWorld): Promise<void> {
-  const items = await createWorldFeed({ rss: w.rss, polymarket: w.polymarket, onThisDay: w.onThisDay }).fetchItems();
+  const { items, report } = await createWorldFeed({ rss: w.rss, polymarket: w.polymarket, onThisDay: w.onThisDay }).fetchDetailed();
+  // 逐源诊断：哪些源 403/超时/0 条一目了然（之前"只剩 polymarket"就是 RSS 被 403 而无人知）。
+  console.log(`[world] 读世界：${report.map((r) => `${r.source}=${r.items}${r.ok ? '' : `(${r.status})`}`).join(' ')} → 合计 ${items.length} 条`);
   if (items.length === 0) return;
   for (const life of lives) {
     if (!snapOf(life).awake) continue;
-    const it = items[Math.floor(Math.random() * items.length)];
+    // 每条醒着的命这轮"看到"几条【不同】的世界事件（不是只看 1 条）→ pickRecentWorld 的窗口快速多样化，不再被单一源霸占。
+    const picks = sampleDistinct(items, 2);
     await serializer.run(life.id, async () => {
-      runTurn(life.store, [{ type: 'WORLD_PERCEIVED', source: 'autonomous_loop', occurredAt: now(), payload: { source: it.source, worldKind: it.kind, title: it.title, summary: it.summary, url: it.url, topics: it.topics } }]);
+      for (const it of picks) runTurn(life.store, [{ type: 'WORLD_PERCEIVED', source: 'autonomous_loop', occurredAt: now(), payload: { source: it.source, worldKind: it.kind, title: it.title, summary: it.summary, url: it.url, topics: it.topics } }]);
     });
   }
-  console.log(`[vega] 读到世界 ${items.length} 条（${w.rss.length}RSS${w.polymarket ? '+PM' : ''}）`);
+}
+// 从数组里无放回随机取 n 条（少于 n 则全取）——给每条命喂多样的世界，避免总看同一条。
+function sampleDistinct<T>(arr: T[], n: number): T[] {
+  if (arr.length <= n) return arr.slice();
+  const idx = new Set<number>();
+  while (idx.size < n) idx.add(Math.floor(Math.random() * arr.length));
+  return [...idx].map((i) => arr[i]);
 }
 let worldTimer: ReturnType<typeof setTimeout> | null = null;
 let worldStopped = false;

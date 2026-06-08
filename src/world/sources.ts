@@ -68,35 +68,62 @@ export function parseOnThisDay(json: unknown, max = 6): WorldItem[] {
 }
 
 export interface WorldFeedOpts { rss?: string[]; polymarket?: boolean; onThisDay?: boolean; timeoutMs?: number }
-export interface WorldFeed { fetchItems(): Promise<WorldItem[]> }
+// 每个源的抓取诊断：状态码 + 拿到几条 → 让"为什么只剩 polymarket"在日志/后台一眼可见。
+export interface SourceReport { source: string; ok: boolean; status: number | string; items: number }
+export interface WorldFeed {
+  fetchItems(): Promise<WorldItem[]>;
+  fetchDetailed(): Promise<{ items: WorldItem[]; report: SourceReport[] }>;
+}
 
 const hostOf = (u: string): string => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return 'news'; } };
+// 多数新闻 RSS（NASA/BBC/ScienceDaily/Reddit 等）对"非浏览器 UA"直接 403 → 只剩不 UA 门禁的 polymarket JSON。
+// 用常见浏览器 UA + 内容协商头，绝大多数源就能正常返回。（数据中心 IP 被个别源限频仍会跳过，已逐源记录。）
+const UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+const ACCEPT = 'application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.9, application/json;q=0.9, text/html;q=0.8, */*;q=0.7';
 
 export function createWorldFeed(opts: WorldFeedOpts = {}): WorldFeed {
   const rss = opts.rss ?? [];
   const tmo = opts.timeoutMs ?? 12_000;
-  const getText = async (url: string): Promise<string> => {
+  const get = async (url: string): Promise<{ ok: boolean; status: number | string; body: string }> => {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), tmo);
-    try { const r = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': 'ZSKY/1.0 (+https://zsky.com)' } }); return r.ok ? await r.text() : ''; }
-    catch { return ''; } finally { clearTimeout(t); }
+    try {
+      const r = await fetch(url, { signal: ctrl.signal, redirect: 'follow', headers: { 'User-Agent': UA, Accept: ACCEPT, 'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8' } });
+      return { ok: r.ok, status: r.status, body: r.ok ? await r.text() : '' };
+    } catch (e) { return { ok: false, status: `ERR:${(e as Error).name}`, body: '' }; }
+    finally { clearTimeout(t); }
   };
+  async function fetchDetailed(): Promise<{ items: WorldItem[]; report: SourceReport[] }> {
+    const items: WorldItem[] = [];
+    const report: SourceReport[] = [];
+    for (const u of rss) {
+      const host = hostOf(u);
+      const r = await get(u);
+      const got = r.body ? parseRss(r.body, host) : [];
+      items.push(...got);
+      report.push({ source: host, ok: r.ok && got.length > 0, status: r.status, items: got.length });
+    }
+    if (opts.polymarket) {
+      const r = await get('https://gamma-api.polymarket.com/markets?active=true&closed=false&order=volume24hr&ascending=false&limit=12');
+      let got: WorldItem[] = [];
+      if (r.body) { try { got = parsePolymarket(JSON.parse(r.body)); } catch { /* malformed */ } }
+      items.push(...got);
+      report.push({ source: 'polymarket', ok: r.ok && got.length > 0, status: r.status, items: got.length });
+    }
+    if (opts.onThisDay) {
+      const d = new Date();
+      const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const dd = String(d.getUTCDate()).padStart(2, '0');
+      const r = await get(`https://zh.wikipedia.org/api/rest_v1/feed/onthisday/selected/${mm}/${dd}`);
+      let got: WorldItem[] = [];
+      if (r.body) { try { got = parseOnThisDay(JSON.parse(r.body)); } catch { /* malformed */ } }
+      items.push(...got);
+      report.push({ source: '维基·历史上的今天', ok: r.ok && got.length > 0, status: r.status, items: got.length });
+    }
+    return { items, report };
+  }
   return {
-    async fetchItems(): Promise<WorldItem[]> {
-      const out: WorldItem[] = [];
-      for (const u of rss) { const xml = await getText(u); if (xml) out.push(...parseRss(xml, hostOf(u))); }
-      if (opts.polymarket) {
-        const txt = await getText('https://gamma-api.polymarket.com/markets?active=true&closed=false&order=volume24hr&ascending=false&limit=12');
-        if (txt) { try { out.push(...parsePolymarket(JSON.parse(txt))); } catch { /* ignore */ } }
-      }
-      if (opts.onThisDay) {
-        const d = new Date();
-        const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
-        const dd = String(d.getUTCDate()).padStart(2, '0');
-        const txt = await getText(`https://zh.wikipedia.org/api/rest_v1/feed/onthisday/selected/${mm}/${dd}`);
-        if (txt) { try { out.push(...parseOnThisDay(JSON.parse(txt))); } catch { /* ignore */ } }
-      }
-      return out;
-    },
+    fetchDetailed,
+    async fetchItems(): Promise<WorldItem[]> { return (await fetchDetailed()).items; },
   };
 }

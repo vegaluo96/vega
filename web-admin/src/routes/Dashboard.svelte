@@ -106,7 +106,14 @@
   }
   async function testWorld() {
     testingWorld = true; worldTestMsg = '抓取中…';
-    try { const r = await api.testWorld(); worldTestMsg = r.ok ? `✓ 抓到 ${r.count} 条：${(r.sample || []).map((x) => x.title).slice(0, 3).join(' / ')}` : `✗ ${r.error}`; }
+    try {
+      const r = await api.testWorld();
+      // 逐源诊断：每个源拿到几条、失败码是什么（一眼看出"为什么只剩 polymarket"——多半是 RSS 被 403）。
+      const breakdown = (r.report || []).map((x) => `${x.source} ${x.items}${x.ok ? '' : `✗${x.status}`}`).join(' · ');
+      worldTestMsg = r.ok
+        ? `✓ 抓到 ${r.count} 条${breakdown ? `（${breakdown}）` : ''}`
+        : `✗ ${r.error || '0 条'}${breakdown ? `（${breakdown}）` : ''}`;
+    }
     catch (e) { worldTestMsg = '✗ ' + e.message; } finally { testingWorld = false; }
   }
   function go(t) { tab = t; data = {}; load(); }
