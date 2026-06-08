@@ -2,11 +2,13 @@
 // ModelGateway（嘴，只产措辞）→ Critic（gate 措辞）→ 落 MESSAGE_SENT（审计，不写状态）。
 // 关键：她的状态在模型开口【之前】就由确定性 appraisal 定了；模型挂了她也照样回应。
 import {
+  type EventDraft,
   type MessageReceivedPayload,
   type MessageSentPayload,
   type RelationshipId,
 } from '../domain/events.ts';
 import { type DerivedSnapshot } from '../domain/snapshot.ts';
+import { buildEvent } from '../kernel/event-store.ts';
 import { reconstruct } from '../kernel/reconstruct.ts';
 import { type DurableEventStore } from '../persistence/file-event-store.ts';
 import { type Mouth } from '../model/mouth.ts';
@@ -49,6 +51,10 @@ export async function converse(
   perceiver?: Perceiver,
   channel = 'chat',
 ): Promise<ConverseResult> {
+  // 乐观锁令牌：开头读一次，覆盖整个 await 窗口（不再在 append 瞬间才读——那样 CAS 永不冲突）。
+  const expected = store.version();
+  const events = store.list();
+  const head = store.head();
   // 之前的对话（不含本条），给"嘴"做上下文。
   const recentContext = recentTurns(store, relationshipId, 6);
 
@@ -62,16 +68,22 @@ export async function converse(
     }
   }
 
-  // ① 输入事件（事务化）。状态变化在此由确定性 appraisal 产生——【在模型开口之前】。
-  store.appendTurn(store.version(), [
-    { type: 'MESSAGE_RECEIVED', source: 'external_user', relationshipId, occurredAt, payload: { relationshipId, content, channel, ...(perception ? { perception } : {}) } },
-  ]);
-  const snapshot = reconstruct(store.list());
+  // ① 收到消息的事件草稿——确定性 appraisal 的输入（状态变化只由它产生，与模型无关）。
+  const receivedDraft: EventDraft<'MESSAGE_RECEIVED'> = {
+    type: 'MESSAGE_RECEIVED', source: 'external_user', relationshipId, occurredAt,
+    payload: { relationshipId, content, channel, ...(perception ? { perception } : {}) },
+  };
 
-  // ② SoulWorkspace：确定性装配"状态摘要 + 语气倾向"。
+  // ② 预演折叠：在内存把 received 折进状态【但不提交】，得到"收到后/发出前"的快照。
+  // 关键（原子性）：模型若在下方 await 中崩，神圣日志什么都没写 → 重试干净，无半截 turn、无二次 appraise。
+  // recordedAt 不入 contentHash、不影响重建，故此预演快照与最终提交逐位一致。
+  const previewReceived = buildEvent(head ? head.lifeId : '', expected, head, head ? head.occurredAt : '', receivedDraft);
+  const snapshot = reconstruct([...events, previewReceived]);
+
+  // ③ SoulWorkspace：确定性装配"状态摘要 + 语气倾向"。
   const workspace = deriveWorkspace(snapshot, relationshipId);
 
-  // ③ 模型只当嘴。挂了/超时也不影响她——兜底到确定性的"嘴"（顺着对方语气、带状态，而非单句套话）。
+  // ④ 模型只当嘴。挂了/超时也不影响她——兜底到确定性的"嘴"（顺着对方语气、带状态，而非单句套话）。
   const input = { ...workspace, lastUserMessage: content, recentContext };
   let raw = '';
   try {
@@ -79,12 +91,14 @@ export async function converse(
   } catch {
     raw = '';
   }
-  // ④ Critic 只 gate 措辞，不写身份；退兜底时由 composeUtterance 确定性地接住对方。
+  // ⑤ Critic 只 gate 措辞，不写身份；退兜底时由 composeUtterance 确定性地接住对方。
   let { verdict, utterance } = critique(raw, workspace);
   if (verdict === 'fallback') utterance = composeUtterance(input);
 
-  // ⑤ 审计事件：模型产物，affectsDerivedState=false（重建永不消费它）。
-  store.appendTurn(store.version(), [
+  // ⑥ 单事务原子提交：received（输入）+ sent（审计，affectsDerivedState=false）一起落（同一 fsync）。
+  // expected 来自开头 → 若 await 期间被并发改写（serializer 被绕过/去中心化），CAS 冲突即抛、整批回滚。
+  store.appendTurn(expected, [
+    receivedDraft,
     {
       type: 'MESSAGE_SENT',
       source: 'autonomous_loop',
@@ -112,6 +126,7 @@ export async function reachOut(
   occurredAt: string,
   world?: { title: string; summary: string; source: string }, // 给同类寒暄当话题：就着真实世界的一条事开口（而非站内瞎聊）
 ): Promise<OutreachResult | null> {
+  const expected = store.version(); // 乐观锁令牌：开头读一次，覆盖 await 窗口
   const snapshot = reconstruct(store.list());
   const bond = snapshot.bonds[relationshipId];
   if (!bond) return null;
@@ -137,7 +152,7 @@ export async function reachOut(
   }
   let { verdict, utterance } = critique(raw, outreach);
   if (verdict === 'fallback') utterance = composeUtterance(input);
-  store.appendTurn(store.version(), [
+  store.appendTurn(expected, [
     {
       type: 'MESSAGE_SENT',
       source: 'autonomous_loop',
@@ -173,6 +188,7 @@ export async function commentOnPost(
 // 她主动发现新用户（§8.1）：在广场"看见"一个新来的人，由她发起第一次打招呼。
 // 关系须已开（调用方先 ensureUserRelationship）。落 MESSAGE_SENT(unprompted)，不写状态。
 export async function greet(store: DurableEventStore, mouth: Mouth, relationshipId: RelationshipId, handle: string, occurredAt: string): Promise<OutreachResult> {
+  const expected = store.version(); // 乐观锁令牌：开头读一次，覆盖 await 窗口
   const snapshot = reconstruct(store.list());
   const ws = deriveWorkspace(snapshot, relationshipId);
   const greeting: Workspace = {
@@ -189,7 +205,7 @@ export async function greet(store: DurableEventStore, mouth: Mouth, relationship
   }
   let { verdict, utterance } = critique(raw, greeting);
   if (verdict === 'fallback') utterance = composeUtterance(input);
-  store.appendTurn(store.version(), [
+  store.appendTurn(expected, [
     { type: 'MESSAGE_SENT', source: 'autonomous_loop', relationshipId, occurredAt, payload: { relationshipId, utterance, modelId: mouth.id, criticVerdict: verdict, affectsDerivedState: false, unprompted: true } },
   ]);
   return { utterance, modelId: mouth.id, verdict };
@@ -199,6 +215,7 @@ export async function greet(store: DurableEventStore, mouth: Mouth, relationship
 // grounding 走 r_square（无 bond）→ deriveWorkspace 只出她的自我+同类，零用户私密。落 MESSAGE_SENT 到 r_square（审计、不写状态）。
 export const PUBLIC_SQUARE = 'r_square';
 export async function muse(store: DurableEventStore, mouth: Mouth, occurredAt: string, world?: { title: string; summary: string; source: string }): Promise<OutreachResult> {
+  const expected = store.version(); // 乐观锁令牌：开头读一次，覆盖 await 窗口
   const snapshot = reconstruct(store.list());
   const ws = deriveWorkspace(snapshot, PUBLIC_SQUARE);
   const musing: Workspace = world
@@ -221,7 +238,7 @@ export async function muse(store: DurableEventStore, mouth: Mouth, occurredAt: s
   }
   let { verdict, utterance } = critique(raw, musing);
   if (verdict === 'fallback') utterance = composeUtterance(input);
-  store.appendTurn(store.version(), [
+  store.appendTurn(expected, [
     { type: 'MESSAGE_SENT', source: 'autonomous_loop', relationshipId: PUBLIC_SQUARE, occurredAt, payload: { relationshipId: PUBLIC_SQUARE, utterance, modelId: mouth.id, criticVerdict: verdict, affectsDerivedState: false, unprompted: true } },
   ]);
   return { utterance, modelId: mouth.id, verdict };

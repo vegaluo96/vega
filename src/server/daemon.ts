@@ -281,7 +281,9 @@ async function respondAsUser(life: Life, me: Account, content: string, channel: 
   return serializer.run(life.id, async () => {
     const { mouth: useMouth, charge } = meterMouth(mouth, templateMouth, accounts.balance(me.id), MODEL_COST);
     const r = await userSay(life.store, useMouth, accounts.relIdFor(me.id), me.handle, content, now(), charge ? perceiver : undefined, channel);
-    if (charge && r.verdict === 'accepted') accounts.debit(me.id, charge, 'model', life.id);
+    // 走了付费路径就扣费（charge>0 = 余额够 + 配了真模型）——感知+嘴的 API 钱已花出，fallback 也是一次已交付的回应。
+    // 不再以 verdict==='accepted' 为条件：否则模型超时/被 critic 兜底时付了钱却不扣，账与实际消费脱节。
+    if (charge) accounts.debit(me.id, charge, 'model', life.id);
     return { utterance: r.utterance, verdict: r.verdict, emotion: r.snapshot.emotion, balance: accounts.balance(me.id), voice: useMouth.id === 'template' ? 'plain' : 'rich' };
   });
 }
