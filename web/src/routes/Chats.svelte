@@ -44,7 +44,7 @@
 </div>
 
 <style>
-  .rels { max-width: var(--maxw); margin: 0 auto; padding: 0 16px 96px; }
+  .rels { max-width: var(--maxw); margin: 0 auto; padding: 0 var(--gutter) 96px; }
   /* 在场点：随标题（slot）一起进入 ListRow */
   .dot { width: 7px; height: 7px; border-radius: var(--r-pill); background: var(--life-asleep); flex: none; }
   .dot.awake { background: var(--life-awake); box-shadow: 0 0 0 3px color-mix(in srgb, var(--life-awake) 20%, transparent); }

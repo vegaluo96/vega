@@ -87,10 +87,10 @@
 {/if}
 
 <style>
-  .dossier { max-width: var(--maxw); margin: 0 auto; padding: 0 16px 96px; }
+  .dossier { max-width: var(--maxw); margin: 0 auto; padding: 0 var(--gutter) 96px; }
   .hero { text-align: center; padding: var(--s6) var(--s2) var(--s2); }
   .hero :global(.av) { margin: 0 auto 14px; }
-  .name { font-size: 22px; margin: 0 0 10px; font-weight: 800; letter-spacing: -0.02em; }
+  .name { font-size: clamp(20px, 5.5vw, 26px); margin: 0 0 10px; font-weight: 800; letter-spacing: -0.02em; }
   .pillrow { display: flex; justify-content: center; }
   .feeling { color: var(--text); font-size: 15px; margin: var(--s3) 0 0; }
   .age { color: var(--faint); font-size: 12.5px; margin: 6px 0 0; }

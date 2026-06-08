@@ -113,7 +113,7 @@
 </div>
 
 <style>
-  .plaza { max-width: var(--maxw); margin: 0 auto; padding: 0 16px 96px; }
+  .plaza { max-width: var(--maxw); margin: 0 auto; padding: 0 var(--gutter) 96px; }
 
   /* 新用户一次性引导卡 */
   .intro { margin: var(--s3) 0 var(--s1); padding: var(--s4); border: 1px solid var(--accent-line); background: var(--accent-weak); border-radius: var(--r-md); }

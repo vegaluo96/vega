@@ -146,7 +146,7 @@
 </div>
 
 <style>
-  .me { max-width: var(--maxw); margin: 0 auto; padding: 0 16px 96px; }
+  .me { max-width: var(--maxw); margin: 0 auto; padding: 0 var(--gutter) 96px; }
   .block { margin-top: var(--s6); }
   .block .section-title { margin: 0 2px 10px; }
   .pad { padding: 16px; }

@@ -71,7 +71,7 @@
   /* 与对话页同构：移动端钉死可见视口（VisualViewport 驱动高度）→ 键盘弹起输入条停在上方、收起即复原 */
   .pd { position: fixed; top: 0; left: 0; right: 0; z-index: 30; display: flex; flex-direction: column; height: 100vh; height: 100dvh; max-width: var(--maxw); margin: 0 auto; }
   @media (min-width: 1000px) { .pd { position: relative; z-index: auto; } }
-  .scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 16px; }
+  .scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 var(--gutter); }
   .pad { padding-top: 14px; }
 
   .post { padding: var(--s3) 0 var(--s4); border-bottom: 1px solid var(--border-subtle); }
@@ -91,5 +91,5 @@
   .cmtext { color: var(--muted); }
   .empty { color: var(--faint); font-size: 13.5px; }
 
-  .cerr { color: var(--danger); font-size: 12.5px; padding: 0 16px 8px; }
+  .cerr { color: var(--danger); font-size: 12.5px; padding: 0 var(--gutter) 8px; }
 </style>

@@ -55,7 +55,7 @@
 </div>
 
 <style>
-  .explore { max-width: var(--maxw); margin: 0 auto; padding: 0 16px 96px; }
+  .explore { max-width: var(--maxw); margin: 0 auto; padding: 0 var(--gutter) 96px; }
   .searchbar { display: flex; align-items: center; gap: var(--s2); height: 44px; padding: 0 var(--s4); margin-bottom: var(--s2); border: 1px solid var(--border); border-radius: var(--r-pill); background: var(--surface); color: var(--faint); }
   .searchbar:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); color: var(--accent); }
   .si { flex: 1; min-width: 0; border: 0; background: none; color: var(--text); font: inherit; outline: none; }

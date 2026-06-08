@@ -17,7 +17,7 @@
 </footer>
 
 <style>
-  .composer { flex: none; display: flex; gap: var(--s2); max-width: var(--maxw); width: 100%; margin: 0 auto; padding: 10px var(--s4) calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: var(--bg); }
+  .composer { flex: none; display: flex; gap: var(--s2); max-width: var(--maxw); width: 100%; margin: 0 auto; padding: 10px var(--gutter) calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: var(--bg); }
   .ci { flex: 1; min-width: 0; }
   .send { flex: none; width: 46px; height: 46px; border: 0; border-radius: 50%; background: var(--accent); color: var(--on-accent); display: inline-flex; align-items: center; justify-content: center; transition: background var(--t-hover) ease, opacity var(--t-hover) ease; }
   .send:hover:not(:disabled) { background: var(--brand-hover); }

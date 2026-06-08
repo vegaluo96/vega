@@ -85,7 +85,7 @@
   .epigraph { color: var(--muted); font-size: 14px; line-height: 1.9; letter-spacing: 0.01em; margin: 0 0 var(--s8); }
   .epigraph .cite { display: block; color: var(--faint); font-size: 12.5px; margin-top: 6px; }
 
-  .headline { font-size: 40px; line-height: 1.12; font-weight: 800; letter-spacing: -0.03em; margin: 0 0 var(--s4); }
+  .headline { font-size: clamp(30px, 8vw, 52px); line-height: 1.12; font-weight: 800; letter-spacing: -0.03em; margin: 0 0 var(--s4); }
   .sub { color: var(--muted); font-size: 16px; line-height: 1.7; margin: 0 0 var(--s6); }
 
   .enter { padding: 0 var(--s8); min-height: 50px; font-size: 16px; }
@@ -101,7 +101,6 @@
 
   @media (min-width: 900px) {
     .grid { grid-template-columns: 1.1fr 0.9fr; gap: 64px; }
-    .headline { font-size: 48px; }
     .preview {
       display: block; background: var(--surface); border: 1px solid var(--border);
       border-radius: var(--r-lg); padding: var(--s5); box-shadow: var(--shadow);

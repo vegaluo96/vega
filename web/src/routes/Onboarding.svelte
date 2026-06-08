@@ -29,7 +29,7 @@
   .dots { display: flex; justify-content: center; gap: 6px; margin-bottom: var(--s8); }
   .dots span { width: 7px; height: 7px; border-radius: 999px; background: var(--border); transition: all var(--t-fade); }
   .dots span.on { background: var(--brand); width: 22px; }
-  h1 { font-size: 26px; margin: 0 0 var(--s4); font-weight: 800; letter-spacing: -0.02em; }
+  h1 { font-size: clamp(22px, 6vw, 30px); margin: 0 0 var(--s4); font-weight: 800; letter-spacing: -0.02em; }
   p { color: var(--muted); line-height: 1.85; font-size: 16px; margin: 0 0 var(--s8); }
   .enter { padding: 0 var(--s8); min-height: 50px; font-size: 16px; }
   .skip { display: block; margin: var(--s5) auto 0; background: none; border: 0; color: var(--muted); font-size: 14px; }

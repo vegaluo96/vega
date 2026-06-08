@@ -45,6 +45,7 @@
 
   --r-xs: 4px; --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-pill: 999px;
   --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px; --s6: 24px; --s8: 32px; --s12: 48px;
+  --gutter: clamp(16px, 5vw, 22px); /* 页面横向留白：流动——随视口缩放，到断点封顶 */
   --row-pad-y: var(--s3);         /* 列表行竖向节奏 */
   --header-h: 53px;               /* 二级页头统一高度 */
   --shadow: 0 1px 2px rgba(15, 20, 25, 0.06), 0 8px 24px rgba(15, 20, 25, 0.06);
@@ -106,7 +107,7 @@ button { font: inherit; cursor: pointer; color: inherit; }
 ::selection { background: var(--accent-weak); }
 
 /* —— 字体层级（更密、更熟悉）—— */
-.page-title { font-size: 20px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.25; margin: 0; }
+.page-title { font-size: clamp(18px, 5vw, 22px); font-weight: 800; letter-spacing: -0.02em; line-height: 1.25; margin: 0; }
 .section-title { font-size: 13px; font-weight: 700; letter-spacing: 0; color: var(--muted); margin: 0; }
 .caption { font-size: 13px; color: var(--muted); line-height: 1.6; }
 .meta { font-size: 13px; color: var(--faint); font-variant-numeric: tabular-nums; }

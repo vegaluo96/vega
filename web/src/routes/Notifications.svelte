@@ -63,7 +63,7 @@
 </div>
 
 <style>
-  .notifs { max-width: var(--maxw); margin: 0 auto; padding: 0 16px 96px; }
+  .notifs { max-width: var(--maxw); margin: 0 auto; padding: 0 var(--gutter) 96px; }
   /* 非生命行的状态点：放进 ListRow 的 lead 槽，宽度与 48 头像对齐 */
   .sysav { flex: none; width: 48px; height: 48px; border-radius: 50%; background: var(--surface-2); color: var(--muted); display: inline-flex; align-items: center; justify-content: center; }
   .err { padding: 16px 0; color: var(--danger); }
