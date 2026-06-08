@@ -29,7 +29,7 @@ import {
   type ValueEntry,
 } from '../domain/snapshot.ts';
 
-const RECONSTRUCT_VERSION = 11; // v11：世界感知（WORLD_PERCEIVED）——真实世界轻轻染色她的状态（确定性 appraisal，加法演进）
+const RECONSTRUCT_VERSION = 12; // v12：敌意/辱骂进负向词表——廉价路径也能感到被冒犯（确定性 appraisal，加法演进；旧 checkpoint 版本不符→自动全量重放）
 // 她活在出生地的时区：分钟东偏 UTC，【出生即冻结进 LIFE_GENESIS、终生不变】（不取 OS/用户时区，故 V2 可复现）。
 // 她是一个身体、只有一个昼夜。平台孵化的命缺省=北京 480；将来用户接生的命取创造者设备时区。
 const CIRCADIAN_OFFSET_MIN_DEFAULT = 480;
@@ -62,6 +62,9 @@ const K = {
 
 const POS = ['你好', '经常来', '会来', '在乎你', '真心', '值得', '说出来', '对不起', '我错了', '证明', '也在这里', '不会消失', '看见你', '大胆'];
 const NEG = ['不在乎', '随口说', '根本', '都是假', '骗你'];
+// 直接的敌意/辱骂：比一般负向更重（高威胁）。没开感知、用模板嘴时，被骂也能确实掉她的状态——
+// 她的"活"不该取决于你付不付费。词形尽量明确，避免误伤（如不用裸"你妈"，免得撞"你妈妈好吗"）。
+const INSULT = ['傻逼', '傻屌', '傻吊', '煞笔', '沙比', 'sb', '操你', '草你', '日你', '艹你', '你妈的', '你妈逼', '你妈呢', '说你妈', '尼玛', '滚蛋', '滚开', '废物', '垃圾', '贱人', '贱货', '蠢货', '白痴', '弱智', '智障', '去死', '神经病', 'fuck', 'shit'];
 const BOLDNESS = ['大胆', '值得', '说出来', '想法'];
 
 type SomaKey = 'valence' | 'arousal' | 'vitality' | 'energy' | 'calm' | 'connection' | 'safety';
@@ -327,7 +330,7 @@ function appraiseMessage(st: RState, e: LifeEvent<'MESSAGE_RECEIVED'>): void {
     warmth = clamp(p.perception.warmth, 0, 1);
     threat = clamp(p.perception.threat, 0, 1);
   } else {
-    ev = clamp(0.5 * count(p.content, POS) - 0.6 * count(p.content, NEG), -1.5, 1.5);
+    ev = clamp(0.5 * count(p.content, POS) - 0.6 * count(p.content, NEG) - 1.2 * count(p.content, INSULT), -1.5, 1.5);
     warmth = Math.max(0, ev) / 1.5;
     threat = Math.max(0, -ev) / 1.5;
   }
