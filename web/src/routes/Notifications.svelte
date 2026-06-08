@@ -62,8 +62,8 @@
 
 <style>
   /* 与「对话」列表同一套行样式：通栏、底分隔线、点按高亮 */
-  .notifs { max-width: var(--maxw); margin: 0 auto; padding: 0 0 96px; }
-  .note { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 12px 16px; background: none; border: 0; border-bottom: 1px solid var(--border-subtle); transition: background var(--t-hover) ease; }
+  .notifs { max-width: var(--maxw); margin: 0 auto; padding: 0 16px 96px; }
+  .note { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 12px 0; background: none; border: 0; border-bottom: 1px solid var(--border-subtle); transition: background var(--t-hover) ease; }
   .note:hover { background: var(--surface-2); }
   .note.fresh { background: var(--accent-weak); }
   .markwrap { flex: none; width: 50px; display: inline-flex; justify-content: center; }

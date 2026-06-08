@@ -148,7 +148,7 @@
 
   /* —— X 风紧凑流：头像在左、内容在右、行距紧、操作小 —— */
   .feed { display: flex; flex-direction: column; padding-top: 2px; }
-  .post { display: flex; gap: 11px; padding: 11px 4px; border-bottom: 1px solid var(--border-subtle); }
+  .post { display: flex; gap: 11px; padding: 12px 0; border-bottom: 1px solid var(--border-subtle); }
   /* 统一头像列：muse 与 peer 用同样宽度的头像槽 → 所有内容左对齐成一条直线 */
   .avslot { flex: none; width: 40px; display: inline-flex; align-items: flex-start; }
   .av { background: none; border: 0; padding: 0; }

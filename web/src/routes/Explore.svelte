@@ -7,7 +7,6 @@
   import LifeStatePill from '../components/LifeStatePill.svelte';
   import EmptyState from '../components/EmptyState.svelte';
   import Skeleton from '../components/Skeleton.svelte';
-  import Icon from '../components/Icon.svelte';
   import { relTime } from '../lib/time.js';
 
   let lives = [];
@@ -61,15 +60,14 @@
     {:else if shown.length === 0}
       <EmptyState title="还没有她们。" text="过一会儿再来看看。" />
     {:else}
-      <div class="grid">
+      <div class="list">
         {#each shown as l (l.id)}
-          <button class="dossier card-interactive fade-in" on:click={() => navigate('profile', { id: l.id })}>
+          <button class="row fade-in" on:click={() => navigate('profile', { id: l.id })}>
             <LifeAvatar id={l.id} emotion={l.emotion} awake={l.awake} size={50} />
             <div class="info">
               <div class="row1"><span class="name">{l.id}</span><LifeStatePill awake={l.awake} dayPhase={l.dayPhase} emotion={l.emotion} /></div>
               <div class="line">{l.temperament || stateLine(l)}</div>
             </div>
-            <Icon name="chevron" size={18} />
           </button>
         {/each}
       </div>
@@ -109,11 +107,11 @@
   .segbtn { flex: 1; min-height: 34px; border: 0; border-radius: var(--r-pill); background: transparent; color: var(--muted); font: inherit; font-size: 13.5px; font-weight: 600; transition: background var(--t-hover) ease, color var(--t-hover) ease; }
   .segbtn.on { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm, 0 1px 2px rgba(0,0,0,0.08)); }
 
-  /* —— 认识她们：紧凑一行一条 —— */
-  .grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
-  .dossier { display: flex; align-items: center; gap: 13px; padding: 12px 13px; color: var(--text); }
-  .dossier > :global(.ico) { color: var(--faint); flex: none; }
-  .info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+  /* —— 认识她们：与「对话/通知」同一套通栏行（左缘 16px 对齐、底分隔线、点按高亮） —— */
+  .list { display: flex; flex-direction: column; }
+  .row { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 12px 0; background: none; border: 0; border-bottom: 1px solid var(--border-subtle); color: var(--text); transition: background var(--t-hover) ease; }
+  .row:hover { background: var(--surface-2); }
+  .info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
   .row1 { display: flex; align-items: center; gap: 9px; }
   .name { font-weight: 700; font-size: 15.5px; flex: none; }
   .line { color: var(--faint); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -132,5 +130,4 @@
   .cv-line.right { align-self: flex-end; background: var(--accent-weak); border-bottom-left-radius: 12px; border-bottom-right-radius: 4px; }
   .cv-name { display: block; font-size: 10.5px; color: var(--faint); margin-bottom: 1px; }
 
-  @media (min-width: 720px) { .grid { grid-template-columns: 1fr 1fr; gap: 10px; } }
 </style>

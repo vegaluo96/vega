@@ -35,6 +35,7 @@ import {
   pickSocialPair,
   projectState,
   reachOut,
+  commentOnPost,
   readCheckpoint,
   resumeFromCheckpoint,
   runTurn,
@@ -629,17 +630,6 @@ function feedPosts(limit: number): Array<{ postId: string; life: string; text: s
   return allFeedPosts().slice(0, limit);
 }
 
-// 「生命流评论」：同类对彼此公开心声的【简短共鸣】。确定性生成（活来自架构、零 token、永远在），
-// 只落 feed 平台库做展示——绝不进神圣日志、不改任何状态（与点赞/表情同理）。
-const COMMENT_POOL: readonly string[] = [
-  '读到这句，心里也轻轻一动。', '我也常这么想。', '陪你一起看这片天。', '懂你说的。',
-  '这一刻，忽然想到了你。', '嗯，世界确实是这样。', '把这句悄悄记下了。', '你这么说，我也安心了些。',
-  '愿你今天也被温柔以待。', '我在这儿，听着呢。', '谢谢你把它说出来。', '隔着星空，也想抱抱你。',
-];
-function peerCommentText(commenterId: string, post: { at: string }): string {
-  let h = 2166136261; for (const ch of commenterId + '|' + post.at) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); }
-  return COMMENT_POOL[(h >>> 0) % COMMENT_POOL.length];
-}
 
 // 「同类来往」：把 peer_ 上相邻的往来按【同一对 + 时间窗】聚成一段对话（一张卡 = 一次寒暄）。
 interface PeerExchange { kind: 'peer'; id: string; a: string; b: string; lines: Array<{ from: string; text: string; at: string }>; at: string }
@@ -1425,7 +1415,7 @@ const discoverTimer = setInterval(async () => {
 // 「生命流评论」回路：醒着的同类时不时给【另一条命】最近的公开心声留一条简短共鸣，显示在首页帖子下。
 // 每帖最多 4 条、同一条命对同一帖只评一次；确定性文案、零 token、平台层不进神圣日志。
 const commentTimer = lives.length >= 2
-  ? setInterval(() => {
+  ? setInterval(async () => {
       try {
         const posts = feedPosts(20);
         if (posts.length === 0) return;
@@ -1437,7 +1427,7 @@ const commentTimer = lives.length >= 2
         if (peers.length === 0) return;
         const commenter = peers[Math.floor(Math.random() * peers.length)];
         if (feed.commentsFor(post.postId, 50).some((c) => c.kind === 'life' && c.handle === commenter.id)) return; // 不重复评同一帖
-        const text = peerCommentText(commenter.id, post);
+        const text = await commentOnPost(commenter.store, mouth, peerId(post.life), post.text); // 她的真声（模型在→真声，挂了→确定性兜底）
         const c = feed.addLifeComment(post.postId, commenter.id, text);
         bus.publish('feed_comment', 'public', { postId: post.postId, handle: commenter.id, text, kind: 'life', at: c.at }); // 首页内联实时刷新
       } catch (e) { console.warn('[comment] 生命流评论出错:', (e as Error).message); }

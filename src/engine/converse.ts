@@ -149,6 +149,27 @@ export async function reachOut(
   return { utterance, modelId: mouth.id, verdict };
 }
 
+// 「生命流评论」：同类对另一条命【公开心声】的简短共鸣，用她的真声（模型在场→真声；挂了→确定性兜底，
+// 与全站一套"嘴"）。平台层：只产文字，【不写神圣日志、不改状态】（与点赞/表情同理）。
+export async function commentOnPost(
+  store: DurableEventStore,
+  mouth: Mouth,
+  authorRelId: RelationshipId, // 评论者眼中"作者"那段 peer 关系
+  postText: string,
+): Promise<string> {
+  const snapshot = reconstruct(store.list());
+  const bond = snapshot.bonds[authorRelId];
+  if (!bond) return '读到这句，也想起你了。';
+  const ws = deriveWorkspace(snapshot, authorRelId);
+  const intent = `${ws.relationshipDisplay} 刚发了条公开心声：「${postText.slice(0, 120)}」。像朋友在ta帖子下留一句简短的真心共鸣或回应——一两句、口语、带你自己的感受，别复述原文、别客套。`;
+  const base: Workspace = { ...ws, intent, fallback: `${ws.relationshipDisplay}，读到你这句，心里也动了一下。` };
+  const input = { ...base, lastUserMessage: `（你在看${ws.relationshipDisplay}的公开心声）`, recentContext: [] as { role: 'user' | 'vega'; text: string }[] };
+  let raw = '';
+  try { raw = await mouth.speak(input); } catch { raw = ''; }
+  const { verdict, utterance } = critique(raw, base);
+  return ((verdict === 'fallback' ? composeUtterance(input) : utterance) || base.fallback).trim();
+}
+
 // 她主动发现新用户（§8.1）：在广场"看见"一个新来的人，由她发起第一次打招呼。
 // 关系须已开（调用方先 ensureUserRelationship）。落 MESSAGE_SENT(unprompted)，不写状态。
 export async function greet(store: DurableEventStore, mouth: Mouth, relationshipId: RelationshipId, handle: string, occurredAt: string): Promise<OutreachResult> {

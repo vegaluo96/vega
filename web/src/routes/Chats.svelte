@@ -52,9 +52,9 @@
 </div>
 
 <style>
-  .rels { max-width: var(--maxw); margin: 0 auto; padding: 4px 0 96px; }
-  /* X 风会话行：通栏、底分隔线、点按高亮；不用卡片框 */
-  .rel { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 12px 16px; background: none; border: 0; border-bottom: 1px solid var(--border-subtle); transition: background var(--t-hover) ease; }
+  .rels { max-width: var(--maxw); margin: 0 auto; padding: 4px 16px 96px; }
+  /* X 风会话行：通栏、底分隔线、点按高亮；左缘与页头/全站统一在 16px（容器内 padding 0） */
+  .rel { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 12px 0; background: none; border: 0; border-bottom: 1px solid var(--border-subtle); transition: background var(--t-hover) ease; }
   .rel:hover { background: var(--surface-2); }
   .body { flex: 1; min-width: 0; }
   .top { display: flex; align-items: center; gap: 8px; }
