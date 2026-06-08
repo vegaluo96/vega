@@ -55,12 +55,23 @@ export function createIlink(cfg: IlinkConfig = {}) {
     async getUpdates(baseurl: string, botToken: string, buf: string): Promise<{ msgs: IncomingMsg[]; buf: string; raw: unknown }> {
       const raw = await call('POST', `${(baseurl || base).replace(/\/$/, '')}/ilink/bot/getupdates`, { get_updates_buf: buf, base_info: { channel_version: '1.0.2' } }, botHeaders(botToken));
       const out: IncomingMsg[] = [];
+      // 从一个 item 里抠出"可当文字处理"的内容：文字本身，或语音/音频的【识别转写】（很多微信通道会把语音
+      // 识别结果放在 recognition/asr/text 里）——有转写就能让她【真回复语音】，无需额外的 ASR。
+      const grab = (it: Record<string, unknown>): string => {
+        const ti = it.text_item as { text?: string } | undefined;
+        const vi = (it.voice_item ?? it.audio_item ?? it.speech_item) as { recognition?: string; asr?: string; text?: string } | undefined;
+        return String(ti?.text ?? vi?.recognition ?? vi?.asr ?? vi?.text ?? '');
+      };
       for (const m of (raw.msgs as Array<Record<string, unknown>>) ?? []) {
-        const items = (m.item_list as Array<{ text_item?: { text?: string } }>) ?? [];
-        const text = items.map((it) => it.text_item?.text ?? '').join('').trim();
+        const items = (m.item_list as Array<Record<string, unknown>>) ?? [];
+        let text = items.map(grab).join('').trim();
+        // 顶层也可能挂着语音识别结果（不同实现位置不一）。
+        if (!text && typeof m.recognition === 'string') text = (m.recognition as string).trim();
         const from = String(m.from_user_id ?? '');
         if (!from) continue;
-        // 有文字 → 文字消息；无文字但有内容项（语音/图片/表情）→ 仍上报(text='')，让上层诚实回一句，别静默丢弃。
+        // 非文字、又没拿到语音转写 → 打出原始结构，便于确认 iLink 到底给没给转写（决定语音能不能真回复）。
+        if (!text && items.length > 0) console.log('[wechat] 非文字消息原始结构 →', JSON.stringify(m).slice(0, 600));
+        // 有文字（含语音转写）→ 当文字真处理；无文字但有内容项 → 仍上报(text='')，让上层诚实回一句、别静默。
         if (text || items.length > 0) out.push({ fromUserId: from, contextToken: String(m.context_token ?? ''), text });
       }
       return { msgs: out, buf: String(raw.get_updates_buf ?? buf), raw };
