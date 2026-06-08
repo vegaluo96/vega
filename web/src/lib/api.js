@@ -29,7 +29,7 @@ export const api = {
   society: () => req('GET', '/api/society'),
   feed: () => req('GET', '/api/feed'),
   reactPost: (postId, emoji) => req('POST', '/api/feed/react', { postId, emoji }),
-  commentPost: (postId, text) => req('POST', '/api/feed/comment', { postId, text }),
+  commentPost: (postId, text, replyTo) => req('POST', '/api/feed/comment', { postId, text, replyTo: replyTo || undefined }),
   postComments: (postId) => req('GET', `/api/feed/comments?postId=${encodeURIComponent(postId)}`),
   feedPost: (postId) => req('GET', `/api/feed/post?postId=${encodeURIComponent(postId)}`),
   lifeProfile: (lifeId) => req('GET', `/api/lives/${lifeId}`),

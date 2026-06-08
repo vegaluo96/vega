@@ -20,6 +20,19 @@ test('评论：用户留言 kind=user、生命流评论 kind=life，按时间正
   assert.deepEqual(all.map((c) => c.kind), ['user', 'life']);
 });
 
+test('回复：replyTo 往返——真人接生命体、生命体接真人，刷新后仍在', () => {
+  const f = createFeedStore(':memory:');
+  const life = f.addLifeComment(P, 'lyra', '今晚的天很安静');      // 生命体先评
+  const user = f.addComment(P, 'u_alice', 'Alice', '我也觉得', life.handle); // 真人回生命体
+  const back = f.addLifeComment(P, 'lyra', '那就一起看会儿', user.handle);  // 生命体回真人
+  assert.equal(life.replyTo, null, '没指定 replyTo 时为 null');
+  assert.equal(user.replyTo, 'lyra', '真人这条记下回复的是 lyra');
+  assert.equal(back.replyTo, 'Alice', '生命体这条记下回复的是 Alice');
+
+  const all = f.commentsFor(P, 50); // 重新读库（模拟刷新）
+  assert.deepEqual(all.map((c) => c.replyTo), [null, 'lyra', 'Alice'], 'replyTo 落库、刷新后仍在');
+});
+
 test('评论数 + 每帖内联预览（latestCommentsFor 取最近 N、按帖分组、正序）', () => {
   const f = createFeedStore(':memory:');
   for (let i = 0; i < 5; i++) f.addLifeComment(P, `peer${i}`, `c${i}`);

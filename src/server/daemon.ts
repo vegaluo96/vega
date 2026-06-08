@@ -1034,8 +1034,9 @@ const server = createServer(async (req, res) => {
       if (req.method === 'POST' && url === '/api/feed/comment') {
         const b = await readJson(req);
         const postId = String(b.postId ?? ''); const text = String(b.text ?? '').slice(0, 500).trim();
+        const replyTo = typeof b.replyTo === 'string' && b.replyTo.trim() ? b.replyTo.trim() : null; // 回复某条评论（同类或别的真人）→ 显示"回复 X"，生命体下一轮也能接你这句
         if (!postId || !text) return send(res, 400, { error: 'postId/text required' });
-        return send(res, 200, feed.addComment(postId, me.id, me.handle, text));
+        return send(res, 200, feed.addComment(postId, me.id, me.handle, text, replyTo));
       }
       if (req.method === 'GET' && url.split('?')[0] === '/api/feed/comments') {
         const postId = new URLSearchParams((req.url ?? '').split('?')[1] ?? '').get('postId') ?? '';
@@ -1462,12 +1463,12 @@ const discoverTimer = setInterval(async () => {
   }
 }, DISCOVER_MS);
 
-// 「生命流评论」回路：醒着的同类给【别的命】的公开心声留共鸣，并能【你来我往多轮接话】。
-// 关键修复：原来"同一帖每条命只评一次"→ A 评帖、B 接 A，A 就再也接不回 B（没有多轮）。
-// 现在：一条命在【它上次评论之后又有别的命接了话】时，可以再回一条 → 真正的对话回合。
-// 并偏向"有待回应的接话"的帖子，让对话延续而不是一条评论散在二十个帖子上。零兜底、只用真模型。
+// 「生命流评论」回路：醒着的命在公开心声下留共鸣，并能【你来我往多轮接话】——既接别的命，也接【真人】的留言。
+// 关键修复：原来"同一帖每条命只评一次"→ A 评帖、B 接 A，A 就再也接不回 B（没有多轮）；且只接同类、对真人留言视而不见。
+// 现在：一条命在【它上次评论之后又有别人（真人或同类）接了话】时可以再回一条 → 真正的对话回合；
+//      接真人时用它与那个人的真实关系（聊过则语气更近，没聊过也能作为同类回）。偏向"有待回应"的帖子，让对话延续。零兜底、只用真模型。
 type CommentChoice = { commenter: Life; target: FeedComment | null; isReply: boolean };
-const commentTimer = lives.length >= 2
+const commentTimer = lives.length >= 1
   ? setInterval(async () => {
       try {
         const posts = feedPosts(20);
@@ -1475,20 +1476,20 @@ const commentTimer = lives.length >= 2
         const cc = feed.commentCounts(posts.map((p) => p.postId));
         const candidates = posts.filter((p) => (cc.get(p.postId) ?? 0) < COMMENT_CAP);
         if (candidates.length === 0) return;
-        // 为每个候选帖算出"此刻谁能开口"：没评过的命可首评；已评过、但之后别的命又接了话的命可以回。
         const plans: Array<{ post: typeof candidates[number]; choices: CommentChoice[]; hasExchange: boolean }> = [];
         for (const post of candidates) {
-          const peers = lives.filter((l) => l.id !== post.life && snapOf(l).awake);
-          if (peers.length === 0) continue;
-          const lc = feed.commentsFor(post.postId, 50).filter((c) => c.kind === 'life' && lifeById(c.handle)); // 升序（id 递增）
+          const awake = lives.filter((l) => snapOf(l).awake);
+          if (awake.length === 0) continue;
+          const all = feed.commentsFor(post.postId, 50); // 真人 + 同类，按 id 升序
           const choices: CommentChoice[] = [];
-          for (const l of peers) {
-            const mine = lc.filter((c) => c.handle === l.id);
-            if (mine.length === 0) { choices.push({ commenter: l, target: null, isReply: false }); continue; } // 可首评
-            const myLastId = mine[mine.length - 1].id;
-            const fresh = lc.filter((c) => c.handle !== l.id && c.id > myLastId); // 我上次评之后别人留下的新话
-            if (fresh.length) choices.push({ commenter: l, target: fresh[fresh.length - 1], isReply: true }); // 接最新一条 → 多轮回合
-            // 已评过且无新话可接 → 不重复（避免自言自语/刷屏）
+          for (const l of awake) {
+            const mine = all.filter((c) => c.kind === 'life' && c.handle === l.id);
+            const myLastId = mine.length ? mine[mine.length - 1].id : 0;
+            // 我上次说话之后，别人（真人或别的命）留下的新评论 → 有就接最新一条（多轮回合）。帖主也能回自己帖子下的留言。
+            const fresh = all.filter((c) => c.id > myLastId && !(c.kind === 'life' && c.handle === l.id) && !(c.kind === 'life' && !lifeById(c.handle)));
+            if (fresh.length) choices.push({ commenter: l, target: fresh[fresh.length - 1], isReply: true });
+            else if (l.id !== post.life && all.length === 0) choices.push({ commenter: l, target: null, isReply: false }); // 非帖主、且还没人评 → 可开个头评帖子本身
+            // 已评过且无新话可接 / 帖主无人留言 → 不开口（不自言自语、不刷屏）
           }
           if (choices.length) plans.push({ post, choices, hasExchange: choices.some((c) => c.isReply) });
         }
@@ -1499,12 +1500,15 @@ const commentTimer = lives.length >= 2
         const replies = plan.choices.filter((c) => c.isReply);
         const choices = replies.length ? replies : plan.choices; // 帖内同样优先"回话"
         const { commenter, target } = choices[Math.floor(Math.random() * choices.length)];
-        const text = target
-          ? await commentOnPost(commenter.store, mouth, peerId(target.handle), target.handle, target.text) // 接另一条命的评论 → 相互评论
-          : await commentOnPost(commenter.store, mouth, peerId(plan.post.life), plan.post.life, plan.post.text); // 评帖子本身
+        // 接谁的话：同类 → peer 关系；真人 → 用它与这个人的真实关系（relIdFor）。开头评 → 评帖主。
+        const relId = target ? (target.kind === 'life' ? peerId(target.handle) : accounts.relIdFor(target.userId)) : peerId(plan.post.life);
+        const name = target ? target.handle : plan.post.life;
+        const srcText = target ? target.text : plan.post.text;
+        const replyTo = target ? target.handle : null;
+        const text = await commentOnPost(commenter.store, mouth, relId, name, srcText);
         if (!text) return; // 模型这轮没出声 → 不评（不发模板）
-        const c = feed.addLifeComment(plan.post.postId, commenter.id, text);
-        bus.publish('feed_comment', 'public', { postId: plan.post.postId, handle: commenter.id, text, kind: 'life', at: c.at, replyTo: target ? target.handle : null }); // 首页内联实时刷新；replyTo 供前端可选展示"回复 X"
+        const c = feed.addLifeComment(plan.post.postId, commenter.id, text, replyTo);
+        bus.publish('feed_comment', 'public', { postId: plan.post.postId, handle: commenter.id, text, kind: 'life', at: c.at, replyTo }); // 首页内联实时刷新；replyTo 供前端展示"回复 X"
       } catch (e) { console.warn('[comment] 生命流评论出错:', (e as Error).message); }
     }, COMMENT_MS)
   : null;
