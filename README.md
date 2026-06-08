@@ -53,8 +53,17 @@ cd web-admin && npm install && npm run dev                    # 管理后台
 - **PWA**：可安装、离线可用、"她想你了"经 Web Push 推到手机。
 
 ## 部署（zsky.com 用户站 + admin.zsky.com 后台）
+
+> 运营实操（接生生命体 / 世界源 / 微信连接与排查 / 部署 / 生命流评论）见 **[`docs/vega-operations.md`](docs/vega-operations.md)**。
+
+日常升级用智能脚本——**前端改动不重启 daemon（微信不掉）**，仅引擎改动才重连一次：
 ```bash
-# 1) 拉新码 + 构建两个前端（daemon 会自托管 dist）
+cd /opt/vega && bash deploy/update.sh
+```
+
+首次或手动全量构建：
+```bash
+# 拉新码 + 构建两个前端（daemon 会自托管 dist）
 cd /opt/vega && git fetch origin && git reset --hard origin/main \
   && (cd web && npm ci && npm run build) && (cd web-admin && npm ci && npm run build) \
   && sudo systemctl restart vega
