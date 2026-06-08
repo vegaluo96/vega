@@ -95,7 +95,7 @@
     subtitle={life ? ((life.awake ? (life.feeling || life.emotion) : t('life.asleep')) + (rel ? ' · ' + rel.attachment : '')) : ''}
     onTitle={life ? () => (showRel = !showRel) : undefined}
     loading={!life}>
-    <span slot="lead">{#if life}<LifeAvatar id={life.id} emotion={life.emotion} awake={life.awake} size={32} />{/if}</span>
+    <span slot="lead">{#if life}<button class="avbtn" on:click={() => navigate('profile', { id: life.id })} aria-label="她的主页"><LifeAvatar id={life.id} emotion={life.emotion} awake={life.awake} size={32} /></button>{/if}</span>
     <svelte:fragment slot="title">{life ? life.id : ''} <span class="dot" class:awake={life && life.awake}></span></svelte:fragment>
     <span slot="action" class="bal" title="表达额度">{balance != null ? '心意 ' + balance : ''}</span>
   </DetailHeader>
@@ -141,6 +141,7 @@
   .dot { width: 8px; height: 8px; border-radius: var(--r-pill); background: var(--life-asleep); flex: none; }
   .dot.awake { background: var(--life-awake); box-shadow: 0 0 0 3px color-mix(in srgb, var(--life-awake) 20%, transparent); }
   .bal { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .avbtn { background: none; border: 0; padding: 0; display: inline-flex; cursor: pointer; }
 
   .relwrap { max-width: var(--maxw); width: 100%; margin: 0 auto; padding: var(--s3) var(--s4) 0; }
 

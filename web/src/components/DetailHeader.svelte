@@ -31,8 +31,7 @@
     display: flex; align-items: center; gap: var(--s2);
     height: var(--header-h); padding: 0 var(--s2);
     border-bottom: 1px solid var(--border);
-    background: color-mix(in srgb, var(--bg) 88%, transparent);
-    backdrop-filter: saturate(180%) blur(12px); -webkit-backdrop-filter: saturate(180%) blur(12px);
+    background: var(--bg);
   }
   .back { flex: none; background: none; border: 0; padding: 0 6px; color: var(--text); display: inline-flex; align-items: center; }
   .lead { flex: none; display: inline-flex; align-items: center; }

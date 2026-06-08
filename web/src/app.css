@@ -182,7 +182,7 @@ button { font: inherit; cursor: pointer; color: inherit; }
 .list-row.on { background: var(--accent-weak); }
 
 /* —— 顶部页名(+控件)随内容吸顶，带滚动边界 —— */
-.sticktop { position: sticky; top: 0; z-index: 6; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: saturate(180%) blur(12px); -webkit-backdrop-filter: saturate(180%) blur(12px); border-bottom: 1px solid var(--border-subtle); }
+.sticktop { position: sticky; top: 0; z-index: 6; background: var(--bg); border-bottom: 1px solid var(--border-subtle); }
 
 /* —— 微进入 + 骨架 —— */
 .fade-in { animation: fade-in var(--t-fade) ease both; }

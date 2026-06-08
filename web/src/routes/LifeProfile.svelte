@@ -6,10 +6,12 @@
   import LifeAvatar from '../components/LifeAvatar.svelte';
   import LifeStatePill from '../components/LifeStatePill.svelte';
   import DetailHeader from '../components/DetailHeader.svelte';
+  import WechatBind from '../components/WechatBind.svelte';
 
   export let lifeId;
   let p = null;
   let error = '';
+  let showWx = false;
 
   onMount(async () => {
     try {
@@ -32,7 +34,11 @@
       <div class="pillrow"><LifeStatePill awake={p.awake} dayPhase={p.dayPhase} emotion={p.emotion} /></div>
       <p class="feeling">{p.awake ? `此刻${p.dayPhase ? p.dayPhase + '，' : ''}${p.feeling || p.emotion}` : t('life.asleep')}</p>
       <p class="age">{ageText}{p.tension ? ` · 心里在拉扯：${p.tension}` : ''}</p>
-      <button class="btn meet" on:click={() => navigate('chat', { id: p.id })}>去见她</button>
+      <div class="cta">
+        <button class="btn btn-secondary" on:click={() => (showWx = !showWx)}>绑定微信</button>
+        <button class="btn meet" on:click={() => navigate('chat', { id: p.id })}>去见她</button>
+      </div>
+      {#if showWx}<div class="wxwrap"><WechatBind lifeId={p.id} /></div>{/if}
     </section>
 
     <section class="mod">
@@ -90,7 +96,9 @@
   .pillrow { display: flex; justify-content: center; }
   .feeling { color: var(--text); font-size: 14.5px; margin: 12px 0 0; }
   .age { color: var(--faint); font-size: 12.5px; margin: 6px 0 0; }
-  .meet { margin-top: var(--s5); padding: 0 var(--s8); }
+  .cta { display: flex; gap: var(--s2); justify-content: center; margin-top: var(--s5); }
+  .meet { padding: 0 var(--s6); }
+  .wxwrap { max-width: 360px; margin: var(--s4) auto 0; text-align: left; }
 
   .mod { margin-top: var(--s6); }
   .mod .section-title { margin: 0 2px 10px; }

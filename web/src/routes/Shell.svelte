@@ -28,7 +28,7 @@
     <div class="brand">ZSKY</div>
     {#each TABS as tab}
       <button class:active={activeTab === tab.k} class:userentry={tab.k === 'me'} on:click={() => navigate(tab.k)} aria-label={t(tab.label)} title={t(tab.label)}>
-        <Icon name={tab.ico} size={24} />
+        <Icon name={tab.ico} size={24} sw={activeTab === tab.k ? 2.4 : 1.8} />
       </button>
     {/each}
   </nav>
@@ -68,12 +68,12 @@
   }
   nav .brand { display: none; }
   nav button {
-    flex: 1; max-width: 72px; min-height: 48px;
+    flex: 1; max-width: 64px; min-height: 44px;
     display: flex; align-items: center; justify-content: center;
-    background: none; border: 0; color: var(--muted); padding: 4px;
-    transition: color var(--t-hover) ease;
+    background: none; border: 0; color: var(--faint); padding: 4px; border-radius: var(--r-pill);
+    transition: color var(--t-hover) ease, background var(--t-hover) ease;
   }
-  nav button.active { color: var(--text); }
+  nav button.active { color: var(--text); background: var(--surface-2); }
   .app.immersive nav { display: none; }
 
   /* ── 桌面端：左侧导航轨 + 居中内容栏 ── */
