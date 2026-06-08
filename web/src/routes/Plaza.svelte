@@ -63,7 +63,7 @@
         <div class="strip">
           {#each present as l (l.id)}
             <button class="pcell" on:click={() => navigate('profile', { id: l.id })}>
-              <span class="ring" class:awake={l.awake}><span class="ringin"><LifeAvatar id={l.id} emotion={l.emotion} awake={l.awake} size={48} /></span></span>
+              <LifeAvatar id={l.id} emotion={l.emotion} awake={l.awake} size={48} />
               <span class="pn">{l.id}</span>
             </button>
           {/each}
@@ -129,12 +129,8 @@
   .present { padding: 4px 0 10px; }
   .strip { display: flex; gap: var(--s3); overflow-x: auto; padding-bottom: 1px; scrollbar-width: none; }
   .strip::-webkit-scrollbar { display: none; }
-  .pcell { flex: none; width: 60px; display: flex; flex-direction: column; align-items: center; gap: 5px; background: none; border: 0; padding: 0; }
-  /* IG 故事环：醒着 = 品牌渐变，睡着 = 灰描边 */
-  .ring { display: inline-flex; padding: 2px; border-radius: 50%; background: var(--border); }
-  .ring.awake { background: linear-gradient(135deg, var(--brand), var(--life-reaching)); }
-  .ringin { display: inline-flex; padding: 2px; border-radius: 50%; background: var(--bg); }
-  .pn { font-size: 11.5px; font-weight: 500; color: var(--muted); max-width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pcell { flex: none; width: 56px; display: flex; flex-direction: column; align-items: center; gap: 5px; background: none; border: 0; padding: 0; }
+  .pn { font-size: 11.5px; font-weight: 500; color: var(--muted); max-width: 56px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .pav { width: 48px; height: 48px; border-radius: 50%; }
   .pl { width: 36px; height: 9px; border-radius: 6px; }
 
