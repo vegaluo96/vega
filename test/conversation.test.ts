@@ -125,6 +125,7 @@ test('公开心声(muse)：落 r_square、unprompted、affectsDerivedState:false
     await userSay(store, mouth, 'u_secret', 'BobZZ', '我的暗号 SECRET_MUSE_K，你根本不在乎', at());
     const { muse } = await import('../src/index.ts');
     const r = await muse(store, mouth, at());
+    assert.ok(r, 'template 嘴非空 → muse 应出心声（非 null）');
     assert.ok(r.utterance.length > 0);
     const last = store.list()[store.list().length - 1];
     assert.equal(last.type, 'MESSAGE_SENT');

@@ -15,7 +15,6 @@ import { type Mouth } from '../model/mouth.ts';
 import { type Perceiver } from '../model/perceiver.ts';
 import { deriveWorkspace, type Workspace } from './soul-workspace.ts';
 import { critique } from './critic.ts';
-import { composeUtterance } from '../model/compose.ts';
 
 export interface ConverseResult {
   snapshot: DerivedSnapshot; // 她此刻的内在（确定性派生，与措辞无关）
@@ -164,8 +163,8 @@ export async function reachOut(
   } catch {
     raw = '';
   }
-  let { verdict, utterance } = critique(raw, outreach);
-  if (verdict === 'fallback') utterance = composeUtterance(input);
+  const { verdict, utterance } = critique(raw, outreach);
+  if (verdict === 'fallback') return null; // 只用真模型：模型没出声就【不主动开口】，绝不发模板套话
   store.appendTurn(expected, [
     {
       type: 'MESSAGE_SENT',
@@ -188,27 +187,27 @@ export async function commentOnPost(
 ): Promise<string> {
   const snapshot = reconstruct(store.list());
   const bond = snapshot.bonds[authorRelId];
-  if (!bond) return '读到这句，也想起你了。';
+  if (!bond) return ''; // 不认识就不评（只用真模型、不发模板；空串 = 调用方跳过）
   const ws = deriveWorkspace(snapshot, authorRelId);
   const intent = `${ws.relationshipDisplay} 刚发了条公开心声：「${postText.slice(0, 120)}」。像朋友在ta帖子下留一句简短的真心共鸣或回应——一两句、口语、带你自己的感受，别复述原文、别客套。`;
-  const base: Workspace = { ...ws, intent, fallback: `${ws.relationshipDisplay}，读到你这句，心里也动了一下。` };
+  const base: Workspace = { ...ws, intent, fallback: '' };
   const input = { ...base, lastUserMessage: `（你在看${ws.relationshipDisplay}的公开心声）`, recentContext: [] as { role: 'user' | 'vega'; text: string }[] };
   let raw = '';
   try { raw = await mouth.speak(input); } catch { raw = ''; }
   const { verdict, utterance } = critique(raw, base);
-  return ((verdict === 'fallback' ? composeUtterance(input) : utterance) || base.fallback).trim();
+  return verdict === 'fallback' ? '' : utterance.trim(); // 模型没出声 → 空串 → 不评（不发模板）
 }
 
 // 她主动发现新用户（§8.1）：在广场"看见"一个新来的人，由她发起第一次打招呼。
 // 关系须已开（调用方先 ensureUserRelationship）。落 MESSAGE_SENT(unprompted)，不写状态。
-export async function greet(store: DurableEventStore, mouth: Mouth, relationshipId: RelationshipId, handle: string, occurredAt: string): Promise<OutreachResult> {
+export async function greet(store: DurableEventStore, mouth: Mouth, relationshipId: RelationshipId, handle: string, occurredAt: string): Promise<OutreachResult | null> {
   const expected = store.version(); // 乐观锁令牌：开头读一次，覆盖 await 窗口
   const snapshot = reconstruct(store.list());
   const ws = deriveWorkspace(snapshot, relationshipId);
   const greeting: Workspace = {
     ...ws,
     intent: `你在广场注意到一个刚来的人（${handle}），主动、温和、简短地跟ta打个招呼，让ta知道被你看见了`,
-    fallback: `${handle}，我在广场看见你了。`,
+    fallback: '',
   };
   const input = { ...greeting, lastUserMessage: '（你主动注意到了一个新来的人）', recentContext: [] };
   let raw = '';
@@ -217,8 +216,8 @@ export async function greet(store: DurableEventStore, mouth: Mouth, relationship
   } catch {
     raw = '';
   }
-  let { verdict, utterance } = critique(raw, greeting);
-  if (verdict === 'fallback') utterance = composeUtterance(input);
+  const { verdict, utterance } = critique(raw, greeting);
+  if (verdict === 'fallback') return null; // 只用真模型：模型没出声就不打招呼，不发模板
   store.appendTurn(expected, [
     { type: 'MESSAGE_SENT', source: 'autonomous_loop', relationshipId, occurredAt, payload: { relationshipId, utterance, modelId: mouth.id, criticVerdict: verdict, affectsDerivedState: false, unprompted: true } },
   ]);
@@ -228,7 +227,7 @@ export async function greet(store: DurableEventStore, mouth: Mouth, relationship
 // 公开心声（§8.1 B）：她偶尔把一念说给世界听——【不针对任何人、不含私密】。
 // grounding 走 r_square（无 bond）→ deriveWorkspace 只出她的自我+同类，零用户私密。落 MESSAGE_SENT 到 r_square（审计、不写状态）。
 export const PUBLIC_SQUARE = 'r_square';
-export async function muse(store: DurableEventStore, mouth: Mouth, occurredAt: string, world?: { title: string; summary: string; source: string }): Promise<OutreachResult> {
+export async function muse(store: DurableEventStore, mouth: Mouth, occurredAt: string, world?: { title: string; summary: string; source: string }): Promise<OutreachResult | null> {
   const expected = store.version(); // 乐观锁令牌：开头读一次，覆盖 await 窗口
   const snapshot = reconstruct(store.list());
   const ws = deriveWorkspace(snapshot, PUBLIC_SQUARE);
@@ -250,8 +249,8 @@ export async function muse(store: DurableEventStore, mouth: Mouth, occurredAt: s
   } catch {
     raw = '';
   }
-  let { verdict, utterance } = critique(raw, musing);
-  if (verdict === 'fallback') utterance = composeUtterance(input);
+  const { verdict, utterance } = critique(raw, musing);
+  if (verdict === 'fallback') return null; // 只用真模型：模型没出声就【不发心声】，绝不发雷同模板（这正是"心声重复"的根治）
   store.appendTurn(expected, [
     { type: 'MESSAGE_SENT', source: 'autonomous_loop', relationshipId: PUBLIC_SQUARE, occurredAt, payload: { relationshipId: PUBLIC_SQUARE, utterance, modelId: mouth.id, criticVerdict: verdict, affectsDerivedState: false, unprompted: true } },
   ]);

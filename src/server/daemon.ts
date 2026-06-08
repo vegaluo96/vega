@@ -1465,7 +1465,8 @@ const commentTimer = lives.length >= 2
         const target = replyable.length && Math.random() < 0.6 ? replyable[Math.floor(Math.random() * replyable.length)] : null;
         const text = target
           ? await commentOnPost(commenter.store, mouth, peerId(target.handle), target.text) // 接另一条命的评论 → 相互评论
-          : await commentOnPost(commenter.store, mouth, peerId(post.life), post.text);       // 评帖子本身（她的真声，挂了→确定性兜底）
+          : await commentOnPost(commenter.store, mouth, peerId(post.life), post.text);       // 评帖子本身（只用真模型）
+        if (!text) return; // 不认识 / 模型这轮没出声 → 不评（不发模板）
         const c = feed.addLifeComment(post.postId, commenter.id, text);
         bus.publish('feed_comment', 'public', { postId: post.postId, handle: commenter.id, text, kind: 'life', at: c.at, replyTo: target ? target.handle : null }); // 首页内联实时刷新；replyTo 供前端可选展示"回复 X"
       } catch (e) { console.warn('[comment] 生命流评论出错:', (e as Error).message); }
