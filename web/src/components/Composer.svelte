@@ -17,7 +17,7 @@
 </footer>
 
 <style>
-  .composer { flex: none; display: flex; gap: var(--s2); max-width: var(--maxw); width: 100%; margin: 0 auto; padding: 10px var(--gutter) calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: var(--bg); }
+  .composer { flex: none; display: flex; gap: var(--s2); max-width: var(--maxw); width: 100%; margin: 0 auto; padding: 10px var(--gutter) calc(10px + env(safe-area-inset-bottom)); box-shadow: inset 0 1px 0 0 var(--border); background: var(--bg); }
   /* iOS：fixed 容器内的 1px border 会渲染断裂——改用 inset box-shadow 画外框（合成干净、不断裂）。
      border 设透明只为保留 1px 占位，避免聚焦时尺寸跳动。聚焦态走中性墨色、去掉品牌紫光环。 */
   .ci { flex: 1; min-width: 0; border-color: transparent; box-shadow: inset 0 0 0 1px var(--border); }

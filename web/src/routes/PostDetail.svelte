@@ -74,7 +74,7 @@
   .scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 var(--gutter); }
   .pad { padding-top: 14px; }
 
-  .post { padding: var(--s3) 0 var(--s4); border-bottom: 1px solid var(--border-subtle); }
+  .post { padding: var(--s3) 0 var(--s4); box-shadow: inset 0 -1px 0 0 var(--border-subtle); }
   .who { display: flex; align-items: center; gap: var(--s3); background: none; border: 0; padding: 0; color: var(--text); }
   .nm { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.25; }
   .nm .meta { margin-top: 2px; }
@@ -83,7 +83,7 @@
 
   .comments { padding: var(--s4) 0 var(--s6); }
   .ctitle { font-size: 13px; color: var(--muted); font-weight: 700; margin-bottom: var(--s3); }
-  .cm { font-size: 15px; line-height: 1.55; padding: var(--s2) 0; border-bottom: 1px solid var(--border-subtle); }
+  .cm { font-size: var(--fs-body); line-height: 1.55; padding: var(--s2) 0; box-shadow: inset 0 -1px 0 0 var(--border-subtle); }
   .cmwho { background: none; border: 0; padding: 0; margin-right: 6px; display: inline-flex; align-items: center; gap: 5px; vertical-align: baseline; }
   .cm b { color: var(--text); }
   .cm.life b { color: var(--accent); }

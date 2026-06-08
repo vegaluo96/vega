@@ -436,7 +436,7 @@
   .admin { display: flex; min-height: 100vh; }
 
   /* —— 侧栏 —— */
-  .sidebar { width: 210px; flex: none; border-right: 1px solid var(--border); padding: 18px 12px; display: flex; flex-direction: column; gap: 4px; position: sticky; top: 0; height: 100vh; background: var(--panel); }
+  .sidebar { width: 210px; flex: none; box-shadow: inset -1px 0 0 0 var(--border); padding: 18px 12px; display: flex; flex-direction: column; gap: 4px; position: sticky; top: 0; height: 100vh; background: var(--panel); }
   .logo { font-weight: 800; letter-spacing: 0.1em; font-size: 17px; padding: 4px 12px 18px; }
   .logo span { display: block; font-size: 10.5px; font-weight: 600; letter-spacing: 0.18em; color: var(--accent); margin-top: 2px; }
   nav { display: flex; flex-direction: column; gap: 2px; }
@@ -447,7 +447,7 @@
 
   /* —— 主区 —— */
   .main { flex: 1; min-width: 0; }
-  .topbar { display: flex; align-items: center; gap: 14px; padding: 14px 24px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px); z-index: 5; }
+  .topbar { display: flex; align-items: center; gap: 14px; padding: 14px 24px; box-shadow: inset 0 -1px 0 0 var(--border); position: sticky; top: 0; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px); z-index: 5; }
   .crumb { font-weight: 700; font-size: 14px; }
   .status { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--muted); }
   .role { font-size: 12px; color: var(--accent); border: 1px solid var(--accent-line); border-radius: 999px; padding: 2px 10px; }

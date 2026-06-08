@@ -77,7 +77,7 @@
     padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
     background: color-mix(in srgb, var(--bg) 86%, transparent);
     backdrop-filter: saturate(180%) blur(16px);
-    border-top: 1px solid var(--border-subtle);
+    box-shadow: inset 0 1px 0 0 var(--border-subtle);
   }
   nav .brand { display: none; }
   nav button {
@@ -99,7 +99,7 @@
       position: sticky; top: 0; left: auto; right: auto; bottom: auto;
       flex-direction: column; justify-content: flex-start; align-items: center; gap: 6px;
       width: 76px; height: 100vh; height: 100dvh; padding: 20px 10px 18px;
-      border-top: 0; border-right: 1px solid var(--border); backdrop-filter: none; background: var(--bg);
+      border-top: 0; box-shadow: inset -1px 0 0 0 var(--border); backdrop-filter: none; background: var(--bg);
     }
     nav .brand { display: block; font-weight: 800; letter-spacing: 0.08em; font-size: 13px; padding: 4px 0 16px; color: var(--text); }
     nav button {
@@ -110,6 +110,6 @@
     nav button.userentry { margin-top: auto; }
     nav button.active { background: var(--surface-2); color: var(--text); }
     nav button:not(.active):hover { color: var(--text); }
-    .content { flex: 1; min-width: 0; border-right: 1px solid var(--border); }
+    .content { flex: 1; min-width: 0; box-shadow: inset -1px 0 0 0 var(--border); }
   }
 </style>
