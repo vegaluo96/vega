@@ -279,11 +279,13 @@ function snapOf(life: Life): DerivedSnapshot {
 // 一个具体用户对一条命说话（计费 + 串行 + 渠道标记）。/api/say 与微信 /api/wechat/say 共用。
 async function respondAsUser(life: Life, me: Account, content: string, channel: string): Promise<Record<string, unknown>> {
   return serializer.run(life.id, async () => {
-    const { mouth: useMouth, charge } = meterMouth(mouth, templateMouth, accounts.balance(me.id), MODEL_COST);
-    const r = await userSay(life.store, useMouth, accounts.relIdFor(me.id), me.handle, content, now(), charge ? perceiver : undefined, channel);
-    // 走了付费路径就扣费（charge>0 = 余额够 + 配了真模型）——感知+嘴的 API 钱已花出，fallback 也是一次已交付的回应。
-    // 不再以 verdict==='accepted' 为条件：否则模型超时/被 critic 兜底时付了钱却不扣，账与实际消费脱节。
-    if (charge) accounts.debit(me.id, charge, 'model', life.id);
+    let { mouth: useMouth, charge } = meterMouth(mouth, templateMouth, accounts.balance(me.id), MODEL_COST);
+    // 预扣即决（原子）：走付费路径就先扣 1。debit 内部 check+UPDATE 同步原子，是计费的唯一权威闸——
+    // 若并发（同号同时找多条命）把余额扣空了 → 本轮降级免费模板嘴、不计费（杜绝负余额/漏扣/白嫖，且不再忽略 debit 返回值）。
+    if (charge > 0 && !accounts.debit(me.id, charge, 'model', life.id)) { useMouth = templateMouth; charge = 0; }
+    // 走付费路径就算已交付（fallback 也算，Fix B）→ 不退；只有这轮没落库（乐观锁/磁盘错抛出）才退回预扣，保账实一致。
+    const r = await userSay(life.store, useMouth, accounts.relIdFor(me.id), me.handle, content, now(), charge > 0 ? perceiver : undefined, channel)
+      .catch((e: unknown) => { if (charge > 0) accounts.credit(me.id, charge, 'refund', life.id); throw e; });
     return { utterance: r.utterance, verdict: r.verdict, emotion: r.snapshot.emotion, balance: accounts.balance(me.id), voice: useMouth.id === 'template' ? 'plain' : 'rich' };
   });
 }
@@ -309,6 +311,7 @@ async function runChannel(userId: string): Promise<void> {
       const lifeId = (ch.lifeId && lifeById(ch.lifeId)) ? ch.lifeId : (WECHAT_LIFE && lifeById(WECHAT_LIFE) ? WECHAT_LIFE : (lives[0]?.id ?? ''));
       try {
         const upd = await ilink.getUpdates(ch.baseurl, ch.botToken, ch.buf);
+        if (!mine()) return; // 长轮询期间被新 worker 接班 → 立刻退出，别动游标也别处理（让接班者重取这批，不丢不重）
         // iLink 客户端不抛错、失败时返回 {_error}/{_status} → 这里识别为传输失败并指数退避（C1）。
         const r = upd.raw as Record<string, unknown> | undefined;
         if (r && (('_error' in r) || ('_status' in r))) {
@@ -318,7 +321,6 @@ async function runChannel(userId: string): Promise<void> {
         }
         backoff = 0; failStreak = 0; // 取到消息＝通道健康，清零退避与失败计数
         const { msgs, buf } = upd;
-        if (buf !== ch.buf) accounts.updateChannelBuf(userId, buf);
         for (const m of msgs) {
           if (!mine()) break;
           try {
@@ -366,6 +368,8 @@ async function runChannel(userId: string): Promise<void> {
             }
           } catch (e) { console.log('[wechat] 回消息失败:', (e as Error).message); }
         }
+        // 处理完才推进游标（之前在处理【前】就推进：被接班/崩在中途会丢整批消息）。仍是本代 worker 才前移 → 至少一次投递、不丢。
+        if (mine() && buf !== ch.buf) accounts.updateChannelBuf(userId, buf);
         if (msgs.length === 0) await sleep(1500); // getupdates 多为长轮询会自阻塞；空转稍歇兜底
       } catch (e) {
         console.log(`[wechat] channel ${userId} 轮询出错:`, (e as Error).message);

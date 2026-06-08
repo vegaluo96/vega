@@ -418,6 +418,7 @@ function applyTick(st: RState, e: LifeEvent<'AUTONOMOUS_TICK'>): void {
     // 内外两层之"内"：只在心里转、没说出口的念头（internal_only），落进私密心声。
     if (intent.gateDecision === 'internal_only') {
       st.quietThoughts.push({ seq: e.seq, relationshipId: intent.relationshipId, kind: intent.kind });
+      if (st.quietThoughts.length > 128) st.quietThoughts.shift(); // 只留最近 128 条（buildInnerLife 只取最近一条匹配的）——不无界增长
     }
   }
 
@@ -480,6 +481,13 @@ function applyReflection(st: RState, e: LifeEvent<'REFLECTION_TRIGGERED'>): void
     driftValue(st, 'forgiveness', +K.driftDelta, e.seq);
     driftValue(st, 'guardedness', -K.driftDelta / 2, e.seq);
   }
+  // 卫生（永生尺度）：反思窗口前移不回头（下次 windowFromSeq = 本次 windowToSeq）→ seq < windowToSeq 的信号此后永不再计入。
+  // 裁掉这些只增不减的内部日志，杜绝无界增长。它们【不进派生快照】（仅在此处按窗口计数），裁剪不改 stateHash/重建结果。
+  const keepFrom = (log: number[]): number[] => log.filter((s) => s >= p.windowToSeq);
+  st.boldnessLog = keepFrom(st.boldnessLog);
+  st.warmthLog = keepFrom(st.warmthLog);
+  st.conflictLog = keepFrom(st.conflictLog);
+  st.lonelyLog = keepFrom(st.lonelyLog);
 }
 
 function driftValue(st: RState, key: string, delta: number, seq: number): void {
