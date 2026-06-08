@@ -137,7 +137,9 @@
 </div>
 
 <style>
-  .chat { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+  /* 移动端：钉死在可见视口（沉浸页本就隐藏底栏）→ 身体不会在键盘弹起时滑动；高度由 VisualViewport 驱动。 */
+  .chat { position: fixed; top: 0; left: 0; right: 0; z-index: 30; display: flex; flex-direction: column; height: 100vh; height: 100dvh; transform-origin: top; }
+  @media (min-width: 1000px) { .chat { position: relative; z-index: auto; } }
 
   .head {
     flex: none;

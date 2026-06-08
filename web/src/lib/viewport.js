@@ -7,7 +7,8 @@ export function fitViewport(node) {
   if (!vv) return {};
   const apply = () => {
     node.style.height = `${Math.round(vv.height)}px`;
-    if (vv.offsetTop) window.scrollTo(0, 0); // 键盘弹起时 iOS 会把文档顶上去，拉回来让容器贴住可见区顶部
+    // 键盘弹起时 iOS 会把可见区相对文档下移 offsetTop——容器(position:fixed)跟着平移，始终贴住可见区
+    node.style.transform = vv.offsetTop ? `translateY(${Math.round(vv.offsetTop)}px)` : '';
   };
   vv.addEventListener('resize', apply);
   vv.addEventListener('scroll', apply);

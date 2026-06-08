@@ -80,8 +80,9 @@
 </div>
 
 <style>
-  /* 与对话页同一套布局：flex 列 + 可滚区 + 底部输入条（flex，不用 fixed）——键盘弹起自然停在上方 */
-  .pd { display: flex; flex-direction: column; height: 100vh; height: 100dvh; max-width: var(--maxw); margin: 0 auto; }
+  /* 与对话页同构：移动端钉死可见视口（VisualViewport 驱动高度）→ 键盘弹起输入条停在上方、收起即复原 */
+  .pd { position: fixed; top: 0; left: 0; right: 0; z-index: 30; display: flex; flex-direction: column; height: 100vh; height: 100dvh; max-width: var(--maxw); margin: 0 auto; }
+  @media (min-width: 1000px) { .pd { position: relative; z-index: auto; } }
   .scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 16px; }
   .pad { padding-top: 14px; }
 
