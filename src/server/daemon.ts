@@ -343,8 +343,10 @@ async function runChannel(userId: string): Promise<void> {
             const ac = accounts.getAccount(acctId);
             if (!ac) continue;
             let reply: string;
+            let delayed = false; // 走了模型 → 回复延迟若干秒，incoming 的 context_token 多半已过期
             if (snapOf(lf).awake) {
               const resp = await respondAsUser(lf, ac, m.text, 'wechat');
+              delayed = true;
               // 诊断"没连上模型"：voice=plain＝没走模型（无 key 或余额<1，看余额判别）；
               // voice=rich+verdict=fallback＝配了模型但调用失败（key 被禁/超时/网络）。
               console.log(`[wechat] 回 ${ac.handle}(${acctId.slice(0, 6)}) voice=${(resp as { voice?: string }).voice} verdict=${(resp as { verdict?: string }).verdict} 余额=${(resp as { balance?: number }).balance} 嘴=${mouth.id}`);
@@ -363,13 +365,18 @@ async function runChannel(userId: string): Promise<void> {
               reply = '她在更深的睡眠里，等会儿再来找我吧。';
             }
             // 发回微信——【必须检查结果】：之前忽略返回，sendmessage 失败也无声，于是"网页收到、微信收不到"。
-            let sr = await ilink.sendMessage(ch.baseurl, ch.botToken, m.fromUserId, m.contextToken, reply) as Record<string, unknown>;
+            // 关键：延迟回复（等模型生成完）时 incoming 的 context_token 多半已过期 → 先用【空 context】主动发；
+            // 即时回复（语音/睡眠，秒回）context 还新鲜 → 用原 context。送不出再用另一种 context 兜底重发一次。
+            // 这正是"语音秒回能到、文字等了模型就到不了微信"的根因。
+            const primaryCtx = delayed ? '' : m.contextToken;
+            const altCtx = delayed ? m.contextToken : '';
+            let sr = await ilink.sendMessage(ch.baseurl, ch.botToken, m.fromUserId, primaryCtx, reply) as Record<string, unknown>;
             const failed = (x: Record<string, unknown>): boolean => !x || ('_error' in x) || ('_status' in x) || (typeof x.ret === 'number' && x.ret !== 0) || (typeof x.errcode === 'number' && x.errcode !== 0);
-            if (failed(sr)) { // 偶发失败重发一次（换不同 context 也试：有的实现要空 context_token）
-              console.log(`[wechat] 发回微信失败 to=${m.fromUserId.slice(0, 8)} ctx=${(m.contextToken || '').slice(0, 10)} →`, JSON.stringify(sr).slice(0, 300));
-              sr = await ilink.sendMessage(ch.baseurl, ch.botToken, m.fromUserId, '', reply) as Record<string, unknown>;
+            if (failed(sr)) { // 用另一种 context 兜底重发一次
+              console.log(`[wechat] 发回微信失败 to=${m.fromUserId.slice(0, 8)} ctx=${primaryCtx ? '原' : '空'} →`, JSON.stringify(sr).slice(0, 300));
+              sr = await ilink.sendMessage(ch.baseurl, ch.botToken, m.fromUserId, altCtx, reply) as Record<string, unknown>;
               if (failed(sr)) console.log('[wechat] 重发仍失败 →', JSON.stringify(sr).slice(0, 300));
-              else console.log('[wechat] 重发成功（空 context_token）');
+              else console.log(`[wechat] 重发成功（ctx=${altCtx ? '原' : '空'}）`);
             }
           } catch (e) { console.log('[wechat] 回消息失败:', (e as Error).message); }
         }
