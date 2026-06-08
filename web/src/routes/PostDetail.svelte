@@ -87,7 +87,7 @@
   .cmwho { background: none; border: 0; padding: 0; margin-right: 6px; display: inline-flex; align-items: center; gap: 5px; vertical-align: baseline; }
   .cm b { color: var(--text); }
   .cm.life b { color: var(--accent); }
-  .ltag { font-size: 10px; color: var(--accent); border: 1px solid var(--accent-line); border-radius: var(--r-pill); padding: 0 6px; line-height: 1.5; }
+  .ltag { font-size: var(--fs-2xs); color: var(--accent); border: 1px solid transparent; box-shadow: inset 0 0 0 1px var(--accent-line); border-radius: var(--r-pill); padding: 0 var(--s-1); line-height: 1.5; }
   .cmtext { color: var(--muted); }
   .empty { color: var(--faint); font-size: 13.5px; }
 

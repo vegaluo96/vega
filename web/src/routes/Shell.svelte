@@ -88,7 +88,7 @@
   }
   nav button.active { color: var(--text); background: var(--surface-2); }
   .ic { position: relative; display: inline-flex; }
-  .reddot { position: absolute; top: -3px; right: -4px; width: 8px; height: 8px; border-radius: 50%; background: var(--danger); border: 2px solid var(--bg); }
+  .reddot { position: absolute; top: -3px; right: -4px; width: 8px; height: 8px; border-radius: 50%; background: var(--danger); box-shadow: 0 0 0 2px var(--bg); }
   .app.immersive nav { display: none; }
 
   /* ── 桌面端：左侧导航轨 + 居中内容栏 ── */
