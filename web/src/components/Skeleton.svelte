@@ -18,8 +18,8 @@
 
 <style>
   .sk { display: flex; flex-direction: column; gap: 8px; }
-  .row { display: flex; align-items: center; gap: 13px; padding: 13px; border: 1px solid var(--border-subtle); border-radius: var(--r-md); }
-  .av { width: 46px; height: 46px; border-radius: 50%; flex: none; }
+  .row { display: flex; align-items: center; gap: var(--s3); padding: var(--s3); border: 1px solid var(--border-subtle); border-radius: var(--r-md); }
+  .av { width: 48px; height: 48px; border-radius: 50%; flex: none; }
   .lines { flex: 1; display: flex; flex-direction: column; gap: 7px; }
   .l1 { height: 12px; width: 42%; border-radius: 6px; }
   .l2 { height: 10px; width: 68%; border-radius: 6px; }

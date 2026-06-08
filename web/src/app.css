@@ -1,35 +1,41 @@
 /* ============================================================================
-   ZSKY 设计系统 ·二轮 —— 一座数字生命社会。
-   质感取向：墨色为主、强调色克制（只点睛，不铺面）、暖纸/深空两套底、
-   每个头像是一小片星空。安静、观测、关系重量；不是 AI 模板、不是社交流。
+   ZSKY 设计系统 ·三轮 —— 一座数字生命社会。
+   方向：主流社交 App 观感（亮面、信息密、熟悉的交互），但魂不变——
+   生命体是主角、每个头像是一小片稳定的星空、她会主动找你并记得你。
+   纯白亮面 + 一个自信的品牌色（靛）；通栏行取代浮卡；入口保留深空。
    ========================================================================== */
 
 :root {
-  /* —— 底 / 层级（暖纸）—— */
-  --bg: #f7f6f3;
+  /* —— 底 / 层级（纯白亮面，x/IG 体感）—— */
+  --bg: #ffffff;
   --surface: #ffffff;
   --elevated: #ffffff;
-  --surface-2: #f0efea;
-  --border: #e6e4dd;
-  --border-subtle: #efeee8;
+  --surface-2: #f2f3f5;           /* 冷灰：hover / 填充 */
+  --border: #e6e8eb;              /* 冷调发丝描边 */
+  --border-subtle: #eef0f2;
 
   /* —— 文字三级 —— */
-  --text: #1b1b20;
-  --muted: #6a6a73;
-  --faint: #a2a2ab;
+  --text: #0f1419;
+  --muted: #536471;
+  --faint: #8b98a5;
 
-  /* —— 主操作=墨色（高级、克制）；强调色只点睛 —— */
-  --primary: #1c1c22;
+  /* —— 品牌色：自信使用（主按钮/激活 tab/链接/发送/她找你）—— */
+  --brand: #4f46e5;
+  --brand-hover: #4338ca;
+  --accent: #4f46e5;              /* 与 --brand 同源别名，沿用既有 .on/链接/focus */
+  --accent-weak: rgba(79, 70, 229, 0.10);
+  --accent-line: rgba(79, 70, 229, 0.28);
+  --on-accent: #ffffff;          /* 品牌底上的文字/图标（聊天"我"气泡、发送键）*/
+
+  /* —— 主操作 = 品牌填充 —— */
+  --primary: var(--brand);
   --on-primary: #ffffff;
-  --accent: #5b57b8;              /* 克制的靛，仅用于激活/链接/"她找你" */
-  --accent-weak: rgba(91, 87, 184, 0.10);
-  --accent-line: rgba(91, 87, 184, 0.26);
 
   /* —— 生命状态色（小点/小环/小签，绝不大色块）—— */
   --life-awake: #3f9968;
   --life-asleep: #9c9ca4;
   --life-remembering: #b3823f;
-  --life-reaching: #7d63b8;
+  --life-reaching: #6a5cf0;        /* 向品牌色靠拢：她"伸手"的信号 */
   --life-tension: #bb6440;
 
   --danger: #c64559;
@@ -37,36 +43,43 @@
   --warning: #b3823f;
   --success: #3f9968;
 
-  --r-xs: 6px; --r-sm: 10px; --r-md: 13px; --r-lg: 18px; --r-pill: 999px;
-  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s6: 24px; --s8: 32px; --s12: 48px;
-  --shadow: 0 1px 2px rgba(20, 20, 30, 0.04), 0 10px 28px rgba(20, 20, 30, 0.05);
+  --r-xs: 4px; --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-pill: 999px;
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px; --s6: 24px; --s8: 32px; --s12: 48px;
+  --row-pad-y: var(--s3);         /* 列表行竖向节奏 */
+  --header-h: 53px;               /* 二级页头统一高度 */
+  --shadow: 0 1px 2px rgba(15, 20, 25, 0.06), 0 8px 24px rgba(15, 20, 25, 0.06);
   --t-hover: 120ms; --t-active: 80ms; --t-fade: 180ms;
   --maxw: 600px; --rail: 244px;
   color-scheme: light;
 }
 
 [data-theme='dark'] {
-  --bg: #0a0a0e;
-  --surface: #121218;
-  --elevated: #17171f;
-  --surface-2: #1a1a22;
-  --border: #24242e;
-  --border-subtle: #1a1a21;
+  /* App 暗色（提亮于纯黑虚空，配白卡体系）—— */
+  --bg: #15171a;
+  --surface: #1c1f24;
+  --elevated: #22262c;
+  --surface-2: #262a30;
+  --border: #2d3239;
+  --border-subtle: #23272d;
 
-  --text: #ecebf1;
-  --muted: #8b8b97;
-  --faint: #585863;
+  --text: #e7e9ea;
+  --muted: #8b98a5;
+  --faint: #5b6671;
 
-  --primary: #eeecf4;
-  --on-primary: #0a0a0e;
-  --accent: #9a8ef0;
-  --accent-weak: rgba(154, 142, 240, 0.13);
-  --accent-line: rgba(154, 142, 240, 0.30);
+  --brand: #6d6af5;
+  --brand-hover: #837fff;
+  --accent: #6d6af5;
+  --accent-weak: rgba(109, 106, 245, 0.16);
+  --accent-line: rgba(109, 106, 245, 0.34);
+  --on-accent: #ffffff;
+
+  --primary: var(--brand);
+  --on-primary: #ffffff;
 
   --life-awake: #4cae7a;
   --life-asleep: #6a6a76;
   --life-remembering: #cf9a5c;
-  --life-reaching: #a78fe6;
+  --life-reaching: #9d8cf5;
   --life-tension: #d4794f;
 
   --danger: #e7637a;
@@ -92,33 +105,35 @@ button { font: inherit; cursor: pointer; color: inherit; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 ::selection { background: var(--accent-weak); }
 
-/* —— 字体层级 —— */
-.page-title { font-size: 23px; font-weight: 750; letter-spacing: -0.01em; line-height: 1.25; margin: 0; }
-.section-title { font-size: 12.5px; font-weight: 600; letter-spacing: 0.02em; color: var(--muted); margin: 0; }
+/* —— 字体层级（更密、更熟悉）—— */
+.page-title { font-size: 20px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.25; margin: 0; }
+.section-title { font-size: 13px; font-weight: 700; letter-spacing: 0; color: var(--muted); margin: 0; }
 .caption { font-size: 13px; color: var(--muted); line-height: 1.6; }
-.meta { font-size: 11.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.meta { font-size: 13px; color: var(--faint); font-variant-numeric: tabular-nums; }
 .muted { color: var(--muted); }
 .faint { color: var(--faint); }
 .mono { font-variant-numeric: tabular-nums; }
 .err { color: var(--danger); }
 
-/* —— 按钮：primary=墨 / secondary / ghost / danger —— */
+/* —— 按钮：primary=品牌填充 / secondary / ghost / danger / neutral —— */
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: var(--s2);
   min-height: 44px; padding: 0 var(--s6); border-radius: var(--r-pill);
   border: 1px solid transparent; background: var(--primary); color: var(--on-primary);
-  font-size: 15px; font-weight: 600; line-height: 1; white-space: nowrap;
+  font-size: 15px; font-weight: 700; line-height: 1; white-space: nowrap;
   transition: transform var(--t-active) ease, opacity var(--t-hover) ease, background var(--t-hover) ease, border-color var(--t-hover) ease;
 }
-.btn:hover { opacity: 0.9; }
+.btn:hover { background: var(--brand-hover); }
 .btn:active { transform: scale(0.985); }
 .btn:disabled { opacity: 0.4; cursor: default; transform: none; }
 .btn-secondary { background: var(--surface-2); color: var(--text); border-color: var(--border); }
-.btn-secondary:hover { opacity: 1; border-color: var(--accent-line); }
+.btn-secondary:hover { background: var(--surface-2); border-color: var(--accent-line); }
 .btn-ghost { background: transparent; color: var(--text); border-color: var(--border); }
-.btn-ghost:hover { opacity: 1; background: var(--surface-2); }
+.btn-ghost:hover { background: var(--surface-2); }
 .btn-danger { background: transparent; color: var(--danger); border-color: color-mix(in srgb, var(--danger) 50%, transparent); }
-.btn-danger:hover { opacity: 1; background: var(--danger-weak); }
+.btn-danger:hover { background: var(--danger-weak); }
+.btn-neutral { background: var(--text); color: var(--bg); border-color: var(--text); }
+.btn-neutral:hover { background: var(--text); opacity: 0.9; }
 .btn-sm { min-height: 36px; padding: 0 var(--s4); font-size: 13.5px; }
 .btn-block { display: flex; width: 100%; }
 
@@ -139,9 +154,9 @@ button { font: inherit; cursor: pointer; color: inherit; }
 .card-interactive {
   display: block; width: 100%; text-align: left; color: var(--text);
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md);
-  transition: border-color var(--t-hover) ease, transform var(--t-active) ease;
+  transition: border-color var(--t-hover) ease, background var(--t-hover) ease, transform var(--t-active) ease;
 }
-.card-interactive:hover { border-color: var(--accent-line); }
+.card-interactive:hover { border-color: var(--accent-line); background: var(--surface-2); }
 .card-interactive:active { transform: scale(0.992); }
 
 /* —— chips —— */
@@ -153,10 +168,21 @@ button { font: inherit; cursor: pointer; color: inherit; }
   transition: all var(--t-hover) ease;
 }
 .chip:hover { border-color: var(--accent-line); color: var(--text); }
-.chip.on { background: var(--text); color: var(--bg); border-color: var(--text); }
+.chip.on { background: var(--accent-weak); color: var(--accent); border-color: var(--accent-line); }
 
-/* —— 顶部页名(+控件)随内容吸顶 —— */
-.sticktop { position: sticky; top: 0; z-index: 6; background: var(--bg); }
+/* —— 通栏行：x/IG 式整宽行，满血 hover 到屏幕边、发丝分隔线 —— */
+.row-bleed {
+  display: flex; align-items: center; gap: var(--s3); width: 100%; text-align: left;
+  padding: var(--row-pad-y) var(--s4); margin: 0 calc(-1 * var(--s4));
+  border: 0; background: none; color: inherit;
+  border-bottom: 1px solid var(--border-subtle);
+  transition: background var(--t-hover) ease;
+}
+.row-bleed:hover { background: var(--surface-2); }
+.row-bleed.on { background: var(--accent-weak); }
+
+/* —— 顶部页名(+控件)随内容吸顶，带滚动边界 —— */
+.sticktop { position: sticky; top: 0; z-index: 6; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: saturate(180%) blur(12px); -webkit-backdrop-filter: saturate(180%) blur(12px); border-bottom: 1px solid var(--border-subtle); }
 
 /* —— 微进入 + 骨架 —— */
 .fade-in { animation: fade-in var(--t-fade) ease both; }

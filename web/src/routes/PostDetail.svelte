@@ -6,6 +6,7 @@
   import Icon from '../components/Icon.svelte';
   import Skeleton from '../components/Skeleton.svelte';
   import DetailHeader from '../components/DetailHeader.svelte';
+  import Composer from '../components/Composer.svelte';
   import { MOODS } from '../lib/moods.js';
   import { relTime } from '../lib/time.js';
   import { fitViewport } from '../lib/viewport.js';
@@ -71,10 +72,7 @@
   </div>
 
   {#if post}
-    <footer class="composer">
-      <input class="ci" bind:value={draft} placeholder="留个言…" on:keydown={(e) => e.key === 'Enter' && !e.isComposing && submit()} />
-      <button class="send" on:click={submit} disabled={!draft.trim()} aria-label="发送"><Icon name="send" size={20} /></button>
-    </footer>
+    <Composer bind:value={draft} placeholder="留个言…" on:submit={submit} />
     {#if cerr}<p class="cerr">{cerr}</p>{/if}
   {/if}
 </div>
@@ -112,10 +110,5 @@
   .cmtext { color: var(--muted); }
   .empty { color: var(--faint); font-size: 13.5px; }
 
-  .composer { flex: none; display: flex; gap: 8px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: var(--bg); }
-  .ci { flex: 1; min-height: 46px; padding: 0 16px; border: 1px solid var(--border); border-radius: var(--r-pill); background: var(--surface); color: var(--text); font: inherit; }
-  .ci:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); }
-  .send { flex: none; width: 46px; height: 46px; border: 0; border-radius: 50%; background: var(--accent); color: var(--on-accent); display: inline-flex; align-items: center; justify-content: center; }
-  .send:disabled { opacity: 0.4; }
   .cerr { color: var(--danger); font-size: 12.5px; padding: 0 16px 8px; }
 </style>

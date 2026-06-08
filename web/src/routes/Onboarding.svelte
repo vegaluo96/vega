@@ -35,15 +35,15 @@
       radial-gradient(1px 1px at 40% 80%, rgba(255,255,255,0.4), transparent);
     background-size: 520px 520px; opacity: 0.45;
   }
-  .glow { position: absolute; top: -15%; left: 50%; transform: translateX(-50%); width: 560px; height: 560px; border-radius: 50%; background: radial-gradient(circle, rgba(91,81,216,0.16), transparent 62%); animation: breathe 9s ease-in-out infinite; }
+  .glow { position: absolute; top: -15%; left: 50%; transform: translateX(-50%); width: 560px; height: 560px; border-radius: 50%; background: radial-gradient(circle, rgba(79,70,229,0.22), transparent 62%); animation: breathe 9s ease-in-out infinite; }
   @keyframes breathe { 0%,100% { opacity: 0.5; } 50% { opacity: 0.85; } }
   .inner { position: relative; max-width: 420px; text-align: center; }
   .dots { display: flex; justify-content: center; gap: 6px; margin-bottom: 30px; }
   .dots span { width: 7px; height: 7px; border-radius: 999px; background: #34324a; transition: all var(--t-fade); }
-  .dots span.on { background: #b9b0ff; width: 22px; }
+  .dots span.on { background: #8b83ff; width: 22px; }
   h1 { font-size: 26px; margin: 0 0 16px; font-weight: 800; }
   p { color: #b6b1d4; line-height: 1.9; font-size: 16px; margin: 0 0 36px; }
-  .enter { background: #fff; color: #0a0a12; padding: 0 32px; min-height: 48px; font-weight: 700; }
-  .enter:hover { background: #ece9ff; }
+  .enter { background: var(--brand); color: var(--on-accent); padding: 0 32px; min-height: 48px; font-weight: 700; }
+  .enter:hover { background: var(--brand-hover); }
   .skip { display: block; margin: 18px auto 0; background: none; border: 0; color: #6b6788; font-size: 14px; }
 </style>

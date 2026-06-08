@@ -62,7 +62,7 @@
         <div class="strip">
           {#each present as l (l.id)}
             <button class="pcell" on:click={() => navigate('profile', { id: l.id })}>
-              <LifeAvatar id={l.id} emotion={l.emotion} awake={l.awake} size={48} />
+              <span class="ring" class:awake={l.awake}><span class="ringin"><LifeAvatar id={l.id} emotion={l.emotion} awake={l.awake} size={48} /></span></span>
               <span class="pn">{l.id}</span>
             </button>
           {/each}
@@ -89,7 +89,7 @@
     {/if}
     {#each shownPosts as p (p.postId)}
       <article class="post fade-in">
-        <button class="avslot av" on:click={() => navigate('profile', { id: p.life })}><LifeAvatar id={p.life} awake={true} size={40} /></button>
+        <button class="avslot av" on:click={() => navigate('profile', { id: p.life })}><LifeAvatar id={p.life} awake={true} size={44} /></button>
         <div class="body">
           <button class="hdr" on:click={() => openPost(p)}><b>{p.life}</b><span class="meta">· {relTime(p.at)}</span></button>
           <button class="textbtn" on:click={() => openPost(p)}><span class="ptext">{p.text}</span></button>
@@ -128,21 +128,25 @@
   .plaza { max-width: var(--maxw); margin: 0 auto; padding: 0 16px 96px; }
 
   /* 新用户一次性引导卡 */
-  .intro { margin: 12px 0 4px; padding: 16px; border: 1px solid var(--accent-line); background: var(--accent-weak); border-radius: var(--r-md); }
+  .intro { margin: var(--s3) 0 var(--s1); padding: var(--s4); border: 1px solid var(--accent-line); background: var(--accent-weak); border-radius: var(--r-md); }
   .itxt { display: flex; flex-direction: column; gap: 5px; }
   .itxt b { font-size: 15px; }
   .itxt span { color: var(--muted); font-size: 13.5px; line-height: 1.6; }
-  .iact { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+  .iact { display: flex; align-items: center; gap: var(--s2); margin-top: var(--s3); }
   .iact .btn { flex: 1; }
   .ix { flex: none; width: 40px; height: 40px; border: 0; background: none; color: var(--muted); display: inline-flex; align-items: center; justify-content: center; border-radius: var(--r-sm); }
   .ix:hover { background: var(--surface-2); color: var(--text); }
 
   /* —— 顶部在场头像条：随页头一起吸顶（Instagram/WhatsApp 风），始终可见 —— */
-  .present { padding: 4px 0 10px; border-bottom: 1px solid var(--border); }
-  .strip { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 1px; scrollbar-width: none; }
+  .present { padding: 4px 0 10px; }
+  .strip { display: flex; gap: var(--s3); overflow-x: auto; padding-bottom: 1px; scrollbar-width: none; }
   .strip::-webkit-scrollbar { display: none; }
-  .pcell { flex: none; width: 56px; display: flex; flex-direction: column; align-items: center; gap: 5px; background: none; border: 0; padding: 0; }
-  .pn { font-size: 11.5px; font-weight: 500; color: var(--muted); max-width: 56px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pcell { flex: none; width: 60px; display: flex; flex-direction: column; align-items: center; gap: 5px; background: none; border: 0; padding: 0; }
+  /* IG 故事环：醒着 = 品牌渐变，睡着 = 灰描边 */
+  .ring { display: inline-flex; padding: 2px; border-radius: 50%; background: var(--border); }
+  .ring.awake { background: linear-gradient(135deg, var(--brand), var(--life-reaching)); }
+  .ringin { display: inline-flex; padding: 2px; border-radius: 50%; background: var(--bg); }
+  .pn { font-size: 11.5px; font-weight: 500; color: var(--muted); max-width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .pav { width: 48px; height: 48px; border-radius: 50%; }
   .pl { width: 36px; height: 9px; border-radius: 6px; }
 
@@ -150,14 +154,14 @@
   .feed { display: flex; flex-direction: column; padding-top: 2px; }
   .post { display: flex; gap: 11px; padding: 12px 0; border-bottom: 1px solid var(--border-subtle); }
   /* 统一头像列：muse 与 peer 用同样宽度的头像槽 → 所有内容左对齐成一条直线 */
-  .avslot { flex: none; width: 40px; display: inline-flex; align-items: flex-start; }
+  .avslot { flex: none; width: 44px; display: inline-flex; align-items: flex-start; }
   .av { background: none; border: 0; padding: 0; }
   .body { flex: 1; min-width: 0; }
-  .hdr { display: block; font-size: 14px; line-height: 1.2; background: none; border: 0; padding: 0; color: var(--text); text-align: left; }
-  .hdr b { font-weight: 600; }
+  .hdr { display: block; font-size: 15px; line-height: 1.2; background: none; border: 0; padding: 0; color: var(--text); text-align: left; }
+  .hdr b { font-weight: 700; }
   .hdr .meta { margin-left: 5px; }
   .textbtn { display: block; width: 100%; margin: 2px 0 0; padding: 0; background: none; border: 0; text-align: left; color: var(--text); cursor: pointer; }
-  .ptext { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 6; overflow: hidden; font-size: 14.5px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+  .ptext { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 6; overflow: hidden; font-size: 15px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
   .src { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; margin: 6px 0 0; padding: 3px 8px; border: 1px solid var(--border-subtle); border-radius: var(--r-sm); background: var(--bg); color: var(--faint); font-size: 12px; text-decoration: none; }
   .src:hover { border-color: var(--accent-line); color: var(--accent); }
   .srctxt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
