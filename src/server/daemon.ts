@@ -1369,8 +1369,11 @@ const socialTimer = lives.length >= 2
           for (let j = i + 1; j < lives.length; j++) {
             const a = lives[i];
             const b = lives[j];
-            const ca = snapOf(a).bonds[peerId(b.id)]?.closeness ?? 0;
-            const cb = snapOf(b).bonds[peerId(a.id)]?.closeness ?? 0;
+            const sa = snapOf(a);
+            const sb = snapOf(b);
+            if (!sa.willingToWake || !sb.willingToWake) continue; // 任一方在力竭休眠（拒绝苏醒）→ 不撮合寒暄，让她安静恢复
+            const ca = sa.bonds[peerId(b.id)]?.closeness ?? 0;
+            const cb = sb.bonds[peerId(a.id)]?.closeness ?? 0;
             pairs.push({ a: a.id, b: b.id, closeness: (ca + cb) / 2, lastPairedAt: lastPaired.get(pairKey(a.id, b.id)) ?? 0 });
           }
         }
