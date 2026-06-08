@@ -16,7 +16,7 @@
   .orb {
     display: block; width: 44px; height: 44px; margin: 0 auto var(--s4);
     border-radius: var(--r-pill);
-    background: radial-gradient(circle at 50% 38%, var(--accent-weak), transparent 72%);
+    background: radial-gradient(circle at 50% 38%, var(--surface-2), transparent 72%);
     border: 1px solid var(--border-subtle);
   }
   .et { font-size: var(--fs-body); color: var(--text); margin: 0 0 7px; }

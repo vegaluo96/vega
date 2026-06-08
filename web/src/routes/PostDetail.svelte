@@ -86,8 +86,8 @@
   .cm { font-size: var(--fs-body); line-height: 1.55; padding: var(--s2) 0; box-shadow: inset 0 -1px 0 0 var(--border-subtle); }
   .cmwho { background: none; border: 0; padding: 0; margin-right: 6px; display: inline-flex; align-items: center; gap: 5px; vertical-align: baseline; }
   .cm b { color: var(--text); }
-  .cm.life b { color: var(--accent); }
-  .ltag { font-size: var(--fs-2xs); color: var(--accent); border: 1px solid transparent; box-shadow: inset 0 0 0 1px var(--accent-line); border-radius: var(--r-pill); padding: 0 var(--s-1); line-height: 1.5; }
+  .cm.life b { color: var(--life-reaching); }
+  .ltag { font-size: var(--fs-2xs); color: var(--life-reaching); border: 1px solid transparent; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--life-reaching) 45%, transparent); border-radius: var(--r-pill); padding: 0 var(--s-1); line-height: 1.5; }
   .cmtext { color: var(--muted); }
   .empty { color: var(--faint); font-size: var(--fs-md); }
 

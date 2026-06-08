@@ -88,7 +88,7 @@
   {#if me}
     <section class="block">
       <h2 class="section-title">心意值</h2>
-      <div class="card">
+      <div>
         <div class="row"><span class="rk">余额</span><span class="rv mono">{me.balance}</span></div>
         {#if me.pendingRecharge > 0}<div class="row"><span class="rk">审批中</span><span class="rv pending">{me.pendingRecharge} · 等待通过</span></div>{/if}
         <div class="row act">
@@ -104,7 +104,7 @@
     </section>
 
     <section class="block">
-      <div class="card pad">
+      <div class="actgrp">
         {#if me.wechatChannel}
           <p class="status">已连接 · 微信里和 <b>{me.wechatChannel.lifeId}</b> 聊</p>
           <button class="btn-ghost btn" on:click={disconnectWx}>断开</button>
@@ -120,7 +120,7 @@
 
     {#if pushSupported()}
       <section class="block">
-        <div class="card pad">
+        <div class="actgrp">
           <button class="btn btn-secondary" on:click={turnOnPush}>开启推送通知</button>
           {#if pushMsg}<p class="ok">{pushMsg}</p>{/if}
         </div>
@@ -129,7 +129,7 @@
 
     <section class="block">
       <h2 class="section-title">账户</h2>
-      <div class="card">
+      <div>
         <div class="row"><span class="rk">昵称</span><span class="rv">{me.account.handle}</span></div>
         <div class="row"><span class="rk">邮箱</span><span class="rv">{me.account.email}</span></div>
         {#if me.account.role !== 'user'}<div class="row"><span class="rk">角色</span><span class="rv">{me.account.role}</span></div>{/if}
@@ -149,7 +149,7 @@
   .me { max-width: var(--maxw); margin: 0 auto; padding: 0 var(--gutter) 96px; }
   .block { margin-top: var(--s6); }
   .block .section-title { margin: 0 2px 10px; }
-  .pad { padding: 16px; }
+  .actgrp { padding: var(--s2) 0; }
 
   .pending { color: var(--accent); }
   .status { font-size: var(--fs-md); color: var(--muted); margin: 0 0 12px; }
@@ -157,9 +157,9 @@
   .ok { color: var(--success); font-size: var(--fs-sm); margin: 10px 2px 0; }
   .wxqr { display: block; width: 200px; height: 200px; margin: 4px auto 6px; background: #fff; border-radius: var(--r-sm); padding: 8px; image-rendering: pixelated; }
 
-  .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: var(--s3) var(--s4); border-bottom: 1px solid var(--border-subtle); }
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: var(--s3) 0; border-bottom: 1px solid var(--border-subtle); }
   .row:last-child { border-bottom: 0; }
-  .row.act { padding: var(--s3) var(--s4); }
+  .row.act { padding: var(--s3) 0; }
   .rk { color: var(--faint); font-size: var(--fs-sm); }
   .rv { font-size: var(--fs-md); font-weight: 600; }
 

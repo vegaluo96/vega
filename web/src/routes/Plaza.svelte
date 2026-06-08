@@ -151,7 +151,7 @@
   .cmts { display: flex; flex-direction: column; gap: 3px; margin: 8px 0 0; }
   .cm { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 2px 0; font-size: var(--fs-sm); line-height: 1.45; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cmname { font-weight: 600; color: var(--text); margin-right: 6px; }
-  .cmname.life { color: var(--accent); }
+  .cmname.life { color: var(--life-reaching); }
   .cmtext { color: var(--muted); }
   .cmmore { background: none; border: 0; padding: 2px 0; font-size: var(--fs-sm); color: var(--faint); text-align: left; }
   .cmmore:hover { color: var(--accent); }
