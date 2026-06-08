@@ -53,7 +53,7 @@
       try {
         const s = await api.wxConnectPoll(qrcode);
         if (!wxAlive) return;
-        if (s.connected) { qrPolling = false; qrImg = ''; me = await api.me(); wxMsg = '✅ 微信已连接，去微信里跟她聊吧。'; return; }
+        if (s.connected) { qrPolling = false; qrImg = ''; me = await api.me(); wxMsg = '微信已连接，去微信里跟她聊吧。'; return; }
         if (s.status === 'expired') { qrPolling = false; qrImg = ''; wxMsg = '二维码过期了，点"连接微信"重试。'; return; }
       } catch { /* 继续轮询 */ }
     }

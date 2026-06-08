@@ -23,13 +23,13 @@
 </div>
 
 <style>
-  /* 亮面引导：纯白 + 顶部极淡品牌光晕，跟随主题。 */
-  .ob { position: relative; min-height: 100dvh; background: radial-gradient(110% 50% at 50% -5%, var(--accent-weak), transparent 60%), var(--bg); color: var(--text); display: flex; align-items: center; justify-content: center; padding: var(--s8) var(--s6); }
+  /* 亮面引导：纯白、安静，跟随主题。 */
+  .ob { position: relative; min-height: 100dvh; background: var(--bg); color: var(--text); display: flex; align-items: center; justify-content: center; padding: var(--s8) var(--s6); }
   .inner { max-width: 420px; text-align: center; }
   .dots { display: flex; justify-content: center; gap: 6px; margin-bottom: var(--s8); }
   .dots span { width: 7px; height: 7px; border-radius: 999px; background: var(--border); transition: all var(--t-fade); }
-  .dots span.on { background: var(--brand); width: 22px; }
-  h1 { font-size: clamp(22px, 6vw, 30px); margin: 0 0 var(--s4); font-weight: 800; letter-spacing: -0.02em; }
+  .dots span.on { background: var(--text); width: 22px; }
+  h1 { font-size: clamp(24px, 5.5vw, 34px); margin: 0 0 var(--s4); font-weight: 700; letter-spacing: -0.02em; }
   p { color: var(--muted); line-height: 1.85; font-size: var(--fs-body); margin: 0 0 var(--s8); }
   .enter { padding: 0 var(--s8); min-height: 50px; font-size: var(--fs-body); }
   .skip { display: block; margin: var(--s5) auto 0; background: none; border: 0; color: var(--muted); font-size: var(--fs-md); }

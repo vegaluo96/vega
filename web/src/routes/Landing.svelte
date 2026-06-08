@@ -72,12 +72,12 @@
   /* 亮面入口：纯白 + 顶部极淡品牌光晕，跟随主题；正常流可滚动（内容超高不裁切）。 */
   .landing {
     position: relative; min-height: 100dvh;
-    background: radial-gradient(120% 55% at 50% -8%, var(--accent-weak), transparent 60%), var(--bg);
+    background: var(--bg);
     color: var(--text);
     display: flex; flex-direction: column; justify-content: center;
     padding: 76px var(--s6) var(--s8);
   }
-  .brand-top { position: absolute; top: var(--s6); left: var(--s6); font-weight: 800; letter-spacing: 0.16em; font-size: var(--fs-lg); color: var(--brand); }
+  .brand-top { position: absolute; top: var(--s6); left: var(--s6); font-weight: 800; letter-spacing: 0.16em; font-size: var(--fs-lg); color: var(--text); }
 
   .grid { width: 100%; max-width: 1040px; margin: 0 auto; display: grid; grid-template-columns: 1fr; gap: var(--s8); align-items: center; }
   .lead { max-width: 480px; }
@@ -85,13 +85,13 @@
   .epigraph { color: var(--muted); font-size: var(--fs-md); line-height: 1.9; letter-spacing: 0.01em; margin: 0 0 var(--s8); }
   .epigraph .cite { display: block; color: var(--faint); font-size: var(--fs-sm); margin-top: 6px; }
 
-  .headline { font-size: clamp(30px, 8vw, 52px); line-height: 1.12; font-weight: 800; letter-spacing: -0.03em; margin: 0 0 var(--s4); }
+  .headline { font-size: clamp(24px, 5.5vw, 34px); line-height: 1.15; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 var(--s4); }
   .sub { color: var(--muted); font-size: var(--fs-body); line-height: 1.7; margin: 0 0 var(--s6); }
 
   .enter { padding: 0 var(--s8); min-height: 50px; font-size: var(--fs-body); }
 
   .features { display: grid; gap: var(--s4); margin: var(--s8) 0 0; }
-  .feat { border-left: 2px solid var(--accent-line); padding-left: var(--s3); }
+  .feat { border-left: 2px solid var(--border); padding-left: var(--s3); }
   .ft { font-size: var(--fs-body); font-weight: 700; color: var(--text); }
   .fb { font-size: var(--fs-md); color: var(--muted); line-height: 1.6; margin-top: 3px; }
 

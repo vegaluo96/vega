@@ -41,7 +41,7 @@
           polling = false; qrImg = '';
           try { await api.setChannelLife(lifeId); } catch { /* 默认命也行，下面 refresh 会显示真值 */ } // 从她的对话连的 → 就绑她
           await refresh(); dispatch('change');
-          msg = '✅ 连上了，微信里现在就和她聊。';
+          msg = '连上了，微信里现在就和她聊。';
           return;
         }
         if (s.status === 'expired') { polling = false; qrImg = ''; msg = '二维码过期了，再点一次。'; return; }
@@ -51,7 +51,7 @@
   }
   async function switchToHer() {
     msg = ''; busy = true;
-    try { await api.setChannelLife(lifeId); await refresh(); dispatch('change'); msg = '✅ 微信里现在和她聊。'; }
+    try { await api.setChannelLife(lifeId); await refresh(); dispatch('change'); msg = '微信里现在和她聊。'; }
     catch (e) { msg = e.message; }
     busy = false;
   }
