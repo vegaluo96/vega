@@ -18,6 +18,9 @@ cd "$(dirname "$0")/.."            # 仓库根（如 /opt/vega）
 BRANCH="${1:-main}"
 SERVICE="${VEGA_SERVICE:-vega}"
 
+# 仓库属主与当前用户不一致时 git 会拒绝（dubious ownership）——把本目录加进 safe.directory（幂等）。
+git config --global --get-all safe.directory 2>/dev/null | grep -qxF "$PWD" || git config --global --add safe.directory "$PWD"
+
 echo "▶ 拉取 origin/$BRANCH …"
 for i in 1 2 3 4; do git fetch origin "$BRANCH" && break || { echo "  fetch 失败，重试 $i…"; sleep $((2 ** i)); }; done
 
