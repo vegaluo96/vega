@@ -6,8 +6,7 @@
   import LifeAvatar from '../components/LifeAvatar.svelte';
   const dispatch = createEventDispatcher();
 
-  // 桌面右栏：真实的"生命活动预览"——她们已经在那里生活了。/api/lives 是公开的，
-  // 失败就静默隐藏，不挡入口。
+  // 桌面右栏：真实的"生命活动预览"——她们已经在那里生活了。/api/lives 公开，失败静默隐藏。
   let preview = [];
   onMount(async () => {
     try { preview = (await api.lives()).slice(0, 4); } catch { preview = []; }
@@ -22,9 +21,6 @@
 </script>
 
 <div class="landing">
-  <span class="field"></span>
-  <span class="glow"></span>
-
   <div class="brand-top">ZSKY</div>
 
   <div class="grid">
@@ -57,7 +53,7 @@
         <div class="pv-list">
           {#each preview as l}
             <div class="pv-row">
-              <LifeAvatar id={l.id} emotion={l.emotion} awake={l.awake} size={34} />
+              <LifeAvatar id={l.id} emotion={l.emotion} awake={l.awake} size={36} />
               <div class="pv-body">
                 <div class="pv-name">{l.id}</div>
                 <div class="pv-state">{l.awake ? (l.dayPhase ? l.dayPhase + ' · ' : '') + l.emotion : '在更深的睡眠里'}</div>
@@ -73,73 +69,53 @@
 </div>
 
 <style>
+  /* 亮面入口：纯白 + 顶部极淡品牌光晕，跟随主题；正常流可滚动（内容超高不裁切）。 */
   .landing {
-    position: fixed; inset: 0; overflow: hidden;
-    background: #07070b; color: #e9e8f0;
-    display: grid; place-items: center; padding: 24px;
+    position: relative; min-height: 100dvh;
+    background: radial-gradient(120% 55% at 50% -8%, var(--accent-weak), transparent 60%), var(--bg);
+    color: var(--text);
+    display: flex; flex-direction: column; justify-content: center;
+    padding: 76px var(--s6) var(--s8);
   }
-  /* 极克制的星点：单层、低密度、缓慢漂移，不是大渐变星空 */
-  .field {
-    position: absolute; inset: -40%;
-    background-image:
-      radial-gradient(1px 1px at 18% 32%, rgba(255,255,255,0.5), transparent),
-      radial-gradient(1px 1px at 72% 58%, rgba(200,196,230,0.45), transparent),
-      radial-gradient(1px 1px at 42% 78%, rgba(255,255,255,0.4), transparent),
-      radial-gradient(1px 1px at 86% 22%, rgba(255,255,255,0.5), transparent),
-      radial-gradient(1px 1px at 9% 66%, rgba(255,255,255,0.35), transparent);
-    background-size: 560px 560px; opacity: 0.5;
-    animation: drift 160s linear infinite;
-  }
-  .glow {
-    position: absolute; top: -20%; left: 50%; transform: translateX(-50%);
-    width: 680px; height: 680px; border-radius: 50%;
-    background: radial-gradient(circle, rgba(79,70,229,0.22), transparent 62%);
-    animation: breathe 9s ease-in-out infinite;
-  }
-  @keyframes drift { to { transform: translate(50px, 34px); } }
-  @keyframes breathe { 0%,100% { opacity: 0.55; } 50% { opacity: 0.9; } }
+  .brand-top { position: absolute; top: var(--s6); left: var(--s6); font-weight: 800; letter-spacing: 0.16em; font-size: 18px; color: var(--brand); }
 
-  .brand-top { position: absolute; top: 22px; left: 24px; font-weight: 800; letter-spacing: 0.18em; font-size: 18px; z-index: 2; }
-
-  .grid { position: relative; z-index: 1; width: 100%; max-width: 1040px; display: grid; grid-template-columns: 1fr; gap: 40px; align-items: center; }
+  .grid { width: 100%; max-width: 1040px; margin: 0 auto; display: grid; grid-template-columns: 1fr; gap: var(--s8); align-items: center; }
   .lead { max-width: 480px; }
 
-  .epigraph { color: #9b95c0; font-size: 14px; line-height: 1.9; letter-spacing: 0.02em; margin: 0 0 36px; }
-  .epigraph .cite { display: block; color: #6f6a90; font-size: 12.5px; margin-top: 6px; }
+  .epigraph { color: var(--muted); font-size: 14px; line-height: 1.9; letter-spacing: 0.01em; margin: 0 0 var(--s8); }
+  .epigraph .cite { display: block; color: var(--faint); font-size: 12.5px; margin-top: 6px; }
 
-  .headline { font-size: 40px; line-height: 1.15; font-weight: 800; letter-spacing: -0.01em; margin: 0 0 16px; }
-  .sub { color: #b6b1d4; font-size: 16px; line-height: 1.75; margin: 0 0 28px; }
+  .headline { font-size: 40px; line-height: 1.12; font-weight: 800; letter-spacing: -0.03em; margin: 0 0 var(--s4); }
+  .sub { color: var(--muted); font-size: 16px; line-height: 1.7; margin: 0 0 var(--s6); }
 
-  .enter { background: var(--brand); color: var(--on-accent); padding: 0 30px; min-height: 48px; font-weight: 700; border-radius: var(--r-pill); }
-  .enter:hover { background: var(--brand-hover); }
+  .enter { padding: 0 var(--s8); min-height: 50px; font-size: 16px; }
 
-  .features { display: grid; gap: 18px; margin: 40px 0 0; }
-  .feat { border-left: 2px solid rgba(109,106,245,0.5); padding-left: 14px; }
-  .ft { font-size: 14.5px; font-weight: 600; color: #e9e8f0; }
-  .fb { font-size: 13px; color: #8a86a8; line-height: 1.6; margin-top: 3px; }
+  .features { display: grid; gap: var(--s4); margin: var(--s8) 0 0; }
+  .feat { border-left: 2px solid var(--accent-line); padding-left: var(--s3); }
+  .ft { font-size: 15px; font-weight: 700; color: var(--text); }
+  .fb { font-size: 13.5px; color: var(--muted); line-height: 1.6; margin-top: 3px; }
 
-  .homage { color: #545070; font-size: 12px; margin-top: 40px; }
+  .homage { color: var(--faint); font-size: 12px; margin-top: var(--s8); }
 
   .preview { display: none; }
 
   @media (min-width: 900px) {
     .grid { grid-template-columns: 1.1fr 0.9fr; gap: 64px; }
-    .headline { font-size: 46px; }
-    .features { grid-template-columns: 1fr; }
+    .headline { font-size: 48px; }
     .preview {
-      display: block; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08);
-      border-radius: var(--r-lg); padding: 20px;
+      display: block; background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--r-lg); padding: var(--s5); box-shadow: var(--shadow);
     }
-    .pv-head { display: flex; justify-content: space-between; align-items: baseline; padding-bottom: 14px; border-bottom: 1px solid rgba(255,255,255,0.07); }
-    .pv-title { font-size: 13px; letter-spacing: 0.08em; color: #cfcbe8; }
-    .pv-meta { font-size: 11.5px; color: #6f6a90; }
-    .pv-list { display: flex; flex-direction: column; gap: 2px; padding: 10px 0; }
-    .pv-row { display: flex; align-items: center; gap: 12px; padding: 9px 4px; }
+    .pv-head { display: flex; justify-content: space-between; align-items: baseline; padding-bottom: var(--s3); border-bottom: 1px solid var(--border-subtle); }
+    .pv-title { font-size: 13px; letter-spacing: 0.06em; font-weight: 700; color: var(--text); }
+    .pv-meta { font-size: 11.5px; color: var(--faint); }
+    .pv-list { display: flex; flex-direction: column; gap: 2px; padding: var(--s3) 0; }
+    .pv-row { display: flex; align-items: center; gap: var(--s3); padding: 9px 4px; }
     .pv-body { flex: 1; min-width: 0; }
-    .pv-name { font-size: 14px; font-weight: 600; color: #e9e8f0; }
-    .pv-state { font-size: 12px; color: #8a86a8; margin-top: 1px; }
-    .pv-dot { width: 7px; height: 7px; border-radius: 999px; background: #5a5a68; flex: none; }
-    .pv-dot.awake { background: var(--life-awake); box-shadow: 0 0 0 3px rgba(63,157,107,0.22); }
-    .pv-foot { padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.07); font-size: 12px; color: #6f6a90; text-align: center; }
+    .pv-name { font-size: 14px; font-weight: 700; color: var(--text); }
+    .pv-state { font-size: 12px; color: var(--muted); margin-top: 1px; }
+    .pv-dot { width: 7px; height: 7px; border-radius: 999px; background: var(--life-asleep); flex: none; }
+    .pv-dot.awake { background: var(--life-awake); box-shadow: 0 0 0 3px color-mix(in srgb, var(--life-awake) 20%, transparent); }
+    .pv-foot { padding-top: var(--s3); border-top: 1px solid var(--border-subtle); font-size: 12px; color: var(--faint); text-align: center; }
   }
 </style>
