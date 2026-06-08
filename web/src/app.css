@@ -27,9 +27,9 @@
   --accent-line: rgba(79, 70, 229, 0.28);
   --on-accent: #ffffff;          /* 品牌底上的文字/图标（聊天"我"气泡、发送键）*/
 
-  /* —— 主操作 = 品牌填充 —— */
-  --primary: var(--brand);
-  --on-primary: #ffffff;
+  /* —— 主操作 = 墨色填充（克制；品牌靛只点睛，不铺面）—— */
+  --primary: var(--text);
+  --on-primary: var(--bg);
 
   /* —— 生命状态色（小点/小环/小签，绝不大色块）—— */
   --life-awake: #3f9968;
@@ -43,7 +43,7 @@
   --warning: #b3823f;
   --success: #3f9968;
 
-  --r-2xs: 6px; --r-xs: 4px; --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-pill: 999px;
+  --r-2xs: 6px; --r-xs: 4px; --r-sm: 8px; --r-md: 12px; --r-btn: 10px; --r-lg: 16px; --r-pill: 999px;
   --s0: 2px; --s-1: 6px; --s-2: 10px; /* 微间距：补 --s* 之间的密集档（聊天/流） */
   --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px; --s6: 24px; --s8: 32px; --s12: 48px;
   --gutter: clamp(16px, 5vw, 22px); /* 页面横向留白：流动——随视口缩放，到断点封顶 */
@@ -77,8 +77,8 @@
   --accent-line: rgba(109, 106, 245, 0.34);
   --on-accent: #ffffff;
 
-  --primary: var(--brand);
-  --on-primary: #ffffff;
+  --primary: var(--text);
+  --on-primary: var(--bg);
 
   --life-awake: #4cae7a;
   --life-asleep: #6a6a76;
@@ -115,7 +115,7 @@ button { font: inherit; cursor: pointer; color: inherit; }
 ::selection { background: var(--accent-weak); }
 
 /* —— 字体层级（更密、更熟悉）—— */
-.page-title { font-size: clamp(18px, 5vw, 22px); font-weight: 800; letter-spacing: -0.02em; line-height: 1.25; margin: 0; }
+.page-title { font-size: clamp(18px, 4.5vw, 21px); font-weight: 700; letter-spacing: -0.02em; line-height: 1.25; margin: 0; }
 .section-title { font-size: var(--fs-sm); font-weight: 700; letter-spacing: 0; color: var(--muted); margin: 0; }
 .caption { font-size: var(--fs-sm); color: var(--muted); line-height: 1.6; }
 .meta { font-size: var(--fs-sm); color: var(--faint); font-variant-numeric: tabular-nums; }
@@ -127,12 +127,12 @@ button { font: inherit; cursor: pointer; color: inherit; }
 /* —— 按钮：primary=品牌填充 / secondary / ghost / danger / neutral —— */
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: var(--s2);
-  min-height: 44px; padding: 0 var(--s6); border-radius: var(--r-pill);
+  min-height: 44px; padding: 0 var(--s5); border-radius: var(--r-btn);
   border: 1px solid transparent; background: var(--primary); color: var(--on-primary);
   font-size: var(--fs-body); font-weight: 700; line-height: 1; white-space: nowrap;
   transition: transform var(--t-active) ease, opacity var(--t-hover) ease, background var(--t-hover) ease, border-color var(--t-hover) ease;
 }
-.btn:hover { background: var(--brand-hover); }
+.btn:hover { opacity: 0.9; }
 .btn:active { transform: scale(0.985); }
 .btn:disabled { opacity: 0.4; cursor: default; transform: none; }
 .btn-secondary { background: var(--surface-2); color: var(--text); border-color: var(--border); }
@@ -145,6 +145,10 @@ button { font: inherit; cursor: pointer; color: inherit; }
 .btn-neutral:hover { background: var(--text); opacity: 0.9; }
 .btn-sm { min-height: 36px; padding: 0 var(--s4); font-size: var(--fs-md); }
 .btn-block { display: flex; width: 100%; }
+
+/* —— 统一图标按钮（纯图标：关闭/清除/头像链接等）—— */
+.icon-btn { display: inline-flex; align-items: center; justify-content: center; min-width: 36px; min-height: 36px; padding: 0 var(--s-1); border: 0; background: transparent; color: var(--faint); border-radius: var(--r-sm); transition: background var(--t-hover) ease, color var(--t-hover) ease; }
+.icon-btn:hover { background: var(--surface-2); color: var(--text); }
 
 /* —— 输入 —— */
 .input {

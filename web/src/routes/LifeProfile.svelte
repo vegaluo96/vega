@@ -35,8 +35,8 @@
       <p class="feeling">{p.awake ? `此刻${p.dayPhase ? p.dayPhase + '，' : ''}${p.feeling || p.emotion}` : t('life.asleep')}</p>
       <p class="age">{ageText}{p.tension ? ` · 心里在拉扯：${p.tension}` : ''}</p>
       <div class="cta">
-        <button class="btn btn-secondary" on:click={() => (showWx = !showWx)}>绑定微信</button>
-        <button class="btn meet" on:click={() => navigate('chat', { id: p.id })}>去见她</button>
+        <button class="btn btn-ghost" on:click={() => (showWx = !showWx)}>绑定微信</button>
+        <button class="btn" on:click={() => navigate('chat', { id: p.id })}>去见她</button>
       </div>
       {#if showWx}<div class="wxwrap"><WechatBind lifeId={p.id} /></div>{/if}
     </section>
@@ -95,7 +95,6 @@
   .feeling { color: var(--text); font-size: var(--fs-body); margin: var(--s3) 0 0; }
   .age { color: var(--faint); font-size: var(--fs-sm); margin: 6px 0 0; }
   .cta { display: flex; gap: var(--s2); justify-content: center; margin-top: var(--s5); }
-  .meet { padding: 0 var(--s6); }
   .wxwrap { max-width: 360px; margin: var(--s4) auto 0; text-align: left; }
 
   .mod { margin-top: var(--s6); }

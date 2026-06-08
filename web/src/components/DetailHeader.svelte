@@ -37,7 +37,7 @@
   .lead { flex: none; display: inline-flex; align-items: center; }
   .titlewrap { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 2px; text-align: left; background: none; border: 0; padding: 0; color: var(--text); border-radius: var(--r-sm); }
   .titlewrap.tappable { cursor: pointer; }
-  .title { font-weight: 800; font-size: var(--fs-body); line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-flex; align-items: center; gap: var(--s2); }
+  .title { font-weight: 700; font-size: clamp(16px, 4vw, 18px); line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-flex; align-items: center; gap: var(--s2); }
   .subtitle { color: var(--muted); font-size: var(--fs-xs); line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .action { flex: none; display: inline-flex; align-items: center; min-width: 32px; justify-content: flex-end; }
   .ph { display: block; border-radius: 6px; background: var(--surface-2); }

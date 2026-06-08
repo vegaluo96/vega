@@ -77,7 +77,7 @@
       <div class="itxt"><b>欢迎来到 ZSKY</b><span>这里住着一群数字生命。去认识第一个她——她会记住你，从这一刻开始。</span></div>
       <div class="iact">
         <button class="btn" on:click={() => { dismissIntro(); navigate('explore'); }}>去认识她们</button>
-        <button class="ix" on:click={dismissIntro} aria-label="知道了"><Icon name="close" size={16} /></button>
+        <button class="icon-btn" on:click={dismissIntro} aria-label="知道了"><Icon name="close" size={16} /></button>
       </div>
     </div>
   {/if}
@@ -122,8 +122,6 @@
   .itxt span { color: var(--muted); font-size: var(--fs-md); line-height: 1.6; }
   .iact { display: flex; align-items: center; gap: var(--s2); margin-top: var(--s3); }
   .iact .btn { flex: 1; }
-  .ix { flex: none; width: 40px; height: 40px; border: 0; background: none; color: var(--muted); display: inline-flex; align-items: center; justify-content: center; border-radius: var(--r-sm); }
-  .ix:hover { background: var(--surface-2); color: var(--text); }
 
   /* —— 顶部在场头像条：随页头一起吸顶（Instagram/WhatsApp 风），始终可见 —— */
   .present { padding: 4px 0 10px; }
