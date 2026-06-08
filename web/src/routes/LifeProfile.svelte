@@ -36,7 +36,7 @@
       <p class="age">{ageText}{p.tension ? ` · 心里在拉扯：${p.tension}` : ''}</p>
       <div class="cta">
         <button class="btn btn-ghost" on:click={() => (showWx = !showWx)}>绑定微信</button>
-        <button class="btn" on:click={() => navigate('chat', { id: p.id })}>去见她</button>
+        <button class="btn" on:click={() => navigate('chat', { id: p.id })}>开启对话</button>
       </div>
       {#if showWx}<div class="wxwrap"><WechatBind lifeId={p.id} /></div>{/if}
     </section>

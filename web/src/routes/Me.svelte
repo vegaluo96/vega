@@ -1,12 +1,11 @@
 <script>
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount } from 'svelte';
   import { api, clearSession } from '../lib/api.js';
   import { theme, toggleTheme } from '../lib/theme.js';
   import { enablePush, pushSupported } from '../lib/push.js';
   import PageHeader from '../components/PageHeader.svelte';
   import Icon from '../components/Icon.svelte';
   import Skeleton from '../components/Skeleton.svelte';
-  import { qrDataUrl } from '../lib/qr.js';
 
   let pushMsg = '';
   async function turnOnPush() {
@@ -30,38 +29,6 @@
     }
   });
 
-  // 微信：ZSKY 自己当机器人——网页把微信返回的授权网址生成成二维码，微信扫码即连接。
-  let qrImg = '', qrPolling = false, wxMsg = '', wxAlive = true;
-  onDestroy(() => { wxAlive = false; qrPolling = false; }); // 离开页面即停轮询，别在已销毁实例上拉取
-  async function connectWx() {
-    wxMsg = '';
-    try {
-      const r = await api.wxConnectStart();
-      if (!r.qrcodeUrl) { wxMsg = '微信没返回授权网址，稍后再试一次。'; console.warn('[wx] connect/start 无 qrcodeUrl:', r); return; }
-      qrImg = qrDataUrl(r.qrcodeUrl); // 把授权网址编码成二维码图（不是去加载它）
-      pollWx(r.qrcode);
-    } catch (e) {
-      wxMsg = e.message || '连接失败，稍后再试。';
-      console.warn('[wx] connect 失败:', e && e.data ? e.data : e);
-    }
-  }
-  async function pollWx(qrcode) {
-    qrPolling = true;
-    for (let i = 0; i < 80 && qrPolling && wxAlive; i++) {
-      await new Promise((r) => setTimeout(r, 2500));
-      if (!wxAlive) return;
-      try {
-        const s = await api.wxConnectPoll(qrcode);
-        if (!wxAlive) return;
-        if (s.connected) { qrPolling = false; qrImg = ''; me = await api.me(); wxMsg = '微信已连接，去微信里跟她聊吧。'; return; }
-        if (s.status === 'expired') { qrPolling = false; qrImg = ''; wxMsg = '二维码过期了，点"连接微信"重试。'; return; }
-      } catch { /* 继续轮询 */ }
-    }
-    qrPolling = false;
-  }
-  async function disconnectWx() {
-    try { await api.wxDisconnect(); me = await api.me(); qrImg = ''; wxMsg = '已断开微信连接。'; } catch (e) { wxMsg = e.message; }
-  }
   async function logout() {
     try { await api.logout(); } catch {}
     clearSession();
@@ -103,21 +70,6 @@
       {#if rechargeMsg}<p class="ok">{rechargeMsg}</p>{/if}
     </section>
 
-    <section class="block">
-      <div class="actgrp">
-        {#if me.wechatChannel}
-          <p class="status">已连接 · 微信里和 <b>{me.wechatChannel.lifeId}</b> 聊</p>
-          <button class="btn-ghost btn" on:click={disconnectWx}>断开</button>
-        {:else if qrImg}
-          <img class="wxqr" src={qrImg} alt="微信连接二维码" />
-          {#if qrPolling}<p class="caption">等待你扫码…</p>{/if}
-        {:else}
-          <button class="btn btn-secondary" on:click={connectWx}>连接微信</button>
-        {/if}
-        {#if wxMsg}<p class="ok">{wxMsg}</p>{/if}
-      </div>
-    </section>
-
     {#if pushSupported()}
       <section class="block">
         <div class="actgrp">
@@ -152,10 +104,8 @@
   .actgrp { padding: var(--s2) 0; }
 
   .pending { color: var(--accent); }
-  .status { font-size: var(--fs-md); color: var(--muted); margin: 0 0 12px; }
   .sel { flex: 1; min-height: 44px; }
   .ok { color: var(--success); font-size: var(--fs-sm); margin: 10px 2px 0; }
-  .wxqr { display: block; width: 200px; height: 200px; margin: 4px auto 6px; background: #fff; border-radius: var(--r-sm); padding: 8px; image-rendering: pixelated; }
 
   .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: var(--s3) 0; border-bottom: 1px solid var(--border-subtle); }
   .row:last-child { border-bottom: 0; }

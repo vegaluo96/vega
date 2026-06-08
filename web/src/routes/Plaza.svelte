@@ -125,7 +125,7 @@
 
   /* —— 顶部在场头像条：随页头一起吸顶（Instagram/WhatsApp 风），始终可见 —— */
   .present { padding: 4px 0 10px; }
-  .strip { display: flex; gap: var(--s3); overflow-x: auto; padding-bottom: 1px; scrollbar-width: none; }
+  .strip { display: flex; gap: var(--s3); overflow-x: auto; padding: 0 var(--gutter) 1px; margin: 0 calc(-1 * var(--gutter)); scrollbar-width: none; }
   .strip::-webkit-scrollbar { display: none; }
   .pcell { flex: none; width: 56px; display: flex; flex-direction: column; align-items: center; gap: 5px; background: none; border: 0; padding: 0; }
   .pn { font-size: var(--fs-xs); font-weight: 500; color: var(--muted); max-width: 56px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
