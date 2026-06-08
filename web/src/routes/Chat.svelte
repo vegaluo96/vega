@@ -145,14 +145,14 @@
 
   .relwrap { max-width: var(--maxw); width: 100%; margin: 0 auto; padding: var(--s3) var(--s4) 0; }
 
-  .banner { max-width: var(--maxw); margin: var(--s3) auto 0; padding: var(--s3) var(--s4); background: var(--accent-weak); color: var(--text); font-size: 13px; text-align: center; border-radius: var(--r-sm); }
+  .banner { max-width: var(--maxw); margin: var(--s3) auto 0; padding: var(--s3) var(--s4); background: var(--surface-2); border: 1px solid var(--border-subtle); color: var(--muted); font-size: 13px; text-align: center; border-radius: var(--r-sm); }
 
   .log { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; max-width: var(--maxw); width: 100%; margin: 0 auto; padding: 18px var(--s4); display: flex; flex-direction: column; gap: 10px; }
   .bubble { max-width: 80%; padding: 10px 14px; border-radius: var(--r-lg); line-height: 1.55; white-space: pre-wrap; word-break: break-word; font-size: 15px; animation: rise var(--t-fade) ease both; }
   @keyframes rise { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
-  .bubble.me { align-self: flex-end; background: var(--accent); color: var(--on-accent); border-bottom-right-radius: 6px; }
+  .bubble.me { align-self: flex-end; background: var(--surface-2); color: var(--text); border-bottom-right-radius: 6px; }
   .bubble.her { align-self: flex-start; background: var(--surface); border: 1px solid var(--border); border-bottom-left-radius: 6px; }
-  .bubble.unprompted { border-color: var(--accent-line); background: var(--accent-weak); }
+  .bubble.unprompted { background: var(--surface-2); border-color: var(--border); }
   .utag { display: block; font-size: 11px; color: var(--life-reaching); margin-bottom: 4px; font-weight: 600; }
   .sys { align-self: center; color: var(--faint); font-size: 13px; text-align: center; }
   .err { color: var(--danger); }

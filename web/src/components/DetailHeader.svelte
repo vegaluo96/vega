@@ -30,7 +30,7 @@
     position: sticky; top: 0; z-index: 10;
     display: flex; align-items: center; gap: var(--s2);
     height: var(--header-h); padding: 0 var(--s2);
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--border-subtle);
     background: var(--bg);
   }
   .back { flex: none; background: none; border: 0; padding: 0 6px; color: var(--text); display: inline-flex; align-items: center; }

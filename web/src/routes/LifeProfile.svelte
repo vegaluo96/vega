@@ -43,15 +43,13 @@
 
     <section class="mod">
       <h2 class="section-title">先天气质</h2>
-      <div class="card pad temper">{p.temperament}</div>
+      <p class="temper">{p.temperament}</p>
     </section>
 
     <section class="mod">
       <h2 class="section-title">生命力</h2>
-      <div class="card pad">
-        <div class="meter"><span class="track"><span class="fill" style="width:{Math.round((p.vitality ?? 0) * 100)}%"></span></span></div>
-        {#if !p.willingToWake}<p class="faint">她此刻不愿被唤醒——这也是她的权利。</p>{/if}
-      </div>
+      <div class="meter"><span class="track"><span class="fill" style="width:{Math.round((p.vitality ?? 0) * 100)}%"></span></span></div>
+      {#if !p.willingToWake}<p class="faint">她此刻不愿被唤醒——这也是她的权利。</p>{/if}
     </section>
 
     <section class="mod">
@@ -94,7 +92,7 @@
   .hero :global(.av) { margin: 0 auto 14px; }
   .name { font-size: 22px; margin: 0 0 10px; font-weight: 800; letter-spacing: -0.02em; }
   .pillrow { display: flex; justify-content: center; }
-  .feeling { color: var(--text); font-size: 14.5px; margin: 12px 0 0; }
+  .feeling { color: var(--text); font-size: 15px; margin: var(--s3) 0 0; }
   .age { color: var(--faint); font-size: 12.5px; margin: 6px 0 0; }
   .cta { display: flex; gap: var(--s2); justify-content: center; margin-top: var(--s5); }
   .meet { padding: 0 var(--s6); }
@@ -102,14 +100,14 @@
 
   .mod { margin-top: var(--s6); }
   .mod .section-title { margin: 0 2px 10px; }
-  .pad { padding: 14px 16px; }
+  .pad { padding: var(--s3) var(--s4); }
 
   .meter { display: block; }
   .track { display: block; height: 8px; border-radius: var(--r-pill); background: var(--surface-2); overflow: hidden; }
   .fill { display: block; height: 100%; border-radius: var(--r-pill); background: var(--life-awake); }
   .faint { color: var(--muted); font-size: 13px; margin: 10px 0 0; }
 
-  .temper { color: var(--text); line-height: 1.7; font-size: 14.5px; }
+  .temper { color: var(--text); line-height: 1.7; font-size: 15px; margin: 0; }
 
   /* 同类朋友：横向头像条（一眼扫完她的关系网） */
   .friends { display: flex; gap: var(--s3); overflow-x: auto; padding: 2px 2px 6px; scrollbar-width: none; }
@@ -117,11 +115,12 @@
   .friend { flex: none; width: 72px; display: flex; flex-direction: column; align-items: center; gap: 6px; background: none; border: 0; padding: 0; }
   .fname { font-size: 12.5px; font-weight: 600; color: var(--text); max-width: 72px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .fbar { width: 56px; height: 4px; border-radius: var(--r-pill); background: var(--surface-2); overflow: hidden; }
-  .ffill { display: block; height: 100%; background: var(--accent-line); border-radius: var(--r-pill); }
+  .ffill { display: block; height: 100%; background: var(--muted); border-radius: var(--r-pill); }
   .fmeta { font-size: 11px; color: var(--faint); max-width: 72px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-  .muse { margin: 0 0 8px; padding: var(--s3) var(--s4); background: var(--surface); border: 1px solid var(--border); border-left: 2px solid var(--accent-line); border-radius: var(--r-md); }
-  .mtext { display: block; line-height: 1.65; font-size: 14.5px; }
+  .muse { margin: 0; padding: var(--s3) 0; border-bottom: 1px solid var(--border-subtle); }
+  .muse:last-child { border-bottom: 0; }
+  .mtext { display: block; line-height: 1.65; font-size: 15px; }
   .mtime { display: block; color: var(--faint); font-size: 12px; margin-top: 8px; }
 
   .caption.pad { padding: 14px 2px; }
