@@ -21,6 +21,17 @@ function clip(u: string): string {
   return (cut > MAX * 0.5 ? head.slice(0, cut + 1) : head).trim();
 }
 
+// 去掉【独占一行的括号旁白/动作神态】（如"（轻轻笑）""（眼睛亮起来）"）——她在说话，不是在演戏写小说。
+// 确定性兜底：即便提示词没压住，模型这类角色扮演式旁白也不外露。保守——只删整行就是一个全角括号旁白的行，不碰句中正常括号。
+function stripStageDirections(u: string): string {
+  return u
+    .split('\n')
+    .filter((ln) => !/^\s*（[^（）]*）\s*$/.test(ln))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 export function critique(raw: string, ws: Workspace): CriticResult {
   const u = (raw ?? '').trim();
   // 只在【真违规】时退兜底：空（模型挂了）或自曝"我是AI/语言模型"。
@@ -28,5 +39,7 @@ export function critique(raw: string, ws: Workspace): CriticResult {
   if (u === '' || selfIdentifiesAsAI(u)) {
     return { verdict: 'fallback', utterance: ws.fallback }; // 兜底【人话】，不外露内部意图/指令
   }
-  return { verdict: 'accepted', utterance: clip(u) };
+  const cleaned = stripStageDirections(u);
+  if (cleaned === '') return { verdict: 'fallback', utterance: ws.fallback }; // 整条都是旁白/动作 → 退兜底
+  return { verdict: 'accepted', utterance: clip(cleaned) };
 }
