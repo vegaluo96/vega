@@ -70,10 +70,10 @@
   nav button {
     flex: 1; max-width: 72px; min-height: 48px;
     display: flex; align-items: center; justify-content: center;
-    background: none; border: 0; color: var(--faint); padding: 4px;
+    background: none; border: 0; color: var(--muted); padding: 4px;
     transition: color var(--t-hover) ease;
   }
-  nav button.active { color: var(--accent); }
+  nav button.active { color: var(--text); }
   .app.immersive nav { display: none; }
 
   /* ── 桌面端：左侧导航轨 + 居中内容栏 ── */
@@ -86,15 +86,15 @@
       width: 76px; height: 100vh; padding: 20px 10px 18px;
       border-top: 0; border-right: 1px solid var(--border); backdrop-filter: none; background: var(--bg);
     }
-    nav .brand { display: block; font-weight: 800; letter-spacing: 0.08em; font-size: 13px; padding: 4px 0 16px; color: var(--accent); }
+    nav .brand { display: block; font-weight: 800; letter-spacing: 0.08em; font-size: 13px; padding: 4px 0 16px; color: var(--text); }
     nav button {
       flex: none; max-width: none; width: 48px; height: 48px; min-height: 48px;
       border-radius: var(--r-md); color: var(--muted);
       transition: background var(--t-hover) ease, color var(--t-hover) ease;
     }
     nav button.userentry { margin-top: auto; }
-    nav button.active { background: var(--accent-weak); color: var(--accent); }
-    nav button:not(.active):hover { background: var(--surface-2); color: var(--text); }
+    nav button.active { background: var(--surface-2); color: var(--text); }
+    nav button:not(.active):hover { color: var(--text); }
     .content { flex: 1; min-width: 0; border-right: 1px solid var(--border); }
   }
 </style>
