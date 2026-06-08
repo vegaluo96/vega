@@ -368,15 +368,18 @@ async function runChannel(userId: string): Promise<void> {
             // 关键：延迟回复（等模型生成完）时 incoming 的 context_token 多半已过期 → 先用【空 context】主动发；
             // 即时回复（语音/睡眠，秒回）context 还新鲜 → 用原 context。送不出再用另一种 context 兜底重发一次。
             // 这正是"语音秒回能到、文字等了模型就到不了微信"的根因。
-            const primaryCtx = delayed ? '' : m.contextToken;
-            const altCtx = delayed ? m.contextToken : '';
+            // 用和"唯一送达成功的那条回复"（语音诚实回复，即时）一样的 context_token。之前给延迟回复改用
+            // 空 context 是误判：真正送出去过的那条用的是【原 context】。模型换快（秒级）后，用原 context
+            // 大概率落进 iLink 的回复窗口；送不出再用空 context 兜底重发一次。
+            const primaryCtx = m.contextToken;
+            const altCtx = '';
             let sr = await ilink.sendMessage(ch.baseurl, ch.botToken, m.fromUserId, primaryCtx, reply) as Record<string, unknown>;
             const failed = (x: Record<string, unknown>): boolean => !x || ('_error' in x) || ('_status' in x) || (typeof x.ret === 'number' && x.ret !== 0) || (typeof x.errcode === 'number' && x.errcode !== 0);
             // 永远打印 iLink 的发送响应（不管成败）——破案关键：延迟回复若被"成功壳"丢弃，只有这里看得到 iLink 到底返回了啥。
-            console.log(`[wechat] 发回微信 delayed=${delayed} ctx=${primaryCtx ? '原' : '空'} len=${reply.length} → ${JSON.stringify(sr).slice(0, 400)}`);
-            if (failed(sr)) { // 用另一种 context 兜底重发一次
+            console.log(`[wechat] 发回微信 delayed=${delayed} ctx=原 len=${reply.length} → ${JSON.stringify(sr).slice(0, 400)}`);
+            if (failed(sr)) { // 用空 context 兜底重发一次
               sr = await ilink.sendMessage(ch.baseurl, ch.botToken, m.fromUserId, altCtx, reply) as Record<string, unknown>;
-              console.log(`[wechat] 兜底重发 ctx=${altCtx ? '原' : '空'} → ${JSON.stringify(sr).slice(0, 400)}`);
+              console.log(`[wechat] 兜底重发 ctx=空 → ${JSON.stringify(sr).slice(0, 400)}`);
             }
           } catch (e) { console.log('[wechat] 回消息失败:', (e as Error).message); }
         }
