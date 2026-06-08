@@ -326,6 +326,11 @@ async function runChannel(userId: string): Promise<void> {
           try {
             const lf = lifeById(lifeId); // 用通道的活跃命（切换即对所有人生效）
             if (!lf) continue;
+            // 非文字消息（语音/图片/表情）：还不会处理 → 诚实回一句，别静默（否则发语音永远收不到回复）。
+            if (!m.text.trim()) {
+              await ilink.sendMessage(ch.baseurl, ch.botToken, m.fromUserId, m.contextToken, '我这会儿还听不了语音、看不了图——你打字跟我说好吗？我在。');
+              continue;
+            }
             // —— 认人：让"微信里的你"尽量=你的 ZSKY 网页账号，从而和网页【共享同一段关系与记忆】。 ——
             // ① 已绑过→那个账号；② 连接码→绑到码所属网页账号；③ 扫码本人(iLink 身份匹配)→绑到通道主人账号；④ 其余→微信朋友。
             // 认人（简化、确定）：每个网页用户连的是【自己的】微信通道，所以这条通道里进来的消息

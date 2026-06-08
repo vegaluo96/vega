@@ -59,12 +59,15 @@ export function createIlink(cfg: IlinkConfig = {}) {
         const items = (m.item_list as Array<{ text_item?: { text?: string } }>) ?? [];
         const text = items.map((it) => it.text_item?.text ?? '').join('').trim();
         const from = String(m.from_user_id ?? '');
-        if (from && text) out.push({ fromUserId: from, contextToken: String(m.context_token ?? ''), text });
+        if (!from) continue;
+        // 有文字 → 文字消息；无文字但有内容项（语音/图片/表情）→ 仍上报(text='')，让上层诚实回一句，别静默丢弃。
+        if (text || items.length > 0) out.push({ fromUserId: from, contextToken: String(m.context_token ?? ''), text });
       }
       return { msgs: out, buf: String(raw.get_updates_buf ?? buf), raw };
     },
     async sendMessage(baseurl: string, botToken: string, toUserId: string, contextToken: string, text: string): Promise<unknown> {
-      return call('POST', `${(baseurl || base).replace(/\/$/, '')}/ilink/bot/sendmessage`, { msg: { to_user_id: toUserId, message_type: 2, message_state: 2, context_token: contextToken, item_list: [{ type: 1, text_item: { text } }] } }, botHeaders(botToken));
+      // base_info 与 getupdates 一致：很多 iLink 实现【每个调用都要】channel_version，缺了就被拒（"网页收到、微信收不到"的根因）。
+      return call('POST', `${(baseurl || base).replace(/\/$/, '')}/ilink/bot/sendmessage`, { msg: { to_user_id: toUserId, message_type: 2, message_state: 2, context_token: contextToken, item_list: [{ type: 1, text_item: { text } }] }, base_info: { channel_version: '1.0.2' } }, botHeaders(botToken));
     },
   };
 }
