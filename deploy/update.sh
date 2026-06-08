@@ -18,6 +18,9 @@ cd "$(dirname "$0")/.."            # 仓库根（如 /opt/vega）
 BRANCH="${1:-main}"
 SERVICE="${VEGA_SERVICE:-vega}"
 
+# 任一命令失败即大声中断（别再把构建失败假装成"跳过"，还误报"升级完成"）。
+trap 'echo "" >&2; echo "✗ 部署中断：上一条命令失败 —— dist 可能没更新，切勿当成已上线！修掉问题后重跑 deploy/update.sh。" >&2' ERR
+
 # 仓库属主与当前用户不一致时 git 会拒绝（dubious ownership）——把本目录加进 safe.directory（幂等）。
 git config --global --get-all safe.directory 2>/dev/null | grep -qxF "$PWD" || git config --global --add safe.directory "$PWD"
 
@@ -40,8 +43,8 @@ build_spa() {  # $1=目录
     if [ ! -d node_modules ] || echo "$CHANGED" | grep -q "^$dir/package"; then npm ci || npm install; fi
     npm run build )
 }
-echo "$CHANGED" | grep -q '^web/'       && build_spa web        || echo "· 用户端 web 无改动，跳过"
-echo "$CHANGED" | grep -q '^web-admin/' && build_spa web-admin   || echo "· 后台 web-admin 无改动，跳过"
+if echo "$CHANGED" | grep -q '^web/';       then build_spa web;      else echo "· 用户端 web 无改动，跳过"; fi
+if echo "$CHANGED" | grep -q '^web-admin/'; then build_spa web-admin; else echo "· 后台 web-admin 无改动，跳过"; fi
 
 # —— 仅当【引擎/服务端】代码变化才重启 daemon（此时微信自动重连一次，属预期内） ——
 if echo "$CHANGED" | grep -qE '^(src/|package\.json|package-lock\.json|tsconfig\.json|deploy/vega\.service)'; then

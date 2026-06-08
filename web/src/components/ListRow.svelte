@@ -1,6 +1,6 @@
 <script>
-  // 全站统一的通栏列表行（对话 / 搜索 / 通知共用）。
-  // x/IG 风：整宽、满血 hover（.row-bleed）、发丝分隔线；收口三处各写各的行 + "想你了"徽章。
+  // 全站统一的列表行（对话 / 搜索 / 通知共用）。
+  // 行宽与页面 16px 边距对齐、底发丝分隔线、点按高亮（.list-row）；收口三处各写各的行 + "想你了"徽章。
   export let onClick = undefined;   // 传 → <button>；不传 → <div>（如纯通知行）
   export let highlight = false;     // 未读 / 新鲜 → 品牌弱底
   export let meta = '';             // 标题行右侧次要信息（多为时间）
@@ -9,7 +9,7 @@
   $: tag = onClick ? 'button' : 'div';
 </script>
 
-<svelte:element this={tag} class="row-bleed" class:on={highlight} role={onClick ? 'button' : undefined} on:click={onClick}>
+<svelte:element this={tag} class="list-row" class:on={highlight} role={onClick ? 'button' : undefined} on:click={onClick}>
   <span class="lead"><slot name="lead" /></span>
   <span class="main">
     <span class="titlerow">

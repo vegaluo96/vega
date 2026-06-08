@@ -171,15 +171,15 @@ button { font: inherit; cursor: pointer; color: inherit; }
 .chip.on { background: var(--accent-weak); color: var(--accent); border-color: var(--accent-line); }
 
 /* —— 列表行：与页面 16px 边距对齐的发丝分隔线 + 点按高亮（跨页一致，不溢出栏宽）—— */
-.row-bleed {
+.list-row {
   display: flex; align-items: center; gap: var(--s3); width: 100%; text-align: left;
   padding: var(--row-pad-y) 0;
   border: 0; background: none; color: inherit;
   border-bottom: 1px solid var(--border-subtle);
   transition: background var(--t-hover) ease;
 }
-.row-bleed:hover { background: var(--surface-2); }
-.row-bleed.on { background: var(--accent-weak); }
+.list-row:hover { background: var(--surface-2); }
+.list-row.on { background: var(--accent-weak); }
 
 /* —— 顶部页名(+控件)随内容吸顶，带滚动边界 —— */
 .sticktop { position: sticky; top: 0; z-index: 6; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: saturate(180%) blur(12px); -webkit-backdrop-filter: saturate(180%) blur(12px); border-bottom: 1px solid var(--border-subtle); }
