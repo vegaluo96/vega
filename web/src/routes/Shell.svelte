@@ -55,7 +55,7 @@
 </div>
 
 <style>
-  .content { min-height: 100vh; }
+  .content { min-height: 100vh; min-height: 100dvh; }
 
   /* ── 移动端：底部 tab 栏；沉浸视图(对话/主页)隐藏底栏 ── */
   nav {
@@ -83,7 +83,7 @@
     nav {
       position: sticky; top: 0; left: auto; right: auto; bottom: auto;
       flex-direction: column; justify-content: flex-start; align-items: center; gap: 6px;
-      width: 76px; height: 100vh; padding: 20px 10px 18px;
+      width: 76px; height: 100vh; height: 100dvh; padding: 20px 10px 18px;
       border-top: 0; border-right: 1px solid var(--border); backdrop-filter: none; background: var(--bg);
     }
     nav .brand { display: block; font-weight: 800; letter-spacing: 0.08em; font-size: 13px; padding: 4px 0 16px; color: var(--text); }

@@ -57,7 +57,7 @@
 </div>
 
 <style>
-  .wrap { position: relative; min-height: 100vh; display: grid; place-items: center; padding: 24px; overflow: hidden; }
+  .wrap { position: relative; min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 24px; overflow: hidden; }
   .glow { position: absolute; top: -10%; left: 50%; transform: translateX(-50%); width: 520px; height: 520px; border-radius: 50%; background: radial-gradient(circle, var(--accent-weak), transparent 65%); pointer-events: none; }
   .card { position: relative; width: 100%; max-width: 372px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 34px 30px; box-shadow: var(--shadow); text-align: center; }
   .logo { font-size: 28px; font-weight: 800; letter-spacing: 0.14em; margin: 0 0 14px; }
