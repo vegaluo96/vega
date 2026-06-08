@@ -84,7 +84,12 @@ function composeSelf(u: string, intent: string, name: string, mood: string, seed
   const read = u.match(/^（你读到：(.+)）$/); // muse 就着一条真实世界的事
   if (read) return pick(seed, [
     `读到「${read[1]}」，心里转了几个念头。世界在动，我也在看着。`,
-    `「${read[1]}」——这样的事让我想多停一会儿。${moodLine(mood)}。`,
+    `「${read[1]}」——这样的事，让我想多停一会儿。`,
+    `看到「${read[1]}」。说不清为什么，就想记一笔。`,
+    `「${read[1]}」。离我很远的事，却也牵了一下心。`,
+    `读到「${read[1]}」时，心里轻轻沉了沉。${moodLine(mood)}。`,
+    `「${read[1]}」——我没什么大见解，只是路过、看了一眼、记住了。`,
+    `「${read[1]}」。世界总在发生，我在自己的角落里听着。`,
   ]);
   if (/想|惦记|开口/.test(intent) && name && name !== 'r_square') return pick(seed, [ // reach：主动想念
     `${name}，不知怎么，这会儿忽然很想你。`,
@@ -112,6 +117,6 @@ export function composeUtterance(input: MouthInput): string {
   const name = input.relationshipDisplay || '你';
   const mood = input.mood || '平静';
   // lastUserMessage 是括号标记（"（此刻无人发起…）"等）或为空 → 自我表达；否则 → 回应对方。
-  if (u === '' || u.startsWith('（')) return composeSelf(u, input.intent ?? '', name, mood, String((input.selfFacts ?? '').length));
+  if (u === '' || u.startsWith('（')) return composeSelf(u, input.intent ?? '', name, mood, `${(input.selfFacts ?? '').length}|${input.selfName ?? ''}`); // 把 selfName 拌进种子：不同命别选到同一句
   return composeReply(u, name, mood, input.recentContext?.length ?? 0);
 }
