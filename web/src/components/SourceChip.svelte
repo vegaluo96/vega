@@ -11,7 +11,7 @@
 {/if}
 
 <style>
-  .src { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 4px 9px; border: 1px solid var(--border-subtle); border-radius: var(--r-sm); background: var(--bg); color: var(--faint); font-size: 12px; text-decoration: none; }
+  .src { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 4px 9px; border: 1px solid var(--border-subtle); border-radius: var(--r-sm); background: var(--bg); color: var(--faint); font-size: var(--fs-xs); text-decoration: none; }
   .src:hover { border-color: var(--accent-line); color: var(--accent); }
   .srctxt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>

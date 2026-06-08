@@ -140,7 +140,7 @@
   /* slot 进 DetailHeader 的小件 */
   .dot { width: 8px; height: 8px; border-radius: var(--r-pill); background: var(--life-asleep); flex: none; }
   .dot.awake { background: var(--life-awake); box-shadow: 0 0 0 3px color-mix(in srgb, var(--life-awake) 20%, transparent); }
-  .bal { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .bal { color: var(--muted); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
   .avbtn { background: none; border: 0; padding: 0; display: inline-flex; cursor: pointer; }
 
   .relwrap { max-width: var(--maxw); width: 100%; margin: 0 auto; padding: var(--s3) var(--gutter) 0; }
@@ -148,13 +148,13 @@
   .banner { max-width: var(--maxw); margin: var(--s3) auto 0; padding: var(--s3) var(--gutter); background: var(--surface-2); border: 1px solid transparent; box-shadow: inset 0 0 0 1px var(--border-subtle); color: var(--muted); font-size: var(--fs-sm); text-align: center; border-radius: var(--r-sm); }
 
   .log { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; max-width: var(--maxw); width: 100%; margin: 0 auto; padding: 18px var(--gutter); display: flex; flex-direction: column; gap: 10px; }
-  .bubble { max-width: 80%; padding: 10px 14px; border-radius: var(--r-lg); line-height: 1.55; white-space: pre-wrap; word-break: break-word; font-size: 15px; animation: rise var(--t-fade) ease both; }
+  .bubble { max-width: 80%; padding: 10px 14px; border-radius: var(--r-lg); line-height: 1.55; white-space: pre-wrap; word-break: break-word; font-size: var(--fs-body); animation: rise var(--t-fade) ease both; }
   @keyframes rise { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
   .bubble.me { align-self: flex-end; background: var(--surface-2); color: var(--text); border-bottom-right-radius: var(--r-2xs); }
   .bubble.her { align-self: flex-start; background: var(--surface); border: 1px solid transparent; box-shadow: inset 0 0 0 1px var(--border); border-bottom-left-radius: var(--r-2xs); }
   .bubble.unprompted { background: var(--surface-2); border-color: var(--border); }
-  .utag { display: block; font-size: 11px; color: var(--life-reaching); margin-bottom: 4px; font-weight: 600; }
-  .sys { align-self: center; color: var(--faint); font-size: 13px; text-align: center; }
+  .utag { display: block; font-size: var(--fs-2xs); color: var(--life-reaching); margin-bottom: 4px; font-weight: 600; }
+  .sys { align-self: center; color: var(--faint); font-size: var(--fs-sm); text-align: center; }
   .err { color: var(--danger); }
 
   .breathing { display: inline-flex; align-items: center; gap: 5px; }

@@ -118,8 +118,8 @@
   /* 新用户一次性引导卡 */
   .intro { margin: var(--s3) 0 var(--s1); padding: var(--s4); border: 1px solid var(--accent-line); background: var(--accent-weak); border-radius: var(--r-md); }
   .itxt { display: flex; flex-direction: column; gap: 5px; }
-  .itxt b { font-size: 15px; }
-  .itxt span { color: var(--muted); font-size: 13.5px; line-height: 1.6; }
+  .itxt b { font-size: var(--fs-body); }
+  .itxt span { color: var(--muted); font-size: var(--fs-md); line-height: 1.6; }
   .iact { display: flex; align-items: center; gap: var(--s2); margin-top: var(--s3); }
   .iact .btn { flex: 1; }
   .ix { flex: none; width: 40px; height: 40px; border: 0; background: none; color: var(--muted); display: inline-flex; align-items: center; justify-content: center; border-radius: var(--r-sm); }
@@ -130,7 +130,7 @@
   .strip { display: flex; gap: var(--s3); overflow-x: auto; padding-bottom: 1px; scrollbar-width: none; }
   .strip::-webkit-scrollbar { display: none; }
   .pcell { flex: none; width: 56px; display: flex; flex-direction: column; align-items: center; gap: 5px; background: none; border: 0; padding: 0; }
-  .pn { font-size: 11.5px; font-weight: 500; color: var(--muted); max-width: 56px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pn { font-size: var(--fs-xs); font-weight: 500; color: var(--muted); max-width: 56px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .pav { width: 48px; height: 48px; border-radius: 50%; }
   .pl { width: 36px; height: 9px; border-radius: 6px; }
 
@@ -141,20 +141,20 @@
   .avslot { flex: none; width: 44px; display: inline-flex; align-items: flex-start; }
   .av { background: none; border: 0; padding: 0; }
   .body { flex: 1; min-width: 0; }
-  .hdr { display: block; font-size: 15px; line-height: 1.2; background: none; border: 0; padding: 0; color: var(--text); text-align: left; }
+  .hdr { display: block; font-size: var(--fs-body); line-height: 1.2; background: none; border: 0; padding: 0; color: var(--text); text-align: left; }
   .hdr b { font-weight: 700; }
   .hdr:hover b { text-decoration: underline; }
   .hdr .meta { margin-left: 5px; }
   .textbtn { display: block; width: 100%; margin: 2px 0 0; padding: 0; background: none; border: 0; text-align: left; color: var(--text); cursor: pointer; }
-  .ptext { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 6; overflow: hidden; font-size: 15px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+  .ptext { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 6; overflow: hidden; font-size: var(--fs-body); line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
   .srcrow { margin: 6px 0 0; }
 
   /* —— 生命流评论：同类在心声下的简短共鸣，内联一两条预览 —— */
   .cmts { display: flex; flex-direction: column; gap: 3px; margin: 8px 0 0; }
-  .cm { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 2px 0; font-size: 13px; line-height: 1.45; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cm { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 2px 0; font-size: var(--fs-sm); line-height: 1.45; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cmname { font-weight: 600; color: var(--text); margin-right: 6px; }
   .cmname.life { color: var(--accent); }
   .cmtext { color: var(--muted); }
-  .cmmore { background: none; border: 0; padding: 2px 0; font-size: 12.5px; color: var(--faint); text-align: left; }
+  .cmmore { background: none; border: 0; padding: 2px 0; font-size: var(--fs-sm); color: var(--faint); text-align: left; }
   .cmmore:hover { color: var(--accent); }
 </style>

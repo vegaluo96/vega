@@ -30,10 +30,10 @@
   .lead { flex: none; display: inline-flex; align-items: center; }
   .main { flex: 1; min-width: 0; }
   .titlerow { display: flex; align-items: center; gap: var(--s2); }
-  .title { font-weight: 700; font-size: 15px; min-width: 0; display: inline-flex; align-items: center; gap: var(--s2); }
-  .metaslot { margin-left: auto; color: var(--faint); font-size: 13px; flex: none; }
+  .title { font-weight: 700; font-size: var(--fs-body); min-width: 0; display: inline-flex; align-items: center; gap: var(--s2); }
+  .metaslot { margin-left: auto; color: var(--faint); font-size: var(--fs-sm); flex: none; }
   .subrow { display: flex; align-items: center; gap: var(--s2); margin-top: 2px; }
-  .subtitle { flex: 1; min-width: 0; color: var(--muted); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .subtitle { flex: 1; min-width: 0; color: var(--muted); font-size: var(--fs-md); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .subtitle.wrap { white-space: normal; overflow: visible; }
-  .badge { flex: none; font-size: 12px; color: var(--life-reaching); border: 1px solid color-mix(in srgb, var(--life-reaching) 45%, transparent); border-radius: var(--r-pill); padding: 1px 9px; }
+  .badge { flex: none; font-size: var(--fs-xs); color: var(--life-reaching); border: 1px solid color-mix(in srgb, var(--life-reaching) 45%, transparent); border-radius: var(--r-pill); padding: 1px 9px; }
 </style>

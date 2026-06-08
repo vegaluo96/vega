@@ -19,7 +19,7 @@
     background: radial-gradient(circle at 50% 38%, var(--accent-weak), transparent 72%);
     border: 1px solid var(--border-subtle);
   }
-  .et { font-size: 15px; color: var(--text); margin: 0 0 7px; }
-  .ex { font-size: 13.5px; color: var(--muted); line-height: 1.65; max-width: 320px; margin: 0 auto; }
+  .et { font-size: var(--fs-body); color: var(--text); margin: 0 0 7px; }
+  .ex { font-size: var(--fs-md); color: var(--muted); line-height: 1.65; max-width: 320px; margin: 0 auto; }
   .ea { margin-top: var(--s6); }
 </style>

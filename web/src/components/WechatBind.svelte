@@ -86,16 +86,16 @@
 <style>
   .wb { margin-top: 6px; }
   .wb-load { color: var(--faint); }
-  .wb-btn { width: 100%; min-height: 40px; padding: 0 14px; border: 1px solid var(--border); border-radius: var(--r-sm); background: none; color: var(--muted); font: inherit; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; transition: border-color var(--t-hover) ease, color var(--t-hover) ease; }
+  .wb-btn { width: 100%; min-height: 40px; padding: 0 14px; border: 1px solid var(--border); border-radius: var(--r-sm); background: none; color: var(--muted); font: inherit; font-size: var(--fs-sm); display: inline-flex; align-items: center; justify-content: center; gap: 8px; transition: border-color var(--t-hover) ease, color var(--t-hover) ease; }
   .wb-btn:hover:not(:disabled) { border-color: var(--accent-line); color: var(--accent); }
   .wb-btn:disabled { opacity: 0.55; }
-  .wb-on { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 4px 0 14px; border: 1px solid var(--accent-line); border-radius: var(--r-sm); background: var(--accent-weak); color: var(--accent); font-size: 13px; }
+  .wb-on { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 4px 0 14px; border: 1px solid var(--accent-line); border-radius: var(--r-sm); background: var(--accent-weak); color: var(--accent); font-size: var(--fs-sm); }
   .wb-on-txt { flex: 1; display: inline-flex; align-items: center; gap: 8px; }
-  .wb-x { flex: none; min-height: 32px; padding: 0 12px; border: 0; background: none; color: var(--muted); font: inherit; font-size: 12.5px; border-radius: var(--r-sm); }
+  .wb-x { flex: none; min-height: 32px; padding: 0 12px; border: 0; background: none; color: var(--muted); font: inherit; font-size: var(--fs-sm); border-radius: var(--r-sm); }
   .wb-x:hover:not(:disabled) { color: var(--danger); }
-  .wb-hint { font-size: 12.5px; color: var(--muted); margin: 0 0 8px; text-align: center; }
+  .wb-hint { font-size: var(--fs-sm); color: var(--muted); margin: 0 0 8px; text-align: center; }
   .wb-hint.dim { color: var(--faint); margin: 8px 0 0; }
   .wb-qr { display: block; width: 180px; height: 180px; margin: 0 auto; background: #fff; border-radius: var(--r-sm); padding: 8px; image-rendering: pixelated; }
-  .wb-msg { font-size: 12.5px; color: var(--success); margin: 8px 0 0; text-align: center; }
-  .wb-tie { display: block; margin: 8px 0 0; color: var(--faint); font-size: 12px; text-align: center; }
+  .wb-msg { font-size: var(--fs-sm); color: var(--success); margin: 8px 0 0; text-align: center; }
+  .wb-tie { display: block; margin: 8px 0 0; color: var(--faint); font-size: var(--fs-xs); text-align: center; }
 </style>

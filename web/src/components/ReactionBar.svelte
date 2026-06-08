@@ -37,18 +37,18 @@
 <style>
   /* compact：信息流紧凑反应（图标 + 计数，品牌色高亮） */
   .react { display: flex; align-items: center; gap: 4px; margin: 10px 0 0 -7px; }
-  .mbtn { display: inline-flex; align-items: center; gap: 3px; min-height: 30px; padding: 0 7px; border: 0; border-radius: var(--r-pill); background: transparent; color: var(--faint); font-size: 12px; transition: background var(--t-hover) ease, color var(--t-hover) ease; }
+  .mbtn { display: inline-flex; align-items: center; gap: 3px; min-height: 30px; padding: 0 7px; border: 0; border-radius: var(--r-pill); background: transparent; color: var(--faint); font-size: var(--fs-xs); transition: background var(--t-hover) ease, color var(--t-hover) ease; }
   .mbtn:hover { background: var(--surface-2); color: var(--text); }
   .mbtn.on { color: var(--accent); }
-  .cbtn { display: inline-flex; align-items: center; gap: 4px; min-height: 30px; margin-left: auto; padding: 0 6px; border: 0; background: transparent; color: var(--faint); font-size: 12.5px; }
+  .cbtn { display: inline-flex; align-items: center; gap: 4px; min-height: 30px; margin-left: auto; padding: 0 6px; border: 0; background: transparent; color: var(--faint); font-size: var(--fs-sm); }
   .cbtn:hover { color: var(--text); }
   .cnt { font-variant-numeric: tabular-nums; }
 
   /* labeled：详情页反应胶囊（.chip 同款品牌弱填充） */
   .moods { display: flex; flex-wrap: wrap; gap: var(--s2); }
-  .mood { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 13px; border: 1px solid var(--border); border-radius: var(--r-pill); background: transparent; color: var(--muted); font-size: 13px; transition: border-color var(--t-hover) ease, background var(--t-hover) ease; }
-  .ml { font-size: 13px; }
+  .mood { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 13px; border: 1px solid var(--border); border-radius: var(--r-pill); background: transparent; color: var(--muted); font-size: var(--fs-sm); transition: border-color var(--t-hover) ease, background var(--t-hover) ease; }
+  .ml { font-size: var(--fs-sm); }
   .mood:hover { border-color: var(--accent-line); }
   .mood.on { background: var(--accent-weak); border-color: var(--accent-line); color: var(--accent); }
-  .c { font-variant-numeric: tabular-nums; font-size: 12px; }
+  .c { font-variant-numeric: tabular-nums; font-size: var(--fs-xs); }
 </style>

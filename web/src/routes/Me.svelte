@@ -152,16 +152,16 @@
   .pad { padding: 16px; }
 
   .pending { color: var(--accent); }
-  .status { font-size: 14px; color: var(--muted); margin: 0 0 12px; }
+  .status { font-size: var(--fs-md); color: var(--muted); margin: 0 0 12px; }
   .sel { flex: 1; min-height: 44px; }
-  .ok { color: var(--success); font-size: 13px; margin: 10px 2px 0; }
+  .ok { color: var(--success); font-size: var(--fs-sm); margin: 10px 2px 0; }
   .wxqr { display: block; width: 200px; height: 200px; margin: 4px auto 6px; background: #fff; border-radius: var(--r-sm); padding: 8px; image-rendering: pixelated; }
 
   .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: var(--s3) var(--s4); border-bottom: 1px solid var(--border-subtle); }
   .row:last-child { border-bottom: 0; }
   .row.act { padding: var(--s3) var(--s4); }
-  .rk { color: var(--faint); font-size: 13px; }
-  .rv { font-size: 14px; font-weight: 600; }
+  .rk { color: var(--faint); font-size: var(--fs-sm); }
+  .rv { font-size: var(--fs-md); font-weight: 600; }
 
   .footer { display: flex; gap: 10px; margin-top: var(--s6); }
   .footer .btn { flex: 1; }

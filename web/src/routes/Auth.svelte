@@ -61,11 +61,11 @@
   .glow { position: absolute; top: -10%; left: 50%; transform: translateX(-50%); width: 520px; height: 520px; border-radius: 50%; background: radial-gradient(circle, var(--accent-weak), transparent 65%); pointer-events: none; }
   .card { position: relative; width: 100%; max-width: 372px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 34px 30px; box-shadow: var(--shadow); text-align: center; }
   .logo { font-size: 28px; font-weight: 800; letter-spacing: 0.14em; margin: 0 0 14px; }
-  .lede { font-size: 15px; margin: 0 0 4px; }
-  .hint { color: var(--muted); font-size: 13px; line-height: 1.6; margin: 0 0 26px; }
+  .lede { font-size: var(--fs-body); margin: 0 0 4px; }
+  .hint { color: var(--muted); font-size: var(--fs-sm); line-height: 1.6; margin: 0 0 26px; }
   form { display: flex; flex-direction: column; gap: 11px; }
   .btn-block { margin-top: 4px; }
-  .err { color: var(--danger); font-size: 13px; margin: 0; }
-  .link { background: none; border: 0; color: var(--accent); font-size: 14px; margin-top: 18px; display: block; width: 100%; }
+  .err { color: var(--danger); font-size: var(--fs-sm); margin: 0; }
+  .link { background: none; border: 0; color: var(--accent); font-size: var(--fs-md); margin-top: 18px; display: block; width: 100%; }
   .link.back { color: var(--muted); margin-top: 10px; }
 </style>

@@ -12,7 +12,7 @@
 </span>
 
 <style>
-  .pill { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--muted); line-height: 1; }
+  .pill { display: inline-flex; align-items: center; gap: 7px; font-size: var(--fs-sm); color: var(--muted); line-height: 1; }
   .d { width: 7px; height: 7px; border-radius: var(--r-pill); background: var(--life-awake); box-shadow: 0 0 0 3px color-mix(in srgb, var(--life-awake) 20%, transparent); flex: none; }
   .asleep .d { background: var(--life-asleep); box-shadow: none; }
   .tx { white-space: nowrap; }
