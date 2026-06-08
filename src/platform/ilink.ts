@@ -7,7 +7,7 @@ import { randomBytes } from 'node:crypto';
 export interface IlinkConfig { base?: string; timeoutMs?: number }
 export interface QrStart { qrcode: string; qrcodeUrl: string }
 export interface QrStatus { status: string; botToken?: string; ilinkUserId?: string; ilinkBotId?: string; baseurl?: string; raw?: unknown }
-export interface IncomingMsg { fromUserId: string; contextToken: string; text: string }
+export interface IncomingMsg { fromUserId: string; contextToken: string; sessionId: string; text: string }
 
 const uin = (): string => randomBytes(4).toString('base64');
 const pick = (o: Record<string, unknown>, ...keys: string[]): unknown => { for (const k of keys) if (o && o[k] !== undefined) return o[k]; return undefined; };
@@ -71,14 +71,16 @@ export function createIlink(cfg: IlinkConfig = {}) {
         if (!from) continue;
         // 非文字、又没拿到语音转写 → 打出原始结构，便于确认 iLink 到底给没给转写（决定语音能不能真回复）。
         if (!text && items.length > 0) console.log('[wechat] 非文字消息原始结构 →', JSON.stringify(m).slice(0, 600));
-        // 有文字（含语音转写）→ 当文字真处理；无文字但有内容项 → 仍上报(text='')，让上层诚实回一句、别静默。
-        if (text || items.length > 0) out.push({ fromUserId: from, contextToken: String(m.context_token ?? ''), text });
+        // 回复令牌：入站消息没有 context_token，真正要回填的是 client_id（bypmsg 被动消息回复令牌）+ session_id。
+        // 之前一直读不存在的 context_token → 发空令牌 → iLink "session timeout"(errcode -14)。
+        if (text || items.length > 0) out.push({ fromUserId: from, contextToken: String(m.context_token ?? m.client_id ?? ''), sessionId: String(m.session_id ?? ''), text });
       }
       return { msgs: out, buf: String(raw.get_updates_buf ?? buf), raw };
     },
-    async sendMessage(baseurl: string, botToken: string, toUserId: string, contextToken: string, text: string): Promise<unknown> {
-      // base_info 与 getupdates 一致：很多 iLink 实现【每个调用都要】channel_version，缺了就被拒（"网页收到、微信收不到"的根因）。
-      return call('POST', `${(baseurl || base).replace(/\/$/, '')}/ilink/bot/sendmessage`, { msg: { to_user_id: toUserId, message_type: 2, message_state: 2, context_token: contextToken, item_list: [{ type: 1, text_item: { text } }] }, base_info: { channel_version: '1.0.2' } }, botHeaders(botToken));
+    async sendMessage(baseurl: string, botToken: string, toUserId: string, contextToken: string, text: string, sessionId = ''): Promise<unknown> {
+      // 回填入站消息的会话令牌：context_token / client_id 都填上回复令牌（bypmsg），并带 session_id——
+      // 否则 iLink 认不出会话回 errcode -14 "session timeout"。base_info 与 getupdates 一致（每个调用都要 channel_version）。
+      return call('POST', `${(baseurl || base).replace(/\/$/, '')}/ilink/bot/sendmessage`, { msg: { to_user_id: toUserId, message_type: 2, message_state: 2, context_token: contextToken, client_id: contextToken, session_id: sessionId, item_list: [{ type: 1, text_item: { text } }] }, base_info: { channel_version: '1.0.2' } }, botHeaders(botToken));
     },
   };
 }

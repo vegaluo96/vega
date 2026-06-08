@@ -328,7 +328,7 @@ async function runChannel(userId: string): Promise<void> {
             if (!lf) continue;
             // 非文字消息（语音/图片/表情）：还不会处理 → 诚实回一句，别静默（否则发语音永远收不到回复）。
             if (!m.text.trim()) {
-              await ilink.sendMessage(ch.baseurl, ch.botToken, m.fromUserId, m.contextToken, '我这会儿还听不了语音、看不了图——你打字跟我说好吗？我在。');
+              await ilink.sendMessage(ch.baseurl, ch.botToken, m.fromUserId, m.contextToken, '我这会儿还听不了语音、看不了图——你打字跟我说好吗？我在。', m.sessionId);
               continue;
             }
             // —— 认人：让"微信里的你"尽量=你的 ZSKY 网页账号，从而和网页【共享同一段关系与记忆】。 ——
@@ -374,16 +374,8 @@ async function runChannel(userId: string): Promise<void> {
             // 发往微信的文本压成单行：唯一送达成功的那条是无换行短句，而模型回复常带换行——iLink 的
             // text_item 很可能不接受内嵌换行（"无换行能到、带换行到不了"的另一可能根因）。网页端用原文(上面已 publish)。
             const wechatText = reply.replace(/\s*\n+\s*/g, '  ').trim() || reply;
-            const primaryCtx = m.contextToken;
-            const altCtx = '';
-            let sr = await ilink.sendMessage(ch.baseurl, ch.botToken, m.fromUserId, primaryCtx, wechatText) as Record<string, unknown>;
-            const failed = (x: Record<string, unknown>): boolean => !x || ('_error' in x) || ('_status' in x) || (typeof x.ret === 'number' && x.ret !== 0) || (typeof x.errcode === 'number' && x.errcode !== 0);
-            // 永远打印 iLink 的发送响应（不管成败）——破案关键：延迟回复若被"成功壳"丢弃，只有这里看得到 iLink 到底返回了啥。
-            console.log(`[wechat] 发回微信 delayed=${delayed} ctx=原 len=${wechatText.length} → ${JSON.stringify(sr).slice(0, 400)}`);
-            if (failed(sr)) { // 用空 context 兜底重发一次
-              sr = await ilink.sendMessage(ch.baseurl, ch.botToken, m.fromUserId, altCtx, wechatText) as Record<string, unknown>;
-              console.log(`[wechat] 兜底重发 ctx=空 → ${JSON.stringify(sr).slice(0, 400)}`);
-            }
+            const sr = await ilink.sendMessage(ch.baseurl, ch.botToken, m.fromUserId, m.contextToken, wechatText, m.sessionId) as Record<string, unknown>;
+            console.log(`[wechat] 发回微信 delayed=${delayed} len=${wechatText.length} → ${JSON.stringify(sr).slice(0, 400)}`);
           } catch (e) { console.log('[wechat] 回消息失败:', (e as Error).message); }
         }
         // 处理完才推进游标（之前在处理【前】就推进：被接班/崩在中途会丢整批消息）。仍是本代 worker 才前移 → 至少一次投递、不丢。
