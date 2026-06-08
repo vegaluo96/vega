@@ -65,6 +65,6 @@
   form { display: flex; flex-direction: column; gap: 11px; }
   .btn-block { margin-top: 4px; }
   .err { color: var(--danger); font-size: var(--fs-sm); margin: 0; }
-  .link { background: none; border: 0; color: var(--accent); font-size: var(--fs-md); margin-top: 18px; display: block; width: 100%; }
+  .link { background: none; border: 0; color: var(--text); font-size: var(--fs-md); margin-top: 18px; display: block; width: 100%; }
   .link.back { color: var(--muted); margin-top: 10px; }
 </style>

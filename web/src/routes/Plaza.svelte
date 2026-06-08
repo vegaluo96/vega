@@ -116,7 +116,7 @@
   .plaza { max-width: var(--maxw); margin: 0 auto; padding: 0 var(--gutter) 96px; }
 
   /* 新用户一次性引导卡 */
-  .intro { margin: var(--s3) 0 var(--s1); padding: var(--s4); border: 1px solid var(--accent-line); background: var(--accent-weak); border-radius: var(--r-md); }
+  .intro { margin: var(--s3) 0 var(--s1); padding: var(--s4); border: 1px solid var(--border); background: var(--surface-2); border-radius: var(--r-md); }
   .itxt { display: flex; flex-direction: column; gap: 5px; }
   .itxt b { font-size: var(--fs-body); }
   .itxt span { color: var(--muted); font-size: var(--fs-md); line-height: 1.6; }

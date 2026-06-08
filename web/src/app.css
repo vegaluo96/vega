@@ -158,7 +158,7 @@ button { font: inherit; cursor: pointer; color: inherit; }
   transition: border-color var(--t-hover) ease, box-shadow var(--t-hover) ease;
 }
 .input::placeholder { color: var(--faint); }
-.input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); }
+.input:focus { outline: none; border-color: var(--text); box-shadow: 0 0 0 3px color-mix(in srgb, var(--text) 9%, transparent); }
 .input-pill { border-radius: var(--r-pill); }
 
 /* —— 卡片 —— */
