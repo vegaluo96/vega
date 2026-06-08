@@ -59,8 +59,9 @@ export function createApiyiMouth(cfg: ApiyiConfig): Mouth {
         ...input.recentContext.map((t) => ({ role: t.role === 'vega' ? 'assistant' : 'user', content: t.text })),
         { role: 'user', content: input.lastUserMessage },
       ];
-      // "嘴"该说短句（像发消息，不是写散文）：封顶输出 + 收敛温度，防长篇独白/文艺腔飙车，省 token、降延迟。
-      const body = JSON.stringify({ model: cfg.model, messages, temperature: 0.6, max_tokens: 160 });
+      // 长度靠提示词控（"一两句、最多三四短句"），max_tokens 只是【安全上限】——设太低会把正常回复在句子中途切断
+      // （断断续续）。给足额度让她把话说完；真跑飞了还有 critic 在 800 字处按句末截。temperature 收敛防飘。
+      const body = JSON.stringify({ model: cfg.model, messages, temperature: 0.6, max_tokens: 512 });
       // 瞬时失败（429/5xx/网络/空）→ 快速重试一次再回落，减少"真模型偶发挂掉→掉回笨模板"的抖动；
       // 但【超时】不重试：超时说明这轮就是太慢，重试只会让用户多等一轮，直接快速回落兜底。
       let lastErr: unknown;
