@@ -29,11 +29,11 @@
   .dh {
     position: sticky; top: 0; z-index: 10;
     display: flex; align-items: center; gap: var(--s2);
-    height: var(--header-h); padding: 0 var(--s2);
+    min-height: var(--header-h); padding: 6px var(--s2);
     box-shadow: inset 0 -1px 0 0 var(--border-subtle);
     background: var(--bg);
   }
-  .back { flex: none; background: none; border: 0; min-width: 44px; min-height: 44px; padding: 0; color: var(--text); display: inline-flex; align-items: center; justify-content: center; }
+  .back { flex: none; background: none; border: 0; width: 40px; height: 40px; padding: 0; color: var(--text); display: inline-flex; align-items: center; justify-content: center; }
   .lead { flex: none; display: inline-flex; align-items: center; }
   .titlewrap { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 2px; text-align: left; background: none; border: 0; padding: 0; color: var(--text); border-radius: var(--r-sm); }
   .titlewrap.tappable { cursor: pointer; }
