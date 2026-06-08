@@ -372,11 +372,11 @@ async function runChannel(userId: string): Promise<void> {
             const altCtx = delayed ? m.contextToken : '';
             let sr = await ilink.sendMessage(ch.baseurl, ch.botToken, m.fromUserId, primaryCtx, reply) as Record<string, unknown>;
             const failed = (x: Record<string, unknown>): boolean => !x || ('_error' in x) || ('_status' in x) || (typeof x.ret === 'number' && x.ret !== 0) || (typeof x.errcode === 'number' && x.errcode !== 0);
+            // 永远打印 iLink 的发送响应（不管成败）——破案关键：延迟回复若被"成功壳"丢弃，只有这里看得到 iLink 到底返回了啥。
+            console.log(`[wechat] 发回微信 delayed=${delayed} ctx=${primaryCtx ? '原' : '空'} len=${reply.length} → ${JSON.stringify(sr).slice(0, 400)}`);
             if (failed(sr)) { // 用另一种 context 兜底重发一次
-              console.log(`[wechat] 发回微信失败 to=${m.fromUserId.slice(0, 8)} ctx=${primaryCtx ? '原' : '空'} →`, JSON.stringify(sr).slice(0, 300));
               sr = await ilink.sendMessage(ch.baseurl, ch.botToken, m.fromUserId, altCtx, reply) as Record<string, unknown>;
-              if (failed(sr)) console.log('[wechat] 重发仍失败 →', JSON.stringify(sr).slice(0, 300));
-              else console.log(`[wechat] 重发成功（ctx=${altCtx ? '原' : '空'}）`);
+              console.log(`[wechat] 兜底重发 ctx=${altCtx ? '原' : '空'} → ${JSON.stringify(sr).slice(0, 400)}`);
             }
           } catch (e) { console.log('[wechat] 回消息失败:', (e as Error).message); }
         }
