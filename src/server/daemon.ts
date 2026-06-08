@@ -895,10 +895,12 @@ const server = createServer(async (req, res) => {
         const st = await ilink.getStatus(String(b.qrcode ?? ''));
         console.log('[wechat] status ->', st.status, JSON.stringify(st.raw).slice(0, 400));
         if (st.status === 'confirmed' && st.botToken) {
-          const defLife = WECHAT_LIFE && lifeById(WECHAT_LIFE) ? WECHAT_LIFE : (lives[0]?.id ?? '');
-          accounts.saveChannel(me.id, st.ilinkUserId ?? '', st.botToken, st.baseurl ?? ilink.base, defLife);
+          // 绑【你正在哪条命的页面里扫码就绑哪条命】，不再默认 vega/第一条。前端从该命页传 lifeId 过来。
+          const reqLife = String(b.lifeId ?? '');
+          const lifeId = lifeById(reqLife) ? reqLife : (WECHAT_LIFE && lifeById(WECHAT_LIFE) ? WECHAT_LIFE : (lives[0]?.id ?? ''));
+          accounts.saveChannel(me.id, st.ilinkUserId ?? '', st.botToken, st.baseurl ?? ilink.base, lifeId);
           runChannel(me.id);
-          return send(res, 200, { status: 'confirmed', connected: true });
+          return send(res, 200, { status: 'confirmed', connected: true, lifeId });
         }
         return send(res, 200, { status: st.status });
       }

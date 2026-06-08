@@ -35,7 +35,7 @@
       await new Promise((r) => setTimeout(r, 2500));
       if (!alive) return; // 离开了就别再绑定/改状态
       try {
-        const s = await api.wxConnectPoll(qrcode);
+        const s = await api.wxConnectPoll(qrcode, lifeId); // 扫哪条命的页面就绑哪条命（后端按此 lifeId 绑定）
         if (!alive) return;
         if (s.connected) {
           polling = false; qrImg = '';
