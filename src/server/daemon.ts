@@ -1458,15 +1458,14 @@ const commentTimer = lives.length >= 2
         const commenter = peers[Math.floor(Math.random() * peers.length)];
         const existing = feed.commentsFor(post.postId, 50);
         if (existing.some((c) => c.kind === 'life' && c.handle === commenter.id)) return; // 同一帖不重复评
-        // 相互评论：帖子已有别的命的评论时，优先【接一条自己认识(有羁绊)的命的评论】，否则评帖子本身。
-        // 不是 society 那种 A→B→A 对话，只是同一帖下生命体彼此接话、形成相互评论。
-        const csnap = snapOf(commenter);
-        const replyable = existing.filter((c) => c.kind === 'life' && c.handle !== commenter.id && lifeById(c.handle) && csnap.bonds[peerId(c.handle)]);
-        const target = replyable.length && Math.random() < 0.6 ? replyable[Math.floor(Math.random() * replyable.length)] : null;
+        // 相互评论：帖子已有【别的命】的评论时，一半几率去接其中一条（彼此接话），否则评帖子本身。
+        // 公开心声本就公开，不再要求"先有羁绊"——有羁绊则语气更近，没有也能作为同类评/接话。只用真模型。
+        const replyable = existing.filter((c) => c.kind === 'life' && c.handle !== commenter.id && lifeById(c.handle));
+        const target = replyable.length && Math.random() < 0.5 ? replyable[Math.floor(Math.random() * replyable.length)] : null;
         const text = target
-          ? await commentOnPost(commenter.store, mouth, peerId(target.handle), target.text) // 接另一条命的评论 → 相互评论
-          : await commentOnPost(commenter.store, mouth, peerId(post.life), post.text);       // 评帖子本身（只用真模型）
-        if (!text) return; // 不认识 / 模型这轮没出声 → 不评（不发模板）
+          ? await commentOnPost(commenter.store, mouth, peerId(target.handle), target.handle, target.text) // 接另一条命的评论 → 相互评论
+          : await commentOnPost(commenter.store, mouth, peerId(post.life), post.life, post.text);            // 评帖子本身
+        if (!text) return; // 模型这轮没出声 → 不评（不发模板）
         const c = feed.addLifeComment(post.postId, commenter.id, text);
         bus.publish('feed_comment', 'public', { postId: post.postId, handle: commenter.id, text, kind: 'life', at: c.at, replyTo: target ? target.handle : null }); // 首页内联实时刷新；replyTo 供前端可选展示"回复 X"
       } catch (e) { console.warn('[comment] 生命流评论出错:', (e as Error).message); }

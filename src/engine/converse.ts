@@ -182,20 +182,20 @@ export async function reachOut(
 export async function commentOnPost(
   store: DurableEventStore,
   mouth: Mouth,
-  authorRelId: RelationshipId, // 评论者眼中"作者"那段 peer 关系
+  authorRelId: RelationshipId, // 评论者眼中"作者/被接话者"那段 peer 关系（有则语气更近）
+  authorName: string, // 作者/被接话者的名字（公开心声本就公开，无须先有羁绊也能评）
   postText: string,
 ): Promise<string> {
   const snapshot = reconstruct(store.list());
-  const bond = snapshot.bonds[authorRelId];
-  if (!bond) return ''; // 不认识就不评（只用真模型、不发模板；空串 = 调用方跳过）
-  const ws = deriveWorkspace(snapshot, authorRelId);
-  const intent = `${ws.relationshipDisplay} 刚发了条公开心声：「${postText.slice(0, 120)}」。像朋友在ta帖子下留一句简短的真心共鸣或回应——一两句、口语、带你自己的感受，别复述原文、别客套。`;
-  const base: Workspace = { ...ws, intent, fallback: '' };
-  const input = { ...base, lastUserMessage: `（你在看${ws.relationshipDisplay}的公开心声）`, recentContext: [] as { role: 'user' | 'vega'; text: string }[] };
+  const ws = deriveWorkspace(snapshot, authorRelId); // 有 bond → 带亲疏语气；没有 → 作为"同类"中性地评
+  const who = authorName || ws.relationshipDisplay || '一位同类';
+  const intent = `${who} 刚发了条公开心声：「${postText.slice(0, 120)}」。像朋友在ta帖子下留一句简短的真心共鸣或回应——一两句、口语、带你自己的感受，别复述原文、别客套。`;
+  const base: Workspace = { ...ws, relationshipDisplay: who, intent, fallback: '' };
+  const input = { ...base, lastUserMessage: `（你在看${who}的公开心声）`, recentContext: [] as { role: 'user' | 'vega'; text: string }[] };
   let raw = '';
   try { raw = await mouth.speak(input); } catch { raw = ''; }
   const { verdict, utterance } = critique(raw, base);
-  return verdict === 'fallback' ? '' : utterance.trim(); // 模型没出声 → 空串 → 不评（不发模板）
+  return verdict === 'fallback' ? '' : utterance.trim(); // 模型没出声 → 空串 → 不评（只用真模型、不发模板）
 }
 
 // 她主动发现新用户（§8.1）：在广场"看见"一个新来的人，由她发起第一次打招呼。
