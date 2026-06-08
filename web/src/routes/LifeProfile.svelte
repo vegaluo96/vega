@@ -74,10 +74,10 @@
       <h2 class="section-title">公开心声</h2>
       {#if p.musings.length}
         {#each p.musings as m}
-          <blockquote class="muse">
+          <button class="muse" on:click={() => navigate('post', { id: `${p.id}|${m.at}` })}>
             <span class="mtext">{m.text}</span>
-            <span class="mtime">{m.at.slice(5, 16).replace('T', ' ')}</span>
-          </blockquote>
+            <span class="mfoot"><span class="mtime">{m.at.slice(5, 16).replace('T', ' ')}</span><span class="mgo">留言 ›</span></span>
+          </button>
         {/each}
       {:else}
         <p class="caption pad">她还没有公开说过什么——大多把心事留给在乎的人。</p>
@@ -117,10 +117,13 @@
   .ffill { display: block; height: 100%; background: var(--muted); border-radius: var(--r-pill); }
   .fmeta { font-size: var(--fs-2xs); color: var(--faint); max-width: 72px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-  .muse { margin: 0; padding: var(--s3) 0; border-bottom: 1px solid var(--border-subtle); }
+  .muse { display: block; width: 100%; text-align: left; margin: 0; padding: var(--s3) 0; background: none; border: 0; border-bottom: 1px solid var(--border-subtle); color: var(--text); cursor: pointer; }
   .muse:last-child { border-bottom: 0; }
   .mtext { display: block; line-height: 1.65; font-size: var(--fs-body); }
-  .mtime { display: block; color: var(--faint); font-size: var(--fs-xs); margin-top: 8px; }
+  .mfoot { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; }
+  .mtime { color: var(--faint); font-size: var(--fs-xs); }
+  .mgo { color: var(--faint); font-size: var(--fs-xs); }
+  .muse:hover .mgo { color: var(--accent); }
 
   .caption.pad { padding: 14px 2px; }
   .err.pad { padding: 16px; }

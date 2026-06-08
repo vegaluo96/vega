@@ -245,16 +245,21 @@ interface Life {
   lastTickAt: number; // 回路健康：上次自主想念
   lastSocialAt: number; // 上次同类寒暄
   lastMuseAt: number; // 上次公开心声
+  museEveryMs: number; // 本条命下一条心声的间隔（每条命不同 + 每次重抽 → 发帖节奏自然、不齐步走）
   samples: Array<{ at: number; vit: number; val: number; ene: number; con: number; emo: string }>; // 健康时间线（环形缓冲）
 }
 
 // 先天种子见 src/engine/seeds.ts（单一来源）。每条命按 id 取不同 archetype；出生即冻结、不可改写。
 const seedFor = (id: string): EventDraft<'LIFE_GENESIS'>['payload'] => genesisPayloadFor(id, { relationshipId: REL, identityRef: userName });
 
+// 心声间隔抖动：每次取 [0.5×, 1.5×] MUSE_MS → 不同命、不同时段都不一样，避免"整点齐步发帖"的机械感。
+const nextMuseGap = (): number => Math.floor(MUSE_MS * (0.5 + Math.random()));
+
 function makeLife(id: string, path: string): Life {
   // C4：prod 拒绝内存/易失存储——否则重启=她被彻底重置。生产环境必须落盘。
   assertPersistenceSafeForProd({ storeKind: 'file', path });
-  return { id, store: createFileEventStore(id, path), path, peers: [], lastReflectAt: Date.now(), lastReflectSeq: 0, state: null, stateSeq: -1, lastCheckpointAt: 0, lastTickAt: 0, lastSocialAt: 0, lastMuseAt: Date.now(), samples: [] };
+  // 初始 lastMuseAt 往回错开一段随机量 → 多条命不在启动后同一刻扎堆发帖（有的几分钟内开口、有的晚些）。
+  return { id, store: createFileEventStore(id, path), path, peers: [], lastReflectAt: Date.now(), lastReflectSeq: 0, state: null, stateSeq: -1, lastCheckpointAt: 0, lastTickAt: 0, lastSocialAt: 0, lastMuseAt: Date.now() - Math.floor(Math.random() * MUSE_MS), museEveryMs: nextMuseGap(), samples: [] };
 }
 const lives: Life[] = LIVES.map((id, idx) => makeLife(id, idx === 0 ? LIFE_PATH : join(DATA_DIR, `${id}.jsonl`)));
 const recomputePeers = (): void => { for (const l of lives) l.peers = lives.filter((o) => o.id !== l.id).map((o) => o.id); };
@@ -1370,11 +1375,12 @@ const heartbeat = setInterval(async () => {
         life.lastReflectAt = Date.now();
         life.lastReflectSeq = life.store.version();
       }
-      if (Date.now() - life.lastMuseAt > MUSE_MS) {
+      if (Date.now() - life.lastMuseAt > life.museEveryMs) {
         const mt = now();
         const w = pickRecentWorld(life); // 随机一条她最近读到的世界事件 → 就着它发帖；没有则发自己的念头
         const o = await muse(life.store, mouth, mt, w); // 公开心声：不针对任何人、不含私密
         life.lastMuseAt = Date.now();
+        life.museEveryMs = nextMuseGap(); // 下一条心声重新抽间隔 → 节奏持续变化，不形成固定周期
         if (o) {
           const src = w ? { title: w.title, source: w.source, url: w.url } : null;
           if (src) feed.setSource(`${life.id}|${mt}`, src); // 帖子出处（展示用，平台层，不进神圣日志）
