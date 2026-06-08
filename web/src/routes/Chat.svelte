@@ -1,10 +1,8 @@
 <script>
   import { onMount, onDestroy, tick } from 'svelte';
   import { api, stream } from '../lib/api.js';
-  import { navigate } from '../lib/router.js';
   import { t } from '../lib/i18n.js';
   import DetailHeader from '../components/DetailHeader.svelte';
-  import LifeAvatar from '../components/LifeAvatar.svelte';
   import Composer from '../components/Composer.svelte';
   import RelationshipPanel from '../components/RelationshipPanel.svelte';
   import WechatBind from '../components/WechatBind.svelte';
@@ -91,10 +89,8 @@
 
 <div class="chat" use:fitViewport>
   <DetailHeader
-    subtitle={life ? (life.awake ? (life.feeling || life.emotion) : t('life.asleep')) : ''}
     onTitle={life ? () => (showRel = !showRel) : undefined}
     loading={!life}>
-    <span slot="lead">{#if life}<button class="avbtn" on:click={() => navigate('profile', { id: life.id })} aria-label="她的主页"><LifeAvatar id={life.id} emotion={life.emotion} awake={life.awake} size={38} /></button>{/if}</span>
     <svelte:fragment slot="title">{life ? life.id : ''}</svelte:fragment>
   </DetailHeader>
 
@@ -135,8 +131,6 @@
   .chat { position: fixed; top: 0; left: 0; right: 0; z-index: 30; display: flex; flex-direction: column; height: 100vh; height: 100dvh; transform-origin: top; }
   @media (min-width: 1000px) { .chat { position: relative; z-index: auto; } }
 
-  /* slot 进 DetailHeader 的小件 */
-  .avbtn { background: none; border: 0; padding: 0; display: inline-flex; cursor: pointer; }
 
   .relwrap { max-width: var(--maxw); width: 100%; margin: 0 auto; padding: var(--s3) var(--gutter) 0; }
 

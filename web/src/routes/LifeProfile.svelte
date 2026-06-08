@@ -23,7 +23,7 @@
   $: ageText = p ? (p.ageDays >= 1 ? `醒来约 ${p.ageDays} 天` : '今天刚醒来') : '';
 </script>
 
-<DetailHeader title="她的主页" />
+<DetailHeader title={p ? p.id : ''} />
 
 {#if error}<p class="err pad">{error}</p>{/if}
 {#if p}
