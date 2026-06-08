@@ -17,7 +17,10 @@ const MAX = 800;
 function clip(u: string): string {
   if (u.length <= MAX) return u;
   const head = u.slice(0, MAX);
-  const cut = Math.max(head.lastIndexOf('。'), head.lastIndexOf('！'), head.lastIndexOf('？'), head.lastIndexOf('…'), head.lastIndexOf('\n'));
+  const cut = Math.max(
+    head.lastIndexOf('。'), head.lastIndexOf('！'), head.lastIndexOf('？'), head.lastIndexOf('…'), head.lastIndexOf('\n'),
+    head.lastIndexOf('. '), head.lastIndexOf('! '), head.lastIndexOf('? '), // 半角句末（英文/混排）也作断点，免得纯英文长文句中硬截
+  );
   return (cut > MAX * 0.5 ? head.slice(0, cut + 1) : head).trim();
 }
 

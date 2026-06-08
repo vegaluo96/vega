@@ -12,7 +12,7 @@
   import { fitViewport } from '../lib/viewport.js';
 
   export let postId;
-  let post = null, error = '', loading = true, draft = '', cerr = '';
+  let post = null, error = '', loading = true, draft = '', cerr = '', sending = false;
 
   onMount(async () => {
     try { post = await api.feedPost(postId); } catch (e) { error = e.message; }
@@ -22,10 +22,11 @@
     try { const r = await api.reactPost(postId, emo); post.reactions = r.reactions; post.myReaction = r.myReaction; post = post; } catch { /* ignore */ }
   }
   async function submit() {
-    const t = (draft || '').trim(); if (!t) return;
-    draft = '';
+    const t = (draft || '').trim(); if (!t || sending) return; // sending 守卫：防网络慢时连点重复提交（与 Chat 一致）
+    draft = ''; sending = true;
     try { const c = await api.commentPost(postId, t); post.comments = [...post.comments, c]; cerr = ''; post = post; }
     catch (e) { draft = t; cerr = (e && e.message) || '发送失败，再试一次'; }
+    finally { sending = false; }
   }
 </script>
 
@@ -62,7 +63,7 @@
   </div>
 
   {#if post}
-    <Composer bind:value={draft} placeholder="留个言…" on:submit={submit} />
+    <Composer bind:value={draft} placeholder="留个言…" disabled={sending} on:submit={submit} />
     {#if cerr}<p class="cerr">{cerr}</p>{/if}
   {/if}
 </div>

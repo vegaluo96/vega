@@ -42,6 +42,17 @@ test('内核·被辱骂会确实掉状态（没开感知、纯确定性词表也
   }
 });
 
+test('内核·含"sb"的正常词(如 USB)不再被当辱骂掉状态', () => {
+  const { s, cleanup } = boot();
+  try {
+    const before = reconstruct(s.list());
+    say(s, '我的USB坏了，帮我看看'); // 含 'sb' 子串但不是辱骂
+    const after = reconstruct(s.list());
+    assert.ok(after.soma.valence.value >= before.soma.valence.value - 0.05, `USB 不该被当辱骂重创心情，实得 ${after.soma.valence.value}`);
+    assert.ok(after.bonds['r'].trust >= before.bonds['r'].trust - 0.05, '信任不该因 USB 暴跌');
+  } finally { cleanup(); }
+});
+
 test('兜底嘴·被骂时划界限，而不是平静地"你接着说"', () => {
   const input = { lastUserMessage: '傻逼吧', relationshipDisplay: 'A', mood: '平静', intent: '', selfFacts: '', recentContext: [] } as unknown as Parameters<typeof composeUtterance>[0];
   const out = composeUtterance(input);

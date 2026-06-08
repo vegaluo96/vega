@@ -192,7 +192,7 @@ if (VAPID) {
     for (const sub of accounts.getPushSubs(userId)) {
       sendPush(sub, payload, VAPID, VAPID_SUBJECT)
         .then((st) => { if (st === 404 || st === 410) accounts.removePushSub(sub.endpoint); })
-        .catch(() => { /* 推送失败不影响其他 */ });
+        .catch((e) => console.warn('[push] 发送失败（不影响其他）:', (e as Error).message)); // 留一行日志，别让推送全挂成黑盒
     }
   });
 }
@@ -401,6 +401,7 @@ async function wechatReply(openid: string, content: string, defaultLifeId?: stri
     if (r) return `✅ 已和你的 ZSKY 账号打通，我是 ${r.lifeId}。`;
     bound = accounts.ensureWechatUser(openid, defaultLifeId ?? lives[0]?.id ?? '');
   }
+  if (!bound) return '出了点问题，稍后再来找我。'; // 防空：ensureWechatUser 万一没建出来，别让 bound.lifeId 抛 TypeError
   const lf = lifeById(bound.lifeId);
   const ac = accounts.getAccount(bound.userId);
   if (!lf || !ac) return '出了点问题，稍后再来找我。';

@@ -24,3 +24,11 @@ test('措辞·整条都是旁白/动作 → 退确定性兜底', () => {
   assert.equal(r.verdict, 'fallback');
   assert.equal(r.utterance, '我在');
 });
+
+test('措辞·超长英文按句末截，不在词中硬切', () => {
+  const long = 'The weather today is calm and the river is quiet. '.repeat(40); // ~2000 字，纯英文半角句号
+  const r = critique(long, ws);
+  assert.equal(r.verdict, 'accepted');
+  assert.ok(r.utterance.length <= 800, `截到 800 内，实得 ${r.utterance.length}`);
+  assert.ok(r.utterance.endsWith('.'), `应在半角句末截，实得结尾：${r.utterance.slice(-15)}`);
+});
