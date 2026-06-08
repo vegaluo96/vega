@@ -94,6 +94,8 @@
         <span class="name">{life.id} <span class="dot" class:awake={life.awake}></span></span>
         <span class="sub">{life.awake ? life.feeling || life.emotion : t('life.asleep')}{rel ? ' · ' + rel.attachment : ''}</span>
       </button>
+    {:else}
+      <span class="who loading"><span class="ph nm"></span><span class="ph sb"></span></span>
     {/if}
     <span class="bal" title="表达额度">{balance != null ? '心意 ' + balance : ''}</span>
   </header>
@@ -138,10 +140,15 @@
 
   .head {
     flex: none;
-    display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+    display: flex; align-items: center; gap: 10px; min-height: 56px; padding: 8px 12px;
     border-bottom: 1px solid var(--border);
     background: color-mix(in srgb, var(--bg) 84%, transparent); backdrop-filter: saturate(180%) blur(14px);
   }
+  /* 载入态占位：避免不同生命体进入时头部从空白跳成两行（高度统一、不闪） */
+  .who.loading { flex: 1; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+  .ph { display: block; border-radius: 6px; background: var(--surface-2); }
+  .ph.nm { width: 90px; height: 15px; }
+  .ph.sb { width: 140px; height: 11px; }
   .back { background: none; border: 0; padding: 0 6px; color: var(--text); display: inline-flex; align-items: center; }
   .who { flex: 1; min-width: 0; background: none; border: 0; text-align: left; padding: 2px 4px; border-radius: var(--r-sm); transition: background var(--t-hover) ease; }
   .who:hover { background: var(--surface-2); }

@@ -5,6 +5,7 @@
   import { enablePush, pushSupported } from '../lib/push.js';
   import PageHeader from '../components/PageHeader.svelte';
   import Icon from '../components/Icon.svelte';
+  import Skeleton from '../components/Skeleton.svelte';
   import { qrDataUrl } from '../lib/qr.js';
 
   let pushMsg = '';
@@ -83,6 +84,7 @@
 <div class="me">
   <div class="sticktop"><PageHeader title="你在 ZSKY" /></div>
 
+  {#if !me && !error}<Skeleton rows={4} />{/if}
   {#if me}
     <section class="block">
       <h2 class="section-title">心意值</h2>

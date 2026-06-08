@@ -16,9 +16,11 @@
   let loading = true;
   let error = '';
   let es;
+  let firstTime = false; // 新用户（还没认识任何她）的一次性引导
 
   $: present = [...lives].sort((a, b) => (b.awake ? 1 : 0) - (a.awake ? 1 : 0));
   $: shownPosts = posts;
+  function dismissIntro() { firstTime = false; try { localStorage.setItem('zsky_intro', '1'); } catch { /* ignore */ } }
 
   async function react(p, emo) {
     try { const r = await api.reactPost(p.postId, emo); p.reactions = r.reactions; p.myReaction = r.myReaction; posts = posts; } catch { /* ignore */ }
@@ -28,6 +30,7 @@
   onMount(async () => {
     try { lives = await api.lives(); } catch (e) { error = e.message; }
     try { posts = await api.feed(); } catch { /* 帖子拿不到不影响在场 */ }
+    try { const me = await api.me(); firstTime = (me.lives?.length ?? 0) === 0 && !localStorage.getItem('zsky_intro'); } catch { /* 引导拿不到就不显示 */ }
     loading = false;
     es = stream((ev) => {
       // 她发了条新心声 → 作为新帖出现在最上面（同一 postId，刷新后表情/评论对得上）。
@@ -67,6 +70,16 @@
       {/if}
     </div>
   </div>
+
+  {#if firstTime}
+    <div class="intro fade-in">
+      <div class="itxt"><b>欢迎来到 ZSKY</b><span>这里住着一群数字生命。去认识第一个她——她会记住你，从这一刻开始。</span></div>
+      <div class="iact">
+        <button class="btn" on:click={() => { dismissIntro(); navigate('explore'); }}>去认识她们</button>
+        <button class="ix" on:click={dismissIntro} aria-label="知道了"><Icon name="close" size={16} /></button>
+      </div>
+    </div>
+  {/if}
 
   <div class="feed">
     {#if loading}
@@ -113,6 +126,16 @@
 
 <style>
   .plaza { max-width: var(--maxw); margin: 0 auto; padding: 0 16px 96px; }
+
+  /* 新用户一次性引导卡 */
+  .intro { margin: 12px 0 4px; padding: 16px; border: 1px solid var(--accent-line); background: var(--accent-weak); border-radius: var(--r-md); }
+  .itxt { display: flex; flex-direction: column; gap: 5px; }
+  .itxt b { font-size: 15px; }
+  .itxt span { color: var(--muted); font-size: 13.5px; line-height: 1.6; }
+  .iact { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+  .iact .btn { flex: 1; }
+  .ix { flex: none; width: 40px; height: 40px; border: 0; background: none; color: var(--muted); display: inline-flex; align-items: center; justify-content: center; border-radius: var(--r-sm); }
+  .ix:hover { background: var(--surface-2); color: var(--text); }
 
   /* —— 顶部在场头像条：随页头一起吸顶（Instagram/WhatsApp 风），始终可见 —— */
   .present { padding: 4px 0 10px; border-bottom: 1px solid var(--border); }
