@@ -344,7 +344,7 @@ async function runChannel(userId: string): Promise<void> {
             if (!ac) continue;
             let reply: string;
             let delayed = false; // 走了模型 → 回复延迟若干秒，incoming 的 context_token 多半已过期
-            if (snapOf(lf).awake) {
+            if (snapOf(lf).willingToWake) { // 收到消息=把她叫醒（开连接由 respondAsUser 完成）；只有她【真的拒醒】才回睡眠提示，不再因"此刻无连接"卡死
               const resp = await respondAsUser(lf, ac, m.text, 'wechat');
               delayed = true;
               // 诊断"没连上模型"：voice=plain＝没走模型（无 key 或余额<1，看余额判别）；
@@ -413,7 +413,7 @@ async function wechatReply(openid: string, content: string, defaultLifeId?: stri
   const ac = accounts.getAccount(bound.userId);
   if (!lf || !ac) return '出了点问题，稍后再来找我。';
   if (content === '') return '（我在听你说）';
-  if (!snapOf(lf).awake) return '她在更深的睡眠里，等会儿再来找我吧。';
+  if (!snapOf(lf).willingToWake) return '她在更深的睡眠里，等会儿再来找我吧。'; // 收到消息即唤醒；仅真拒醒才回此句
   const rr = await respondAsUser(lf, ac, content, 'wechat');
   return String((rr as { utterance?: string }).utterance ?? '…');
 }
@@ -844,7 +844,7 @@ const server = createServer(async (req, res) => {
         if (!life || !acct) return send(res, 404, { error: 'life or account gone' });
         const content = String(b.content ?? '').slice(0, 4000).trim();
         if (content === '') return send(res, 400, { error: 'content required' });
-        if (!snapOf(life).awake) return send(res, 200, { awake: false, note: '她在更深的睡眠里，暂不回应。' });
+        if (!snapOf(life).willingToWake) return send(res, 200, { awake: false, note: '她在更深的睡眠里，暂不回应。' });
         return send(res, 200, { awake: true, ...(await respondAsUser(life, acct, content, 'wechat')) });
       }
       // 以下需登录
@@ -1085,7 +1085,7 @@ const server = createServer(async (req, res) => {
         const b = await readJson(req);
         const content = String(b.content ?? '').slice(0, 4000).trim();
         if (content === '') return send(res, 400, { error: 'content required' });
-        if (!snapOf(life2).awake) return send(res, 200, { awake: false, note: '她在更深的睡眠里，暂不回应。' });
+        if (!snapOf(life2).willingToWake) return send(res, 200, { awake: false, note: '她在更深的睡眠里，暂不回应。' });
         return send(res, 200, { awake: true, ...(await respondAsUser(life2, me, content, 'web')) });
       }
       return send(res, 404, { error: 'not found' });
@@ -1281,7 +1281,7 @@ const server = createServer(async (req, res) => {
       const content = String(body.content ?? '').slice(0, 4000).trim();
       if (content === '') return send(res, 400, { error: 'content required' });
       const before = snapOf(life);
-      if (!before.awake) return send(res, 200, { awake: false, note: '她在更深的睡眠里，暂不回应。' });
+      if (!before.willingToWake) return send(res, 200, { awake: false, note: '她在更深的睡眠里，暂不回应。' });
       const r = await serializer.run(life.id, async () => {
         if (!snapOf(life).openConnections.includes(REL)) {
           runTurn(life.store, [{ type: 'CONNECTION_OPENED', source: 'host', relationshipId: REL, occurredAt: now(), payload: { relationshipId: REL, host: { kind: 'http', ref: 'say' } } }]);
