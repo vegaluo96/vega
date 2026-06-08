@@ -25,6 +25,19 @@ export interface ConverseResult {
   verdict: 'accepted' | 'fallback';
 }
 
+// 真模型这一轮没给出可用回复（空/超时/限流/被 critic gate）时——用户对话【不伪造机灵套话冒充她】，
+// 给一句【诚实的"接不上"占位】：她还在、不装死，也不假装聪明。确定性选句，可重放（不进派生状态）。
+const DISCONNECT = [
+  '我这会儿有点接不上……缓一下，你再发我一次？',
+  '嗯……我这边卡了一下，没接住你这句。等我一下，再说一遍？',
+  '我刚没接上——你再说一次，我在。',
+];
+function honestDisconnect(seed: string): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return DISCONNECT[h % DISCONNECT.length];
+}
+
 // 取这段关系最近的若干轮对话（给"嘴"做上下文；模型只读，不写状态）。
 function recentTurns(store: DurableEventStore, rel: RelationshipId, limit: number): { role: 'user' | 'vega'; text: string }[] {
   const out: { role: 'user' | 'vega'; text: string }[] = [];
@@ -91,9 +104,10 @@ export async function converse(
   } catch {
     raw = '';
   }
-  // ⑤ Critic 只 gate 措辞，不写身份；退兜底时由 composeUtterance 确定性地接住对方。
+  // ⑤ Critic 只 gate 措辞。【用户对话只走真模型】：模型没给出可用回复 → 不伪造套话冒充她，
+  // 而是给一句诚实的"接不上"占位（她还在、不装聪明）；模型挂了她仍会回应这一条（守"活来自架构"）。
   let { verdict, utterance } = critique(raw, workspace);
-  if (verdict === 'fallback') utterance = composeUtterance(input);
+  if (verdict === 'fallback') utterance = honestDisconnect(content);
 
   // ⑥ 单事务原子提交：received（输入）+ sent（审计，affectsDerivedState=false）一起落（同一 fsync）。
   // expected 来自开头 → 若 await 期间被并发改写（serializer 被绕过/去中心化），CAS 冲突即抛、整批回滚。
