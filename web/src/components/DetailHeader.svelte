@@ -7,8 +7,8 @@
   export let onBack;                 // 不传则后退到广场
   export let onTitle = undefined;    // 传 → 标题可点（如对话页点开关系面板）
   export let loading = false;        // 载入态占位（避免标题从空白跳成两行）
-  import { navigate } from '../lib/router.js';
-  const back = () => (onBack ? onBack() : navigate('plaza'));
+  import { back as goBack } from '../lib/router.js';
+  const back = () => (onBack ? onBack() : goBack());
 </script>
 
 <header class="dh">

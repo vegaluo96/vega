@@ -91,7 +91,6 @@
 
 <div class="chat" use:fitViewport>
   <DetailHeader
-    onBack={() => navigate('plaza')}
     subtitle={life ? ((life.awake ? (life.feeling || life.emotion) : t('life.asleep')) + (rel ? ' · ' + rel.attachment : '')) : ''}
     onTitle={life ? () => (showRel = !showRel) : undefined}
     loading={!life}>

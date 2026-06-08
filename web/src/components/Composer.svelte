@@ -22,7 +22,7 @@
      border 设透明只为保留 1px 占位，避免聚焦时尺寸跳动。聚焦态走中性墨色、去掉品牌紫光环。 */
   .ci { flex: 1; min-width: 0; border-color: transparent; box-shadow: inset 0 0 0 1px var(--border); }
   .ci:focus { border-color: transparent; box-shadow: inset 0 0 0 1.5px var(--text); }
-  .send { flex: none; width: 46px; height: 46px; border: 0; border-radius: 50%; background: var(--accent); color: var(--on-accent); display: inline-flex; align-items: center; justify-content: center; transition: background var(--t-hover) ease, opacity var(--t-hover) ease; }
-  .send:hover:not(:disabled) { background: var(--brand-hover); }
+  .send { flex: none; width: 46px; height: 46px; border: 0; border-radius: 50%; background: var(--primary); color: var(--on-primary); display: inline-flex; align-items: center; justify-content: center; transition: opacity var(--t-hover) ease; }
+  .send:hover:not(:disabled) { opacity: 0.9; }
   .send:disabled { opacity: 0.4; }
 </style>
