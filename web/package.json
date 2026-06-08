@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "lint:ui": "node scripts/check-seams.mjs"
+    "lint:ui": "node scripts/check-seams.mjs && node scripts/check-tokens.mjs"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^3.1.2",
