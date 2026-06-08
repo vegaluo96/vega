@@ -6,6 +6,7 @@
   import RelationshipPanel from '../components/RelationshipPanel.svelte';
   import WechatBind from '../components/WechatBind.svelte';
   import Icon from '../components/Icon.svelte';
+  import { fitViewport } from '../lib/viewport.js';
 
   export let lifeId;
 
@@ -86,7 +87,7 @@
   onDestroy(() => es && es.close());
 </script>
 
-<div class="chat">
+<div class="chat" use:fitViewport>
   <header class="head">
     <button class="back" on:click={() => navigate('plaza')} aria-label="返回"><Icon name="back" size={24} /></button>
     {#if life}

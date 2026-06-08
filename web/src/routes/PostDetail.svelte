@@ -8,6 +8,7 @@
   import DetailHeader from '../components/DetailHeader.svelte';
   import { MOODS } from '../lib/moods.js';
   import { relTime } from '../lib/time.js';
+  import { fitViewport } from '../lib/viewport.js';
 
   export let postId;
   let post = null, error = '', loading = true, draft = '', cerr = '';
@@ -27,7 +28,7 @@
   }
 </script>
 
-<div class="pd">
+<div class="pd" use:fitViewport>
   <DetailHeader title="心声" />
 
   <div class="scroll">

@@ -13,7 +13,7 @@
 
   const TABS = [
     { k: 'plaza', ico: 'plaza', label: 'nav.plaza' },
-    { k: 'explore', ico: 'explore', label: 'nav.explore' },
+    { k: 'explore', ico: 'search', label: 'nav.explore' },
     { k: 'chats', ico: 'chats', label: 'nav.chats' },
     { k: 'notifications', ico: 'notifications', label: 'nav.notifications' },
     { k: 'me', ico: 'me', label: 'nav.me' },
