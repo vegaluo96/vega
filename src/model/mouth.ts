@@ -59,24 +59,35 @@ export function createApiyiMouth(cfg: ApiyiConfig): Mouth {
         ...input.recentContext.map((t) => ({ role: t.role === 'vega' ? 'assistant' : 'user', content: t.text })),
         { role: 'user', content: input.lastUserMessage },
       ];
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), cfg.timeoutMs);
-      try {
-        const res = await fetch(`${cfg.baseUrl}/chat/completions`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.apiKey}` },
-          // "嘴"该说短句（像发消息，不是写散文）：封顶输出 + 收敛温度，防长篇独白/文艺腔飙车，省 token、降延迟。
-          body: JSON.stringify({ model: cfg.model, messages, temperature: 0.6, max_tokens: 160 }),
-          signal: ctrl.signal,
-        });
-        if (!res.ok) throw new Error(`model http ${res.status}`);
-        const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
-        const text = data.choices?.[0]?.message?.content?.trim();
-        if (!text) throw new Error('empty model response');
-        return text;
-      } finally {
-        clearTimeout(timer);
+      // "嘴"该说短句（像发消息，不是写散文）：封顶输出 + 收敛温度，防长篇独白/文艺腔飙车，省 token、降延迟。
+      const body = JSON.stringify({ model: cfg.model, messages, temperature: 0.6, max_tokens: 160 });
+      // 瞬时失败（429/5xx/网络/空）→ 快速重试一次再回落，减少"真模型偶发挂掉→掉回笨模板"的抖动；
+      // 但【超时】不重试：超时说明这轮就是太慢，重试只会让用户多等一轮，直接快速回落兜底。
+      let lastErr: unknown;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), cfg.timeoutMs);
+        try {
+          const res = await fetch(`${cfg.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.apiKey}` },
+            body,
+            signal: ctrl.signal,
+          });
+          if (!res.ok) throw new Error(`model http ${res.status}`);
+          const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+          const text = data.choices?.[0]?.message?.content?.trim();
+          if (!text) throw new Error('empty model response');
+          return text;
+        } catch (e) {
+          lastErr = e;
+          if ((e as { name?: string }).name === 'AbortError') throw e; // 超时 → 不重试，快速回落
+        } finally {
+          clearTimeout(timer);
+        }
+        if (attempt === 0) await new Promise((r) => setTimeout(r, 400)); // 短暂退避后重试一次
       }
+      throw lastErr;
     },
   };
 }

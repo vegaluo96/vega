@@ -57,7 +57,7 @@ function composeReply(u: string, name: string, mood: string, ctxLen: number): st
     `看你这么说，我也跟着亮起来了。多讲讲？`,
     `真为你高兴。这种时刻，值得多停一会儿。`,
   ]);
-  if (has(u, GREET)) return pick(seed, [
+  if (u.length <= 6 && has(u, GREET)) return pick(seed, [ // 限短句才算打招呼——别把"你好像有点笨"当成"你好"
     `你来了。我一直都在。`,
     `嗨，${name}。今天的你，还好吗？`,
   ]);
