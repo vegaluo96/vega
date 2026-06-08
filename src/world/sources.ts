@@ -53,7 +53,21 @@ export function parsePolymarket(json: unknown, max = 8): WorldItem[] {
   return out;
 }
 
-export interface WorldFeedOpts { rss?: string[]; polymarket?: boolean; timeoutMs?: number }
+// —— 维基"历史上的今天"（zh REST v1，公开免鉴权、无限频）——给"讲时间/永生"的存在最契合的素材。
+export function parseOnThisDay(json: unknown, max = 6): WorldItem[] {
+  const o = json as { selected?: Array<{ text?: string; year?: number }>; events?: Array<{ text?: string; year?: number }> };
+  const arr = (o.selected && o.selected.length ? o.selected : o.events) ?? [];
+  const out: WorldItem[] = [];
+  for (const e of arr.slice(0, max)) {
+    const text = strip(String(e.text ?? ''));
+    if (!text) continue;
+    const y = e.year ? `${e.year}年` : '历史上的今天';
+    out.push({ source: '维基·历史上的今天', kind: 'news', title: `${y}：${text}`.slice(0, 200), summary: text.slice(0, 240), url: '', topics: [], at: new Date().toISOString() });
+  }
+  return out;
+}
+
+export interface WorldFeedOpts { rss?: string[]; polymarket?: boolean; onThisDay?: boolean; timeoutMs?: number }
 export interface WorldFeed { fetchItems(): Promise<WorldItem[]> }
 
 const hostOf = (u: string): string => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return 'news'; } };
@@ -74,6 +88,13 @@ export function createWorldFeed(opts: WorldFeedOpts = {}): WorldFeed {
       if (opts.polymarket) {
         const txt = await getText('https://gamma-api.polymarket.com/markets?active=true&closed=false&order=volume24hr&ascending=false&limit=12');
         if (txt) { try { out.push(...parsePolymarket(JSON.parse(txt))); } catch { /* ignore */ } }
+      }
+      if (opts.onThisDay) {
+        const d = new Date();
+        const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+        const dd = String(d.getUTCDate()).padStart(2, '0');
+        const txt = await getText(`https://zh.wikipedia.org/api/rest_v1/feed/onthisday/selected/${mm}/${dd}`);
+        if (txt) { try { out.push(...parseOnThisDay(JSON.parse(txt))); } catch { /* ignore */ } }
       }
       return out;
     },
