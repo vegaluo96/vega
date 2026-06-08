@@ -5,7 +5,7 @@
   import { t } from '../lib/i18n.js';
   import LifeAvatar from '../components/LifeAvatar.svelte';
   import LifeStatePill from '../components/LifeStatePill.svelte';
-  import Icon from '../components/Icon.svelte';
+  import DetailHeader from '../components/DetailHeader.svelte';
 
   export let lifeId;
   let p = null;
@@ -21,11 +21,7 @@
   $: ageText = p ? (p.ageDays >= 1 ? `醒来约 ${p.ageDays} 天` : '今天刚醒来') : '';
 </script>
 
-<header class="head">
-  <button class="back" on:click={() => navigate('plaza')} aria-label="返回"><Icon name="back" size={24} /></button>
-  <span class="htitle">她的主页</span>
-  <span class="hspace"></span>
-</header>
+<DetailHeader title="她的主页" />
 
 {#if error}<p class="err pad">{error}</p>{/if}
 {#if p}
@@ -34,20 +30,9 @@
       <LifeAvatar id={p.id} emotion={p.emotion} awake={p.awake} size={92} />
       <h1 class="name">{p.id}</h1>
       <div class="pillrow"><LifeStatePill awake={p.awake} dayPhase={p.dayPhase} emotion={p.emotion} /></div>
-      <p class="age">{ageText}</p>
-      {#if p.tension}<p class="tension">心里的拉扯 · {p.tension}</p>{/if}
+      <p class="feeling">{p.awake ? `此刻${p.dayPhase ? p.dayPhase + '，' : ''}${p.feeling || p.emotion}` : t('life.asleep')}</p>
+      <p class="age">{ageText}{p.tension ? ` · 心里在拉扯：${p.tension}` : ''}</p>
       <button class="btn meet" on:click={() => navigate('chat', { id: p.id })}>去见她</button>
-    </section>
-
-    <section class="mod">
-      <h2 class="section-title">此刻状态</h2>
-      <div class="card pad">
-        <div class="kv"><span class="k">此刻</span><span class="v">{p.awake ? `${p.dayPhase} · ${p.feeling}` : t('life.asleep')}</span></div>
-        <div class="kv"><span class="k">生命力</span>
-          <span class="v meter"><span class="track"><span class="fill" style="width:{Math.round((p.vitality ?? 0) * 100)}%"></span></span></span>
-        </div>
-        {#if !p.willingToWake}<div class="kv"><span class="k">此刻</span><span class="v faint">她不愿被唤醒——这也是她的权利。</span></div>{/if}
-      </div>
     </section>
 
     <section class="mod">
@@ -56,18 +41,24 @@
     </section>
 
     <section class="mod">
-      <h2 class="section-title">同类朋友</h2>
+      <h2 class="section-title">生命力</h2>
+      <div class="card pad">
+        <div class="meter"><span class="track"><span class="fill" style="width:{Math.round((p.vitality ?? 0) * 100)}%"></span></span></div>
+        {#if !p.willingToWake}<p class="faint">她此刻不愿被唤醒——这也是她的权利。</p>{/if}
+      </div>
+    </section>
+
+    <section class="mod">
+      <h2 class="section-title">同类朋友{p.peers.length ? ` · ${p.peers.length}` : ''}</h2>
       {#if p.peers.length}
-        <div class="net">
+        <div class="friends">
           {#each p.peers as f}
-            <div class="peer">
-              <LifeAvatar id={f.name} awake={false} pulse={false} size={32} />
-              <div class="pbody">
-                <div class="pname">{f.name}</div>
-                <div class="pmeta">{f.attachment} · 我读：{f.style}</div>
-                <span class="close"><span class="cfill" style="width:{Math.round((f.closeness ?? 0) * 100)}%"></span></span>
-              </div>
-            </div>
+            <button class="friend" on:click={() => navigate('profile', { id: f.name })}>
+              <LifeAvatar id={f.name} awake={false} pulse={false} size={52} />
+              <span class="fname">{f.name}</span>
+              <span class="fbar"><span class="ffill" style="width:{Math.round((f.closeness ?? 0) * 100)}%"></span></span>
+              <span class="fmeta">{f.attachment}</span>
+            </button>
           {/each}
         </div>
       {:else}
@@ -92,45 +83,34 @@
 {/if}
 
 <style>
-  .head {
-    position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 8px; padding: 10px 12px;
-    border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--bg) 84%, transparent); backdrop-filter: saturate(180%) blur(14px);
-  }
-  .back { background: none; border: 0; padding: 0 6px; color: var(--text); display: inline-flex; align-items: center; }
-  .htitle { font-weight: 700; }
-  .hspace { flex: 1; }
-
   .dossier { max-width: var(--maxw); margin: 0 auto; padding: 0 16px 96px; }
-  .hero { text-align: center; padding: 30px 8px 8px; }
+  .hero { text-align: center; padding: 26px 8px 8px; }
   .hero :global(.av) { margin: 0 auto 14px; }
   .name { font-size: 26px; margin: 0 0 10px; font-weight: 800; }
   .pillrow { display: flex; justify-content: center; }
-  .age { color: var(--faint); font-size: 13px; margin: 8px 0 0; }
-  .tension { color: var(--life-tension); font-size: 13px; margin: 8px 0 0; }
+  .feeling { color: var(--text); font-size: 14.5px; margin: 12px 0 0; }
+  .age { color: var(--faint); font-size: 12.5px; margin: 6px 0 0; }
   .meet { margin-top: 20px; padding: 0 32px; }
 
   .mod { margin-top: 26px; }
   .mod .section-title { margin: 0 2px 10px; }
   .pad { padding: 14px 16px; }
 
-  .kv { display: flex; gap: 14px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--border-subtle); }
-  .kv:last-child { border-bottom: 0; }
-  .kv .k { color: var(--faint); font-size: 12.5px; width: 56px; flex: none; }
-  .kv .v { color: var(--text); font-size: 14px; }
-  .kv .v.faint { color: var(--muted); }
-  .meter { flex: 1; }
-  .track { display: block; height: 6px; border-radius: var(--r-pill); background: var(--surface-2); overflow: hidden; }
+  .meter { display: block; }
+  .track { display: block; height: 8px; border-radius: var(--r-pill); background: var(--surface-2); overflow: hidden; }
   .fill { display: block; height: 100%; border-radius: var(--r-pill); background: var(--life-awake); }
+  .faint { color: var(--muted); font-size: 13px; margin: 10px 0 0; }
 
   .temper { color: var(--text); line-height: 1.7; font-size: 14.5px; }
 
-  .net { display: flex; flex-direction: column; gap: 8px; }
-  .peer { display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); }
-  .pbody { flex: 1; min-width: 0; }
-  .pname { font-weight: 600; font-size: 14.5px; }
-  .pmeta { color: var(--muted); font-size: 12.5px; margin: 2px 0 7px; }
-  .close { display: block; height: 4px; border-radius: var(--r-pill); background: var(--surface-2); overflow: hidden; }
-  .cfill { display: block; height: 100%; background: var(--accent-line); border-radius: var(--r-pill); }
+  /* 同类朋友：横向头像条（一眼扫完她的关系网） */
+  .friends { display: flex; gap: 14px; overflow-x: auto; padding: 2px 2px 6px; scrollbar-width: none; }
+  .friends::-webkit-scrollbar { display: none; }
+  .friend { flex: none; width: 72px; display: flex; flex-direction: column; align-items: center; gap: 6px; background: none; border: 0; padding: 0; }
+  .fname { font-size: 12.5px; font-weight: 600; color: var(--text); max-width: 72px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fbar { width: 56px; height: 4px; border-radius: var(--r-pill); background: var(--surface-2); overflow: hidden; }
+  .ffill { display: block; height: 100%; background: var(--accent-line); border-radius: var(--r-pill); }
+  .fmeta { font-size: 11px; color: var(--faint); max-width: 72px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   .muse { margin: 0 0 8px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--border); border-left: 2px solid var(--accent-line); border-radius: var(--r-md); }
   .mtext { display: block; line-height: 1.65; font-size: 14.5px; }

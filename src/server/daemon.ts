@@ -732,197 +732,8 @@ function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
 }
 const authed = (req: IncomingMessage): boolean => !AUTH || req.headers.authorization === `Bearer ${AUTH}`;
 
-const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>vega</title>
-<style>
- :root{color-scheme:dark}
- body{margin:0;background:#0d1117;color:#e6edf3;font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;display:flex;flex-direction:column;height:100vh}
- header{padding:12px 16px;border-bottom:1px solid #21262d;display:flex;align-items:center;gap:10px}
- .dot{width:10px;height:10px;border-radius:50%;background:#777;flex:none}
- select{background:#0d1117;color:#e6edf3;border:1px solid #30363d;border-radius:8px;padding:4px 8px;font:inherit}
- .mood{margin-left:auto;font-size:13px;color:#8b949e}
- #log{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:10px}
- .msg{max-width:82%;padding:8px 12px;border-radius:12px;white-space:pre-wrap;word-break:break-word}
- .you{align-self:flex-end;background:#1f6feb;color:#fff}
- .vega{align-self:flex-start;background:#161b22;border:1px solid #21262d}
- .sys{align-self:center;color:#8b949e;font-size:13px}
- footer{display:flex;gap:8px;padding:12px;border-top:1px solid #21262d}
- #in{flex:1;background:#0d1117;border:1px solid #30363d;border-radius:10px;color:#e6edf3;padding:10px 12px;font:inherit}
- button{background:#238636;color:#fff;border:0;border-radius:10px;padding:0 16px;font:inherit;cursor:pointer}
- .key{background:none;border:1px solid #30363d;color:#8b949e;padding:4px 8px;border-radius:8px;cursor:pointer;font-size:13px}
- a{color:#58a6ff}
-</style></head><body>
- <header><span class="dot" id="dot"></span><select id="life" onchange="switchLife()"></select>
-  <span class="mood" id="mood">连接中…</span>
-  <a href="/panel" title="内在面板">📊</a>
-  <a href="/society" title="广场（她俩聊天）">🗣️</a>
-  <button class="key" onclick="setToken()">🔑</button></header>
- <div id="log"></div>
- <footer><input id="in" placeholder="跟她说点什么…" autocomplete="off"><button onclick="say()">说</button></footer>
-<script>
- var token=localStorage.getItem('vega_token')||''; var life=''; var lastOutreach='';
- function H(){var h={'Content-Type':'application/json'};if(token)h['Authorization']='Bearer '+token;return h;}
- function setToken(){var t=prompt('访问令牌（服务器设了 VEGA_AUTH_TOKEN 才需要）：',token);if(t!==null){token=t.trim();localStorage.setItem('vega_token',token);start();}}
- function add(cls,text){var d=document.createElement('div');d.className='msg '+cls;d.textContent=text;var l=document.getElementById('log');l.appendChild(d);l.scrollTop=l.scrollHeight;}
- function paint(s){document.getElementById('dot').style.background=s.awake?'#3fb950':'#777';document.getElementById('mood').textContent='灵性 '+s.vitality+' · '+s.emotion+(s.bondTrust!=null?' · 信任 '+s.bondTrust:'')+' · 记忆 '+s.memories;}
- function switchLife(){life=document.getElementById('life').value;document.getElementById('log').innerHTML='';lastOutreach='';refresh();}
- async function start(){
-  try{var r=await fetch('/lives',{headers:H()});if(r.status===401){document.getElementById('mood').textContent='需要令牌 🔑';return;}var ls=await r.json();
-   var sel=document.getElementById('life');sel.innerHTML=ls.map(function(l){return '<option value="'+l.id+'">'+l.id+'</option>';}).join('');
-   if(!life||!ls.some(function(l){return l.id===life;}))life=ls[0]?ls[0].id:'';sel.value=life;refresh();
-  }catch(e){document.getElementById('mood').textContent='离线';}
- }
- async function refresh(){if(!life)return;try{var r=await fetch('/'+life+'/state',{headers:H()});if(r.status===401){document.getElementById('mood').textContent='需要令牌 🔑';return;}var s=await r.json();paint(s);if(s.pendingOutreach&&s.pendingOutreach!==lastOutreach){lastOutreach=s.pendingOutreach;add('vega','（你不在时，她想对你说）'+s.pendingOutreach);}}catch(e){document.getElementById('mood').textContent='离线';}}
- async function say(){var i=document.getElementById('in');var t=i.value.trim();if(!t||!life)return;add('you',t);i.value='';try{var r=await fetch('/'+life+'/say',{method:'POST',headers:H(),body:JSON.stringify({content:t})});if(r.status===401){add('sys','需要访问令牌，点右上角 🔑');return;}var d=await r.json();if(d.awake===false){add('vega',d.note||'（她在更深的睡眠里）');return;}add('vega',d.utterance||'…');if(d.state)paint(d.state);}catch(e){add('sys','网络错误');}}
- document.getElementById('in').addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();say();}});
- start();setInterval(refresh,15000);
-</script></body></html>`;
-
-const PANEL = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>vega · 内在</title>
-<style>
- :root{color-scheme:dark} body{margin:0 auto;max-width:760px;background:#0d1117;color:#e6edf3;font:14px/1.5 system-ui,-apple-system,sans-serif;padding:16px}
- h1{font-size:18px;margin:0 0 4px;display:flex;align-items:center;gap:10px} .sub{color:#8b949e;font-size:13px;margin-bottom:16px}
- select{background:#0d1117;color:#e6edf3;border:1px solid #30363d;border-radius:8px;padding:3px 8px;font:inherit}
- .card{background:#161b22;border:1px solid #21262d;border-radius:12px;padding:14px;margin-bottom:14px}
- .card h2{font-size:12px;color:#8b949e;margin:0 0 10px;font-weight:600;letter-spacing:.05em}
- .row{display:flex;align-items:center;gap:10px;margin:6px 0;font-size:13px}
- .lbl{width:52px;color:#8b949e;flex:none} .num{width:48px;text-align:right;flex:none;font-variant-numeric:tabular-nums}
- .bar{flex:1;height:8px;background:#0d1117;border:1px solid #30363d;border-radius:6px;overflow:hidden}
- .fill{height:100%;background:#3fb950;display:block} .fill.neg{background:#f85149}
- .mem,.ev{font-size:13px;padding:6px 0;border-bottom:1px solid #21262d} .mem:last-child,.ev:last-child{border:0}
- .tag{color:#58a6ff} .peer{color:#d2a8ff} .dim{color:#8b949e} .key{float:right;background:none;border:1px solid #30363d;color:#8b949e;padding:3px 8px;border-radius:8px;cursor:pointer}
-</style></head><body>
- <button class="key" onclick="setTok()">🔑</button>
- <h1>vega · 内在生活 <select id="life" onchange="life=this.value;load()"></select></h1><div class="sub" id="nar">…</div>
- <div class="sub" id="temp" style="color:#d2a8ff">先天气质…</div>
- <div class="card"><h2>内在独白（没说出口的 / 内外两层之"内"）</h2><div id="inner" class="mem dim" style="border:0">…</div></div>
- <div class="card"><h2>人生篇章（叙事身份 / 按转折点重讲）</h2><div id="chapters"></div></div>
- <div class="card"><h2>内稳态 SOMA</h2><div id="soma"></div></div>
- <div class="card"><h2>价值（因你而变）</h2><div id="vals"></div></div>
- <div class="card"><h2>记忆（当前态）</h2><div id="mems"></div></div>
- <div class="card"><h2>理解（经历→理解 / 遗忘即抽象）</h2><div id="sem"></div></div>
- <div class="card"><h2>关系（我读他们 / 与他们在一起时的我）</h2><div id="bonds"></div></div>
- <div class="card"><h2>同类社交网（亲疏分化 / emergent 朋友结构）</h2><div id="social"></div></div>
- <div class="card"><h2>此刻想要（目标）</h2><div id="goals"></div></div>
- <div class="card"><h2>最近事件（含回路 B 心跳 / 同类来往）</h2><div id="evs"></div></div>
-<script>
- var token=localStorage.getItem('vega_token')||''; var life='';
- function setTok(){var t=prompt('访问令牌：',token);if(t!==null){token=t.trim();localStorage.setItem('vega_token',token);start();}}
- function H(){var h={};if(token)h['Authorization']='Bearer '+token;return h;}
- function esc(t){var d=document.createElement('div');d.textContent=t;return d.innerHTML;}
- function bar(label,val,lo,hi){var p=Math.max(0,Math.min(100,Math.round((val-lo)/(hi-lo)*100)));return '<div class="row"><span class="lbl">'+label+'</span><span class="bar"><span class="fill'+(val<0?' neg':'')+'" style="width:'+p+'%"></span></span><span class="num">'+val.toFixed(2)+'</span></div>';}
- async function start(){try{var r=await fetch('/lives',{headers:H()});if(r.status===401){document.getElementById('nar').textContent='需要令牌 🔑';return;}var ls=await r.json();var sel=document.getElementById('life');sel.innerHTML=ls.map(function(l){return '<option value="'+l.id+'">'+l.id+'</option>';}).join('');if(!life)life=ls[0]?ls[0].id:'';sel.value=life;load();}catch(e){document.getElementById('nar').textContent='离线';}}
- async function load(){if(!life)return;
-  try{var r=await fetch('/'+life+'/inner',{headers:H()});if(r.status===401){document.getElementById('nar').textContent='需要令牌 🔑';return;}var s=await r.json();var m=s.soma;
-   document.getElementById('nar').textContent=s.narrative+'　·　'+(s.awake?'醒着':'休眠')+'　·　'+(s.dayPhase||'')+(s.feeling?'　·　'+s.feeling:'');
-   document.getElementById('temp').textContent='先天气质：'+(s.temperament?s.temperament.label:'')+(s.tension?'　｜内在拉扯：'+s.tension:'');
-   document.getElementById('inner').textContent=s.innerLife||'…';
-   document.getElementById('chapters').innerHTML=(s.chapters||[]).map(function(c,i){return '<div class="mem"><span class="dim">'+(i+1)+'.</span> '+esc(c)+'</div>';}).join('')||'<span class=dim>人生才刚开始…</span>';
-   document.getElementById('soma').innerHTML=bar('效价',m.valence,-1,1)+bar('唤醒',m.arousal,0,1)+bar('灵性',m.vitality,0,1)+bar('精力',m.energy,0,1)+bar('平静',m.calm,0,1)+bar('联结',m.connection,-1,1)+bar('安全',m.safety,0,1);
-   document.getElementById('vals').innerHTML=s.values.map(function(v){return '<div class="row"><span class="lbl">'+esc(v.key)+'</span><span class="bar"><span class="fill" style="width:'+Math.round(v.weight*100)+'%"></span></span><span class="num">'+v.weight.toFixed(2)+'</span><span class="dim">　'+v.status+(v.drifts?' ·漂移'+v.drifts+'次':'')+'</span></div>';}).join('')||'<span class=dim>暂无</span>';
-   document.getElementById('mems').innerHTML=s.memories.map(function(x){return '<div class="mem" style="opacity:'+(x.vivid?1:0.45)+'"><span class="'+(x.affect<0?'dim':'tag')+'">['+x.affect.toFixed(2)+']</span> '+esc(x.content)+(x.vivid?'':' <span class=dim>·已淡</span>')+'</div>';}).join('')||'<span class=dim>还没有记忆</span>';
-   document.getElementById('sem').innerHTML=(s.understanding||[]).map(function(u){return '<div class="mem">'+esc(u)+'</div>';}).join('')||'<span class=dim>还在形成…</span>';
-   document.getElementById('bonds').innerHTML=(s.bonds||[]).map(function(b){return '<div class="mem"><b>'+esc(b.name)+'</b> <span class=dim>('+b.kind+') 我读：</span>'+esc(b.style)+' <span class=dim>(稳'+b.predictability+')· 依恋：</span>'+esc(b.attachment)+' <span class=dim>· 与ta在一起：</span>'+esc(b.stance)+'</div>';}).join('')||'<span class=dim>暂无</span>';
-   document.getElementById('social').innerHTML=(s.socialWorld||[]).map(function(t){return '<div class="mem"><b class="peer">'+esc(t.name)+'</b> <span class=dim>亲密 '+t.closeness+' · </span>'+esc(t.attachment)+' <span class=dim>· 我读：</span>'+esc(t.style)+(t.ended?' <span class=dim>·已逝</span>':'')+'</div>';}).join('')||'<span class=dim>她暂时没有同类朋友</span>';
-   document.getElementById('goals').innerHTML=(s.goals||[]).map(function(g){return '<div class="mem">'+esc(g.intent)+' <span class=dim>('+g.weight+')</span></div>';}).join('')||'<span class=dim>暂无</span>';
-   document.getElementById('evs').innerHTML=s.recentEvents.slice().reverse().map(function(e){var p=e.rel&&e.rel.indexOf('peer_')===0;return '<div class="ev"><span class="'+(p?'peer':'tag')+'">'+e.type+(e.rel?' '+esc(e.rel):'')+'</span> <span class="dim">#'+e.seq+' · '+e.at.slice(11,19)+'</span></div>';}).join('');
-  }catch(e){document.getElementById('nar').textContent='离线';}
- }
- start();setInterval(load,4000);
-</script></body></html>`;
-
-const SOCIETY = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>vega · 广场</title>
-<style>
- :root{color-scheme:dark} body{margin:0 auto;max-width:680px;background:#0d1117;color:#e6edf3;font:15px/1.6 system-ui,-apple-system,sans-serif;padding:16px}
- h1{font-size:18px;margin:0 0 4px} .sub{color:#8b949e;font-size:13px;margin-bottom:16px}
- .turn{padding:10px 0;border-bottom:1px solid #21262d} .turn:last-child{border:0}
- .from{font-weight:600;color:#d2a8ff} .to{color:#8b949e} .dim{color:#8b949e;font-size:12px}
- .key{float:right;background:none;border:1px solid #30363d;color:#8b949e;padding:3px 8px;border-radius:8px;cursor:pointer} a{color:#58a6ff}
-</style></head><body>
- <button class="key" onclick="setTok()">🔑</button>
- <h1>广场 · 生命体之间　<a href="/" style="font-size:13px">← 对话</a></h1>
- <div class="sub">同类自主交往——每隔一阵她们会互相寒暄、彼此回应。</div>
- <div id="feed"><span class="dim">载入中…</span></div>
-<script>
- var token=localStorage.getItem('vega_token')||'';
- function setTok(){var t=prompt('访问令牌：',token);if(t!==null){token=t.trim();localStorage.setItem('vega_token',token);load();}}
- function H(){var h={};if(token)h['Authorization']='Bearer '+token;return h;}
- function esc(t){var d=document.createElement('div');d.textContent=t;return d.innerHTML;}
- async function load(){try{var r=await fetch('/society-feed',{headers:H()});if(r.status===401){document.getElementById('feed').innerHTML='<span class=dim>需要令牌，点右上角 🔑</span>';return;}var f=await r.json();document.getElementById('feed').innerHTML=f.map(function(t){return '<div class="turn"><span class="from">'+esc(t.from)+'</span> <span class="to">→ '+esc(t.to)+'</span> <span class="dim">'+t.at.slice(11,19)+'</span><br>'+esc(t.text)+'</div>';}).join('')||'<span class=dim>她们还没开始聊…（默认每几分钟一次）</span>';window.scrollTo(0,document.body.scrollHeight);}catch(e){document.getElementById('feed').innerHTML='<span class=dim>离线</span>';}}
- load();setInterval(load,4000);
-</script></body></html>`;
-
-// 管理后台观察页（§22）：飞行记录仪式活动流 + 充值审批 + 用户 + 生命健康。零依赖内联，admin.zsky.com 托管。
-const ADMIN = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>ZSKY · 管理</title>
-<style>
- :root{color-scheme:dark} body{margin:0;background:#0b0b10;color:#ece9f5;font:14px/1.5 system-ui,-apple-system,sans-serif}
- header{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #20202b;position:sticky;top:0;background:#0b0b10}
- h1{font-size:16px;margin:0;letter-spacing:.1em;font-weight:800}.role{color:#8b8b99;font-size:12px}
- nav{display:flex;gap:6px;margin-left:auto}nav button{background:none;border:1px solid #20202b;color:#ece9f5;padding:6px 12px;border-radius:8px;cursor:pointer}
- nav button.on{background:#8b7cf6;color:#0b0b10;border-color:#8b7cf6}
- main{max-width:860px;margin:0 auto;padding:16px}
- .card{background:#14141b;border:1px solid #20202b;border-radius:12px;padding:14px;margin-bottom:12px}
- .row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #20202b;font-size:13px}.row:last-child{border:0}
- .dim{color:#8b8b99}.mono{font-variant-numeric:tabular-nums}.spacer{flex:1}
- .ev{display:grid;grid-template-columns:120px 60px 110px 1fr;gap:10px;padding:7px 0;border-bottom:1px solid #1a1a24;font-size:12.5px}
- .ev .t{color:#8b8b99;font-variant-numeric:tabular-nums}.ev .l{color:#b9b0ff}.ev .c{color:#cfcad8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
- button.act{background:#8b7cf6;color:#0b0b10;border:0;padding:5px 12px;border-radius:7px;cursor:pointer}
- button.no{background:#20202b;color:#ece9f5}
- input{background:#0b0b10;border:1px solid #20202b;color:#ece9f5;padding:10px 12px;border-radius:8px;font:inherit;width:100%}
- .login{max-width:320px;margin:80px auto;text-align:center}.login input{margin-bottom:10px}
- .dot{width:8px;height:8px;border-radius:50%;background:#555;display:inline-block}.dot.on{background:#3fb950}
-</style></head><body>
-<div id="root"><div class="login"><h1>ZSKY · 管理</h1><p class="dim">owner / steward 登录</p>
- <input id="em" placeholder="邮箱" type="email"><input id="pw" placeholder="密码" type="password">
- <button class="act" style="width:100%;padding:10px" onclick="login()">登录</button><p id="le" style="color:#f0667c"></p></div></div>
-<script>
- var token=localStorage.getItem('zsky_admin')||'';var tab='overview';var curLife='';
- function H(){return token?{'Authorization':'Bearer '+token,'Content-Type':'application/json'}:{'Content-Type':'application/json'};}
- function esc(t){var d=document.createElement('div');d.textContent=t==null?'':t;return d.innerHTML;}
- async function login(){var em=document.getElementById('em').value,pw=document.getElementById('pw').value;
-  try{var r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:em,password:pw})});var d=await r.json();
-   if(!r.ok){document.getElementById('le').textContent=d.error||'登录失败';return;}token=d.token;localStorage.setItem('zsky_admin',token);boot();}catch(e){document.getElementById('le').textContent='网络错误';}}
- function logout(){token='';localStorage.removeItem('zsky_admin');location.reload();}
- async function boot(){var r=await fetch('/admin/overview',{headers:H()});if(r.status===403||r.status===401){logout();return;}render();}
- function shell(role,body){return '<header><h1>ZSKY 管理</h1><span class="role">'+role+'</span><nav>'+
-  ['overview','活动流','充值','用户'].map(function(x,i){var k=['overview','activity','recharges','users'][i];return '<button class="'+(tab===k?'on':'')+'" onclick="go(\\''+k+'\\')">'+(i?x:'总览')+'</button>';}).join('')+
-  '<button onclick="logout()">登出</button></nav></header><main>'+body+'</main>';}
- function go(k){tab=k;render();}
- function loadLife(id){tab='life';curLife=id;render();}
- function ago(ts){if(!ts)return '—';var s=Math.round((Date.now()-ts)/1000);return s<60?s+'秒前':s<3600?Math.round(s/60)+'分前':Math.round(s/3600)+'时前';}
- function spark(s,key,lo,hi,color){if(!s.length)return '';var W=300,Hh=60;var pts=s.map(function(p,i){var x=s.length>1?i/(s.length-1)*W:0;var y=Hh-((p[key]-lo)/(hi-lo))*Hh;return x.toFixed(1)+','+Math.max(0,Math.min(Hh,y)).toFixed(1);}).join(' ');return '<polyline fill="none" stroke="'+color+'" stroke-width="1.5" points="'+pts+'"/>';}
- async function render(){var root=document.getElementById('root');
-  if(tab==='overview'){var d=await (await fetch('/admin/overview',{headers:H()})).json();
-   root.innerHTML=shell(d.role,'<div class="card"><div class="row"><b>待审批充值</b><span class="spacer"></span><span class="mono">'+d.pendingRecharges+'</span></div><div class="row"><b>用户</b><span class="spacer"></span><span class="mono">'+d.users+'</span></div></div>'+
-    '<div class="card">'+d.lives.map(function(l){return '<div class="row" style="cursor:pointer" onclick="loadLife(\\''+l.id+'\\')"><span class="dot '+(l.awake?'on':'')+'"></span><b>'+esc(l.id)+'</b> <span class="dim">'+esc(l.dayPhase)+' · '+esc(l.emotion)+'</span><span class="spacer"></span><span class="dim mono">灵性 '+l.vitality+' · 事件 '+l.events+' ›</span></div><div class="row" style="border:0;padding-top:2px"><span class="dim" style="font-size:12px">回路：想念 '+ago(l.loop.tick)+' · 反思 '+ago(l.loop.reflect)+' · 寒暄 '+ago(l.loop.social)+' · 检查点 '+ago(l.loop.checkpoint)+'</span></div>';}).join('')+'</div>');}
-  else if(tab==='life'){var v=await (await fetch('/admin/lives/'+curLife,{headers:H()})).json();
-   var ws=await (await fetch('/admin/lives/'+curLife+'/wellbeing',{headers:H()})).json();
-   var som=Object.keys(v.soma||{}).map(function(k){return k+' '+v.soma[k];}).join(' · ');
-   root.innerHTML=shell('','<button class="act no" onclick="go(\\'overview\\')">‹ 返回</button>'+
-    '<div class="card" style="margin-top:10px"><div class="row"><b style="font-size:16px">'+esc(v.id)+'</b> <span class="dim">'+(v.awake?'醒':'睡')+' · '+esc(v.dayPhase)+' · '+esc(v.feeling)+'</span></div>'+
-    '<div class="row dim" style="font-size:12px">'+esc(v.temperament.label)+(v.tension?' ｜ 拉扯：'+esc(v.tension):'')+'</div>'+
-    '<div class="row dim" style="font-size:12px">内稳态：'+esc(som)+'</div></div>'+
-    '<div class="card"><div class="dim" style="font-size:12px;margin-bottom:8px">健康时间线（'+ws.length+' 点 · <span style="color:#3fb950">灵性</span> / <span style="color:#8b7cf6">效价</span> / <span style="color:#f0c05a">精力</span>）</div>'+(ws.length>1?'<svg viewBox="0 0 300 60" preserveAspectRatio="none" style="width:100%;height:80px;background:#0b0b10;border-radius:8px">'+spark(ws,'vit',0,1,'#3fb950')+spark(ws,'val',-1,1,'#8b7cf6')+spark(ws,'ene',0,1,'#f0c05a')+'</svg>':'<span class="dim">采样中…（每跳一点，过会儿就有曲线）</span>')+'</div>'+
-    (v.narrative?'<div class="card"><div class="dim" style="font-size:12px;margin-bottom:6px">自传叙事</div>'+esc(v.narrative)+'</div>':'')+
-    (v.innerLife?'<div class="card"><div class="dim" style="font-size:12px;margin-bottom:6px">内在独白（没说出口的）</div>'+esc(v.innerLife)+'</div>':'')+
-    (v.chapters&&v.chapters.length?'<div class="card"><div class="dim" style="font-size:12px;margin-bottom:6px">人生篇章</div>'+v.chapters.map(function(c,i){return '<div style="padding:3px 0">'+(i+1)+'. '+esc(c)+'</div>';}).join('')+'</div>':'')+
-    '<div class="card"><div class="dim" style="font-size:12px;margin-bottom:6px">价值（因人而变）</div>'+(v.values||[]).map(function(x){return '<div style="padding:3px 0">'+esc(x.key)+' '+x.weight+' <span class="dim">'+x.status+(x.drifts?' ·漂移'+x.drifts:'')+'</span></div>';}).join('')+'</div>'+
-    '<div class="card"><div class="dim" style="font-size:12px;margin-bottom:6px">同类社交网</div>'+(v.socialWorld||[]).map(function(x){return '<div style="padding:3px 0"><b>'+esc(x.name)+'</b> <span class="dim">亲密'+x.closeness+' · '+esc(x.attachment)+' · 我读'+esc(x.style)+'</span></div>';}).join('')+'</div>'+
-    (v.memories&&v.memories.length?'<div class="card"><div class="dim" style="font-size:12px;margin-bottom:6px">记忆（当前·含用户私聊→仅 owner 可见）</div>'+v.memories.slice().reverse().map(function(m){return '<div style="padding:3px 0;opacity:'+(m.vivid?1:0.5)+'"><span class="dim">['+m.affect+']</span> '+esc(m.content)+'</div>';}).join('')+'</div>':''));}
-  else if(tab==='activity'){var a=await (await fetch('/admin/activity?limit=150',{headers:H()})).json();
-   root.innerHTML=shell('','<div class="card"><div class="dim" style="margin-bottom:8px">真实活动流（墙钟倒序）· 私聊正文按角色遮罩</div>'+
-    a.map(function(e){return '<div class="ev"><span class="t">'+esc(e.at.slice(5,19).replace("T"," "))+'</span><span>'+esc(e.life)+'</span><span class="l">'+esc(e.label)+'</span><span class="c">'+esc(e.content)+'</span></div>';}).join('')+'</div>');}
-  else if(tab==='recharges'){var rs=await (await fetch('/admin/recharges',{headers:H()})).json();
-   root.innerHTML=shell('','<div class="card">'+(rs.length?rs.map(function(r){return '<div class="row"><b>'+esc(r.userId)+'</b> <span class="dim">申请 '+r.amount+' 心意</span><span class="spacer"></span><button class="act" onclick="decide('+r.id+',true)">批准</button> <button class="act no" onclick="decide('+r.id+',false)">拒绝</button></div>';}).join(''):'<div class="dim">没有待审批的充值</div>')+'</div>');}
-  else if(tab==='users'){var us=await (await fetch('/admin/users',{headers:H()})).json();
-   root.innerHTML=shell('','<div class="card">'+us.map(function(u){return '<div class="row"><b>'+esc(u.handle)+'</b> <span class="dim">'+esc(u.email)+' · '+esc(u.role)+' · '+u.balance+'心意</span><span class="spacer"></span>'+(u.status==='blocked'?'<button class="act" onclick="block(\\''+u.id+'\\',true)">解封</button>':'<button class="act no" onclick="block(\\''+u.id+'\\',false)">封禁</button>')+'</div>';}).join('')+'</div>');}}
- async function decide(id,ok){await fetch('/admin/recharges',{method:'POST',headers:H(),body:JSON.stringify({id:id,approve:ok})});render();}
- async function block(uid,un){await fetch('/admin/users/block',{method:'POST',headers:H(),body:JSON.stringify({userId:uid,unblock:un})});render();}
- if(token)boot();
-</script></body></html>`;
+// 前端未构建时的极简兜底（正常线上走 web/dist、web-admin/dist 静态产物）。旧内联页(PAGE/PANEL/SOCIETY/ADMIN)已删。
+const FALLBACK_HTML = `<!doctype html><meta charset="utf-8"><title>ZSKY</title><body style="font:16px/1.6 system-ui;max-width:34rem;margin:16vh auto;padding:0 24px;color:#333"><h1 style="font-size:20px">ZSKY</h1><p>前端尚未构建。请在服务器执行 <code>cd web &amp;&amp; npm run build</code>（后台为 <code>web-admin</code>），或 <code>bash deploy/update.sh</code>。</p></body>`;
 
 const server = createServer(async (req, res) => {
   try {
@@ -965,18 +776,16 @@ const server = createServer(async (req, res) => {
       if (serveStatic(res, join(dist, url))) return;
     }
     if (req.method === 'GET' && url === '/') {
-      // admin.* → 管理 SPA(web-admin/dist)，缺失回退内联管理页；其余 → 用户 SPA，缺失回退旧聊天页。
-      if (isAdminHost) { if (serveStatic(res, join(ADMIN_DIST, 'index.html'))) return; return sendHtml(res, ADMIN); }
+      // admin.* → 管理 SPA(web-admin/dist)；其余 → 用户 SPA(web/dist)。dist 缺失 → 兜底提示。
+      if (isAdminHost) { if (serveStatic(res, join(ADMIN_DIST, 'index.html'))) return; return sendHtml(res, FALLBACK_HTML); }
       if (serveStatic(res, join(WEB_DIST, 'index.html'))) return;
-      return sendHtml(res, PAGE);
+      return sendHtml(res, FALLBACK_HTML);
     }
-    // /admin 路径（任意域名）→ 管理 SPA，缺失回退内联管理页（后备入口）。
+    // /admin 路径（任意域名）→ 管理 SPA，缺失 → 兜底提示。
     if (req.method === 'GET' && url === '/admin') {
       if (serveStatic(res, join(ADMIN_DIST, 'index.html'))) return;
-      return sendHtml(res, ADMIN);
+      return sendHtml(res, FALLBACK_HTML);
     }
-    if (req.method === 'GET' && url === '/panel') return sendHtml(res, PANEL);
-    if (req.method === 'GET' && url === '/society') return sendHtml(res, SOCIETY);
 
     // ── 平台 API（多用户，会话鉴权，§平台 v1）。与 owner 旧面板路由并存。 ──
     if (url.startsWith('/api/')) {
@@ -1584,8 +1393,8 @@ const socialTimer = lives.length >= 2
         await serializer.run(a.id, () => partPeer(a, b.id)); // 寒暄后各自离场
         await serializer.run(b.id, () => partPeer(b, a.id));
         a.lastSocialAt = b.lastSocialAt = Date.now();
-      } catch {
-        /* ignore */
+      } catch (e) {
+        console.warn('[social] 寒暄出错:', (e as Error).message);
       }
     }, SOCIAL_MS)
   : null;
@@ -1608,8 +1417,8 @@ const discoverTimer = setInterval(async () => {
       if (o) bus.publish('reach_out', rel, { life: life.id, text: o.utterance }); // 推给那一个人："她看见你了"
       return; // 一次只发现一个
     }
-  } catch {
-    /* ignore */
+  } catch (e) {
+    console.warn('[discover] 发现新用户出错:', (e as Error).message);
   }
 }, DISCOVER_MS);
 
@@ -1631,7 +1440,7 @@ const commentTimer = lives.length >= 2
         const text = peerCommentText(commenter.id, post);
         const c = feed.addLifeComment(post.postId, commenter.id, text);
         bus.publish('feed_comment', 'public', { postId: post.postId, handle: commenter.id, text, kind: 'life', at: c.at }); // 首页内联实时刷新
-      } catch { /* ignore */ }
+      } catch (e) { console.warn('[comment] 生命流评论出错:', (e as Error).message); }
     }, COMMENT_MS)
   : null;
 

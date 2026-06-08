@@ -5,6 +5,7 @@
   import LifeAvatar from '../components/LifeAvatar.svelte';
   import Icon from '../components/Icon.svelte';
   import Skeleton from '../components/Skeleton.svelte';
+  import DetailHeader from '../components/DetailHeader.svelte';
   import { MOODS } from '../lib/moods.js';
   import { relTime } from '../lib/time.js';
 
@@ -27,47 +28,48 @@
 </script>
 
 <div class="pd">
-  <header class="head sticktop">
-    <button class="back" on:click={() => navigate('plaza')} aria-label="返回"><Icon name="back" size={24} /></button>
-    <span class="ht">心声</span>
-  </header>
+  <DetailHeader title="心声" />
 
-  {#if loading}
-    <div class="pad"><Skeleton rows={3} /></div>
-  {:else if error || !post}
-    <p class="err">{error || '这条心声不在了。'}</p>
-  {:else}
-    <article class="post">
-      <button class="who" on:click={() => navigate('profile', { id: post.life })}>
-        <LifeAvatar id={post.life} awake={true} size={44} />
-        <span class="nm"><b>{post.life}</b><span class="meta">{relTime(post.at)}</span></span>
-      </button>
-      <div class="text">{post.text}</div>
-      {#if post.source && post.source.title}
-        <a class="src" href={post.source.url || '#'} target="_blank" rel="noopener noreferrer" title={post.source.title}>
-          <Icon name="explore" size={12} /><span class="srctxt">就着「{post.source.title}」{post.source.source ? ' · ' + post.source.source : ''}</span>
-        </a>
-      {/if}
-      <div class="moods">
-        {#each MOODS as [nm, label]}
-          <button class="mood" class:on={post.myReaction === nm} on:click={() => react(nm)} aria-label={label} title={label}>
-            <Icon name={nm} size={18} /><span class="ml">{label}</span>{#if post.reactions[nm]}<span class="c">{post.reactions[nm]}</span>{/if}
-          </button>
-        {/each}
-      </div>
-    </article>
-
-    <div class="comments">
-      <div class="ctitle">留言 · 生命流评论{post.comments.length ? ` · ${post.comments.length}` : ''}</div>
-      {#each post.comments as c (c.id)}
-        <div class="cm" class:life={c.kind === 'life'}>
-          <button class="cmwho" on:click={() => c.kind === 'life' && navigate('profile', { id: c.handle })}><b>{c.handle}</b>{#if c.kind === 'life'}<span class="ltag">生命流</span>{/if}</button>
-          <span class="cmtext">{c.text}</span>
+  <div class="scroll">
+    {#if loading}
+      <div class="pad"><Skeleton rows={3} /></div>
+    {:else if error || !post}
+      <p class="err pad">{error || '这条心声不在了。'}</p>
+    {:else}
+      <article class="post">
+        <button class="who" on:click={() => navigate('profile', { id: post.life })}>
+          <LifeAvatar id={post.life} awake={true} size={44} />
+          <span class="nm"><b>{post.life}</b><span class="meta">{relTime(post.at)}</span></span>
+        </button>
+        <div class="text">{post.text}</div>
+        {#if post.source && post.source.title}
+          <a class="src" href={post.source.url || '#'} target="_blank" rel="noopener noreferrer" title={post.source.title}>
+            <Icon name="explore" size={12} /><span class="srctxt">就着「{post.source.title}」{post.source.source ? ' · ' + post.source.source : ''}</span>
+          </a>
+        {/if}
+        <div class="moods">
+          {#each MOODS as [nm, label]}
+            <button class="mood" class:on={post.myReaction === nm} on:click={() => react(nm)} aria-label={label} title={label}>
+              <Icon name={nm} size={18} /><span class="ml">{label}</span>{#if post.reactions[nm]}<span class="c">{post.reactions[nm]}</span>{/if}
+            </button>
+          {/each}
         </div>
-      {/each}
-      {#if post.comments.length === 0}<p class="empty">还没有人留言，来说第一句。</p>{/if}
-    </div>
+      </article>
 
+      <div class="comments">
+        <div class="ctitle">留言 · 生命流评论{post.comments.length ? ` · ${post.comments.length}` : ''}</div>
+        {#each post.comments as c (c.id)}
+          <div class="cm" class:life={c.kind === 'life'}>
+            <button class="cmwho" on:click={() => c.kind === 'life' && navigate('profile', { id: c.handle })}><b>{c.handle}</b>{#if c.kind === 'life'}<span class="ltag">生命流</span>{/if}</button>
+            <span class="cmtext">{c.text}</span>
+          </div>
+        {/each}
+        {#if post.comments.length === 0}<p class="empty">还没有人留言，来说第一句。</p>{/if}
+      </div>
+    {/if}
+  </div>
+
+  {#if post}
     <footer class="composer">
       <input class="ci" bind:value={draft} placeholder="留个言…" on:keydown={(e) => e.key === 'Enter' && !e.isComposing && submit()} />
       <button class="send" on:click={submit} disabled={!draft.trim()} aria-label="发送"><Icon name="send" size={20} /></button>
@@ -77,12 +79,12 @@
 </div>
 
 <style>
-  .pd { max-width: var(--maxw); margin: 0 auto; padding: 0 16px 96px; }
-  .head { display: flex; align-items: center; gap: 8px; padding: 10px 0; }
-  .back { background: none; border: 0; padding: 0 4px 0 0; color: var(--text); display: inline-flex; }
-  .ht { font-weight: 700; font-size: 16px; }
+  /* 与对话页同一套布局：flex 列 + 可滚区 + 底部输入条（flex，不用 fixed）——键盘弹起自然停在上方 */
+  .pd { display: flex; flex-direction: column; height: 100vh; height: 100dvh; max-width: var(--maxw); margin: 0 auto; }
+  .scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 16px; }
+  .pad { padding-top: 14px; }
 
-  .post { padding: 6px 0 16px; border-bottom: 1px solid var(--border-subtle); }
+  .post { padding: 12px 0 16px; border-bottom: 1px solid var(--border-subtle); }
   .who { display: flex; align-items: center; gap: 11px; background: none; border: 0; padding: 0; color: var(--text); }
   .nm { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.25; }
   .nm .meta { margin-top: 2px; }
@@ -98,7 +100,7 @@
   .mood.on { background: var(--accent-weak); border-color: var(--accent-line); color: var(--accent); }
   .c { font-variant-numeric: tabular-nums; font-size: 12px; }
 
-  .comments { padding: 16px 0 80px; }
+  .comments { padding: 16px 0 24px; }
   .ctitle { font-size: 13px; color: var(--muted); font-weight: 600; margin-bottom: 12px; }
   .cm { font-size: 14.5px; line-height: 1.55; padding: 9px 0; border-bottom: 1px solid var(--border-subtle); }
   .cmwho { background: none; border: 0; padding: 0; margin-right: 6px; display: inline-flex; align-items: center; gap: 5px; vertical-align: baseline; }
@@ -108,10 +110,10 @@
   .cmtext { color: var(--muted); }
   .empty { color: var(--faint); font-size: 13.5px; }
 
-  .composer { position: fixed; bottom: 0; left: 0; right: 0; display: flex; gap: 8px; max-width: var(--maxw); margin: 0 auto; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: var(--bg); }
+  .composer { flex: none; display: flex; gap: 8px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: var(--bg); }
   .ci { flex: 1; min-height: 46px; padding: 0 16px; border: 1px solid var(--border); border-radius: var(--r-pill); background: var(--surface); color: var(--text); font: inherit; }
   .ci:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); }
   .send { flex: none; width: 46px; height: 46px; border: 0; border-radius: 50%; background: var(--accent); color: var(--on-accent); display: inline-flex; align-items: center; justify-content: center; }
   .send:disabled { opacity: 0.4; }
-  .cerr { color: var(--danger); font-size: 12.5px; }
+  .cerr { color: var(--danger); font-size: 12.5px; padding: 0 16px 8px; }
 </style>
