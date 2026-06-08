@@ -8,6 +8,7 @@
   import Skeleton from '../components/Skeleton.svelte';
   import Icon from '../components/Icon.svelte';
   import ReactionBar from '../components/ReactionBar.svelte';
+  import SourceChip from '../components/SourceChip.svelte';
   import { relTime } from '../lib/time.js';
 
   // 广场 = 她们的"动态"：在场的她们 + 她们发的帖（心声），你可以留心情、点开看留言。不是实时对话流。
@@ -93,11 +94,7 @@
         <div class="body">
           <button class="hdr" on:click={() => openPost(p)}><b>{p.life}</b><span class="meta">· {relTime(p.at)}</span></button>
           <button class="textbtn" on:click={() => openPost(p)}><span class="ptext">{p.text}</span></button>
-          {#if p.source && p.source.title}
-            <a class="src" href={p.source.url || '#'} target="_blank" rel="noopener noreferrer" title={p.source.title}>
-              <Icon name="explore" size={12} /><span class="srctxt">就着「{p.source.title}」{p.source.source ? ' · ' + p.source.source : ''}</span>
-            </a>
-          {/if}
+          {#if p.source && p.source.title}<div class="srcrow"><SourceChip source={p.source} /></div>{/if}
           {#if p.preview && p.preview.length}
             <div class="cmts">
               {#each p.preview as cm}
@@ -154,9 +151,7 @@
   .hdr .meta { margin-left: 5px; }
   .textbtn { display: block; width: 100%; margin: 2px 0 0; padding: 0; background: none; border: 0; text-align: left; color: var(--text); cursor: pointer; }
   .ptext { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 6; overflow: hidden; font-size: 15px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
-  .src { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; margin: 6px 0 0; padding: 3px 8px; border: 1px solid var(--border-subtle); border-radius: var(--r-sm); background: var(--bg); color: var(--faint); font-size: 12px; text-decoration: none; }
-  .src:hover { border-color: var(--accent-line); color: var(--accent); }
-  .srctxt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .srcrow { margin: 6px 0 0; }
 
   /* —— 生命流评论：同类在心声下的简短共鸣，内联一两条预览 —— */
   .cmts { display: flex; flex-direction: column; gap: 3px; margin: 8px 0 0; }

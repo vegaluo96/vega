@@ -15,9 +15,9 @@
   --faint: #56566440;
   --faint-c: #565664;
 
-  --accent: #8b7cf6;
-  --accent-weak: rgba(139, 124, 246, 0.14);
-  --accent-line: rgba(139, 124, 246, 0.32);
+  --accent: #6d6af5;
+  --accent-weak: rgba(109, 106, 245, 0.16);
+  --accent-line: rgba(109, 106, 245, 0.34);
 
   --awake: #4cae7a;
   --asleep: #5a5a68;
@@ -27,7 +27,7 @@
   --danger-weak: rgba(239, 97, 119, 0.12);
 
   --vit: #4cae7a;
-  --val: #8b7cf6;
+  --val: #6d6af5;
   --ene: #d6a85a;
 
   --r-sm: 8px;
@@ -54,7 +54,7 @@ button { font: inherit; cursor: pointer; color: inherit; }
 .err { color: var(--danger); }
 
 /* —— 按钮 —— */
-.abtn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 34px; padding: 0 14px; border-radius: var(--r-sm); border: 1px solid transparent; background: var(--accent); color: #0b0b10; font-size: 13px; font-weight: 600; transition: background 120ms ease, border-color 120ms ease, opacity 120ms ease; }
+.abtn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 34px; padding: 0 14px; border-radius: var(--r-sm); border: 1px solid transparent; background: var(--accent); color: #fff; font-size: 13px; font-weight: 600; transition: background 120ms ease, border-color 120ms ease, opacity 120ms ease; }
 .abtn:hover { background: color-mix(in srgb, var(--accent) 88%, #fff); }
 .abtn:disabled { opacity: 0.5; cursor: default; }
 .abtn-ghost { background: var(--panel-2); color: var(--text); border-color: var(--border); }
