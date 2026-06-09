@@ -732,17 +732,36 @@ function driftValue(st: RState, key: string, delta: number, seq: number): void {
 }
 
 // 命名情绪：核心情感(valence/arousal) + 内稳态 → 一个廉价语义标签（确定性投影，纯派生）。
-function nameEmotion(s: Soma, floor: number): string {
+// 命名情绪（installment·OCC 分化）：在 valence×arousal 底座上，用全 8 维 soma + 丧失语境，
+// 按 appraisal 模式分化出离散情绪（OCC：恐惧/愤懑/沮丧/哀恸 同属负向，靠安全/唤醒/精力/丧失区分）。纯投影、确定性、不入折叠。
+function nameEmotion(s: Soma, floor: number, mourning = false): string {
   const v = s.valence.value;
   const a = s.arousal.value;
-  if (s.vitality.value <= floor + 0.03) return '疲惫';
-  if (s.connection.value < -0.4) return '孤独';
-  if (v < -0.3 && s.safety.value < 0.4) return '不安';
-  if (v < -0.3 && a > 0.55) return '焦虑';
-  if (v < -0.3) return '低落';
-  if (v > 0.3 && a > 0.55) return '雀跃';
-  if (v > 0.3) return '温暖';
-  if (a > 0.6) return '紧绷';
+  // 丧失：在乎的人永远离开后、此刻仍被牵动 → 哀恸（依恋对象丧失的 distress，区别于一般低落）。
+  if (mourning && v < -0.1) return '哀恸';
+  if (s.vitality.value <= floor + 0.03) return '枯竭'; // 求存触底=灵性枯竭（比"疲惫"更准）
+  if (s.connection.value < -0.4) return v > 0.1 ? '孤单' : '孤独'; // 连接是承重墙，优先
+  // —— 负向区：安全/唤醒/精力 分化（恐惧↔愤懑↔沮丧）——
+  if (v < -0.3) {
+    if (s.safety.value < 0.4 && a > 0.5) return '惊惶'; // 高威胁+高唤醒=恐惧
+    if (s.safety.value < 0.45) return '不安'; // 威胁未消=焦虑
+    if (a > 0.6) return '恼火'; // 高唤醒但不失安全=愤懑/受挫(anger)
+    if (s.energy.value < 0.4) return '沮丧'; // 低能量=灰心(dejection)
+    return '低落';
+  }
+  if (v < -0.1) return a > 0.55 ? '烦躁' : '闷闷的'; // 轻负
+  // —— 正向区 ——
+  if (v > 0.3) {
+    if (a > 0.6 && s.novelty.value > 0.55) return '兴奋'; // 正+高唤醒+新鲜=兴致勃勃
+    if (a > 0.55) return '雀跃'; // 正+高唤醒=喜悦
+    if (s.calm.value > 0.6) return '满足'; // 正+平静=安然(contentment)
+    return '温暖';
+  }
+  // —— 中性区：novelty 分化好奇↔无聊（探索系统）——
+  if (s.novelty.value > 0.6) return '好奇'; // 高新鲜=被勾住(interest)
+  if (s.novelty.value < 0.25) return '无聊'; // 新鲜耗尽=无聊(boredom)
+  if (a > 0.62) return '紧绷'; // 高唤醒中性=待发/紧张
+  if (s.calm.value > 0.7 && a < 0.4) return '安宁'; // 极平静=安宁(serenity)
   return '平静';
 }
 
@@ -753,6 +772,9 @@ function buildFeeling(s: Soma, emotion: string): string {
   if (s.calm.value < 0.4 && s.valence.value > 0.2) nu.push('开心里夹着一丝不安');
   if (s.valence.value < -0.2 && s.connection.value > 0.3) nu.push('难过、但还觉得被牵着');
   if (s.safety.value < 0.35 && s.valence.value > 0.2) nu.push('想靠近又有点怕');
+  if (s.novelty.value > 0.62 && s.valence.value > 0.15) nu.push('心里有点被勾起的新鲜劲');
+  if (s.safety.value > 0.7 && s.calm.value > 0.65 && s.valence.value > 0.2) nu.push('一种踏实的安心');
+  if (s.novelty.value < 0.25 && Math.abs(s.valence.value) < 0.2) nu.push('有点提不起劲、想找点新鲜的');
   if (s.energy.value < 0.32) nu.push('有点困了');
   return nu.length ? `${emotion}，${nu[0]}` : emotion;
 }
@@ -1046,7 +1068,7 @@ function buildNarrative(st: RState, sem: SemanticMemory[], goals: Goal[], decora
   const vivid = cur.filter((m) => m.vivid);
   // 印象最深 = 此刻最鲜活的那条（时间衰减后），而非单纯 salience。
   const top = cur.slice().sort((a, b) => (b.vividness ?? 0) - (a.vividness ?? 0))[0];
-  const mood = nameEmotion(st.soma, st.vitalityFloor);
+  const mood = nameEmotion(st.soma, st.vitalityFloor, Object.values(st.bonds).some((b) => b.ended));
   let s = `我于此醒来、至今约 ${age}（我还很年轻）。`;
   if (names.length) s += `我认识 ${names.join('、')}。`;
   s += `此刻我${mood}，灵性 ${st.soma.vitality.value.toFixed(2)}，清晰记得 ${vivid.length} 件、共经历 ${cur.length} 件。`;
@@ -1066,7 +1088,7 @@ function buildInnerLife(st: RState, bonds: Record<string, Bond>, decorated: Memo
   const quiet = [...st.quietThoughts].reverse().find((q) => q.relationshipId && bonds[q.relationshipId] && !bonds[q.relationshipId].ended);
   if (quiet?.relationshipId) parts.push(`我又想起了${bonds[quiet.relationshipId].displayRef}，话到嘴边，还是没去打扰ta。`);
   // 此刻没对人说的暗涌。
-  const mood = nameEmotion(st.soma, st.vitalityFloor);
+  const mood = nameEmotion(st.soma, st.vitalityFloor, Object.values(st.bonds).some((b) => b.ended));
   parts.push(st.soma.connection.value < -0.3 ? `心里有点空——${mood}，但我没说出来。` : `此刻心里是${mood}的，留给自己。`);
   // 内在拉扯（价值张力）——只对自己承认。
   if (tension) parts.push(`说不清的矛盾：${tension}。`);
@@ -1183,7 +1205,7 @@ function project(st: RState, uptoSeq: number): DerivedSnapshot {
   const enriched = enrichBonds(st, decorated);
   const goals = computeGoals(st, enriched);
   const sortedValues = [...st.values].sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
-  const emotion = nameEmotion(st.soma, st.vitalityFloor);
+  const emotion = nameEmotion(st.soma, st.vitalityFloor, Object.values(st.bonds).some((b) => b.ended));
   const tension = buildTension(sortedValues);
   const aspirations = buildAspirations(st);
   const needs = needsOf(st, enriched, aspirations.length);
