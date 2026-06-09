@@ -428,11 +428,13 @@
               <div class="ct-nums">记忆：当下记得 {st.memory.vivid} / 共 {st.memory.total} 段</div>
               {#if st.chapters.length}<div class="ct-sub">人生篇章</div><div class="ct-prose">{st.chapters.join('　→　')}</div>{/if}
             </div></div>
-            <div class="ct-stage"><div class="ct-k">④ 给模型的内容 SoulWorkspace</div><div class="ct-v">
-              <div class="ct-sub">性格底色</div><div class="ct-prose">{t.workspace.persona}</div>
+            <div class="ct-stage"><div class="ct-k">④ 给模型的内容 SoulWorkspace <span class="faint">（完整 8 字段）</span></div><div class="ct-v">
+              <div class="ct-nums">她是谁 {t.workspace.selfName} · 在和「{t.workspace.relationshipDisplay}」说 · 心情 {t.workspace.mood}</div>
+              <div class="ct-sub">性格底色 persona</div><div class="ct-prose">{t.workspace.persona}</div>
               <div class="ct-sub">当下倾向 intent</div><div class="ct-prose">{t.workspace.intent}</div>
-              <div class="ct-sub">状态摘要</div><div class="ct-prose">{t.workspace.stateSummary}</div>
+              <div class="ct-sub">状态摘要 stateSummary</div><div class="ct-prose">{t.workspace.stateSummary}</div>
               <div class="ct-sub">自我事实 selfFacts（grounding）</div><pre class="ct-pre">{t.workspace.selfFacts}</pre>
+              <div class="ct-sub">兜底话 fallback（仅模型挂了时用）</div><div class="ct-prose dim">{t.workspace.fallback}</div>
             </div></div>
             <div class="ct-stage"><div class="ct-k">⑤ 模型 ModelGateway {#if t.model.usedRealModel}<span class="tag ok">用了真模型 · {t.model.id}</span><span class="faint">{t.timing.modelMs}ms</span>{:else}<span class="tag sensitive">模板嘴 · 没用模型</span>{/if}</div><div class="ct-v">
               {#if t.raw.error && t.timing.modelMs > 6000}<p class="ct-warn">⚠ 模型耗时 {t.timing.modelMs}ms 后失败（多半超时）——这个模型对聊天太慢，用户会频繁看到"接不上"。换个快模型（qwen-plus / qwen-turbo / deepseek-chat / gpt-4o-mini）。</p>{/if}

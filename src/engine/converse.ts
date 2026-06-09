@@ -301,7 +301,7 @@ export interface ChainTrace {
     memory: { vivid: number; total: number };
     chapters: string[];
   };
-  workspace: { intent: string; stateSummary: string; selfFacts: string; persona: string; mood: string }; // 确定性装配、即将进 prompt 的内容
+  workspace: { intent: string; stateSummary: string; selfFacts: string; persona: string; mood: string; selfName: string; relationshipDisplay: string; fallback: string }; // 确定性装配、即将进 prompt 的内容（完整 8 字段）
   model: { id: string; usedRealModel: boolean; prompt: { role: string; content: string }[] }; // usedRealModel=false → 当前是模板嘴（没用模型）
   raw: { ok: boolean; text: string; error?: string }; // 模型原始输出（或失败原因）
   critic: { verdict: 'accepted' | 'fallback'; finalUtterance: string }; // 裁决 + 用户最终会看到的话
@@ -355,7 +355,7 @@ export async function traceConverse(
       memory: { vivid: curMem.filter((m) => m.vivid).length, total: curMem.length },
       chapters: snapshot.chapters,
     },
-    workspace: { intent: workspace.intent, stateSummary: workspace.stateSummary, selfFacts: workspace.selfFacts, persona: workspace.persona, mood: workspace.mood },
+    workspace: { intent: workspace.intent, stateSummary: workspace.stateSummary, selfFacts: workspace.selfFacts, persona: workspace.persona, mood: workspace.mood, selfName: workspace.selfName, relationshipDisplay: workspace.relationshipDisplay, fallback: workspace.fallback },
     model: { id: mouth.id, usedRealModel, prompt: usedRealModel ? apiyiMessages(input) : [] },
     raw: { ok, text: raw, error },
     critic: { verdict, finalUtterance },
