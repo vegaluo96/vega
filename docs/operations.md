@@ -12,12 +12,18 @@
 
 ## 守护进程代码结构（`src/server/`）
 
-daemon 是薄的**组装根**，业务逻辑分到几个只读 ctx 的模块，便于维护/阅读：
+`daemon.ts` 是**薄的组装根**（280 行）：按单向依赖把各层接起来 —— env → 各 store → 配置 → 生命体 → 写链路 → 微信 → 世界 → 组装 `ctx` → 挂 HTTP server（静态/健康/OpenAI 入口 + 两行派发）→ 起回路 → 生命周期。业务逻辑分到一组**只吃 `ctx` 的聚焦模块**（依赖单向无环：config → lives → respond → wechat/world → ctx → loops/routes），每个模块的依赖面用 `Pick<Ctx>` 投影、零类型重复：
 
-- `daemon.ts` —— 接线：env/单例/生效配置解析器/生命体(snapOf·boot·birthLife)/写链路(respondAsUser)/微信通道/聚合器；组装 `ctx` 后挂 HTTP（静态/健康/OpenAI 入口 + 两行派发）+ 起回路 + 生命周期。
-- `context.ts` —— `Ctx` 接口与共享类型（`Life`/`EffWorld`/`EffSocial`/`PeerExchange`）：路由层与回路层共同的"接口面"。
-- `routes/user.ts`(`handleUserApi`) · `routes/admin.ts`(`handleAdmin`) —— 用户态/管理态路由，逐段吃 ctx；匹配顺序/脱敏/角色门即真相。
+- `context.ts` —— `Ctx` 接口 + 共享类型（`Life`/`EffWorld`/`EffSocial`/`PeerExchange`）：所有模块共同的"接口面"。
+- `config.ts`(`createConfig`) —— 生效配置解析器（嘴/耳/世界/社交/计费 = settings ⊕ env ⊕ 默认）。
+- `lives.ts`(`createLives`) —— 生命体子系统：名册/句柄/有界重放(`snapOf`)/创世接生(`boot`·`birthLife`)/读助手/广场聚合器。
+- `respond.ts`(`createResponder`) —— 写链路 `respondAsUser`（神圣链路用户侧入口：计费 + 串行 + 资源感知）。
+- `presence.ts`(`createPresence`) —— 省 token 闲置门控（"有没有听众"）。
+- `wechat.ts`(`createWechat`) —— 微信 / iLink 通道：长轮询收发 + 统一应答。
+- `world.ts`(`createWorld`) —— 世界读取回路 + 备份（start/stop 生命周期）。
+- `push.ts`(`setupPush`) —— Web Push 订阅（reach_out → 推送）。
 - `loops.ts`(`startLoops`) —— 六个自主社会回路（心跳/寒暄/发现/反馈/评论/共鸣）。
+- `routes/user.ts`(`handleUserApi`) · `routes/admin.ts`(`handleAdmin`) —— 用户态/管理态路由，匹配顺序/脱敏/角色门即真相。
 - `http.ts`（收发/静态/取体）· `format.ts`（展示层纯函数：round3/maskKey/tempLabel/mbtiOf/moodReactionFor/eventLabel）。
 
 > 纯函数内核在 `src/kernel/`（reconstruct / 事件库 / 哈希链 / 情感配置 —— 零依赖、确定性、`RECONSTRUCT_VERSION` 在此）；`src/engine/` 是其上的编排层（converse / seeds / critic / invariant-checker）。服务层只在内核外编排，不反向污染。

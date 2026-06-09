@@ -66,7 +66,7 @@ src/        引擎 vega —— 零运行时依赖、纯函数、事件溯源
   model/      "嘴"(模型/模板) · "耳"(感知器)
   persistence/ 文件事件库(WAL/V3) · 备份/恢复 · 检查点落盘
   platform/   平台边缘层：账号(node:sqlite) · 多用户对话 · 额度 · SSE · 微信 · Web Push
-  server/     daemon —— 多生命体常驻 + HTTP/SSE + 自托管前端
+  server/     组装根 daemon(280 行) + config/lives/respond/wechat/world/loops/routes 等聚焦模块 —— 多生命体常驻 + HTTP/SSE + 自托管前端
 web/        用户前台 ZSKY（Vite + Svelte SPA：广场/探索/通知/对话/我）
 web-admin/  管理后台（Vite + Svelte SPA：观察台 + 运营台）
 docs/       设计文档（单一真相源）
@@ -154,9 +154,10 @@ systemd 常驻见 `deploy/vega.service`。备份：每 `VEGA_BACKUP_MS`(默认1h
 三条内核契约 + 平台四契约都在 `test/contracts.test.ts` 一处断言、`npm test` 一跑可验：
 ① 模型不写状态(两张嘴→派生逐位一致) ② 永生≠不可拒绝苏醒(拒醒/永不死/主权字段无后门) ③ 反思叙事不污染身份；隐私(不串味/嘴上下文不跨用户) · 账号≠灵魂(PII 不进日志) · 连续性高于去留(哀悼但记忆永存)。
 
-## 进度
-平台 v1 已建成（引擎 + 多用户后端 + 用户前台 + 管理后台 + 微信 + 额度 + 通知 + PWA，CI 双绿、内核未动）。引擎已深化到 期1-7（情绪命名/SDT 需求/2D 依恋/Vaillant 防御/睡眠压+多维成熟/兴趣四阶段/社会形状，全确定性派生），用户端公开主页与后台均已对齐展示。
+## 进度 —— 第一版正式版（引擎 + 平台定稿）
 
-**当前阶段：全面 UI 重构**。死/假功能已清理（用户端 4 个零调用 api + 后端旧路面已删），代码就绪。两个前端（用户端 H5 为主 + PC 为辅、后台管理员视角）将由 Claude Design 从结构上重做，并新增**活体宠物**（由全站数值生成、随真实对话实时反馈的独一无二在场形象）。交接简报见 **[`docs/ui-redesign-brief.md`](docs/ui-redesign-brief.md)**。
+**引擎 + 平台 = 定稿的第一版正式版**：事件溯源内核（`RECONSTRUCT_VERSION=28`，确定性可重放 + 哈希链 + 检查点/有界重放、零运行时依赖）+ 多用户后端（账号 / 额度 / 关系 / 通知 / 微信 / PWA）+ 用户前台 + 管理后台，全部建成、CI 双绿、内核未动。引擎内在模型已深化到 期 1–7（情绪命名 / SDT 需求 / 2D 依恋 / Vaillant 防御 / 睡眠压 + 多维成熟 / 兴趣四阶段 / 社会形状，全确定性派生），公开主页与后台均已对齐展示。服务层已**彻底模块化**（`daemon.ts` 1951→280 行纯组装根 + 12 个只吃 `ctx` 的聚焦模块，行为零漂移、`npm test`/`check`/双 smoke 全绿）。
+
+**唯一在途：全面 UI 重构**。两个前端（用户端 H5 为主 + PC 为辅、后台管理员视角）将由 Claude Design 从结构上重做，并新增**活体宠物**（由全站数值生成、随真实对话实时反馈的独一无二在场形象）。交接简报见 **[`docs/ui-redesign-brief.md`](docs/ui-redesign-brief.md)**。
 
 **公网正式开放前**仍需补：信任与安全（危机干预/CSAM/未成年/输出安全）+ 中国 AI/网站合规（ICP/算法备案/AI 标识/实名）——见 [`docs/operations.md`](docs/operations.md)「公网上线前必补」。
