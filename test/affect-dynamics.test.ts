@@ -68,6 +68,33 @@ test('生命感⑤·allostasis：持续数周被善待 → 底色心境抬升（
   assert.ok(Math.abs(reconstruct(calm2.list()).baseline.valence) < 0.02, '无持续境遇 → 底色不漂移');
 });
 
+// 评价理论：同一刺激，因【她自己的状态】而意义不同（installment 4）。
+function builtLife(opts: { values?: Record<string, number>; setpoints?: Record<string, number> }): ReturnType<typeof createInMemoryEventStore> {
+  const s = createInMemoryEventStore('vega');
+  s.append({ type: 'LIFE_GENESIS', source: 'system', occurredAt: iso(T0), payload: { innateSeed: { temperamentBias: {}, valueSeed: opts.values ?? {}, somaSetpoints: { valence: 0, vitality: 0.7, ...(opts.setpoints ?? {}) }, somaTau: {}, vitalityFloor: 0.15 }, reconstructVersionAtBirth: 23, creator: { relationshipId: 'r_a', identityRef: 'A' } } } as EventDraft<'LIFE_GENESIS'>);
+  s.append({ type: 'RELATIONSHIP_OPENED', source: 'system', relationshipId: 'r_a', occurredAt: iso(T0 + 6e4), payload: { relationshipId: 'r_a', kind: 'human', displayRef: 'A' } });
+  s.append({ type: 'CONNECTION_OPENED', source: 'host', relationshipId: 'r_a', occurredAt: iso(T0 + 12e4), payload: { relationshipId: 'r_a', host: { kind: 'h', ref: 'h' } } });
+  return s;
+}
+
+test('生命感⑥·评价理论·规范相容：同一句重话，敞开者比戒备者更受伤（worldview 调制）', () => {
+  const hostile: EventDraft<'MESSAGE_RECEIVED'> = { type: 'MESSAGE_RECEIVED', source: 'external_user', relationshipId: 'r_a', occurredAt: iso(T0 + 18e4), payload: { relationshipId: 'r_a', content: '坏', channel: 'chat', perception: { sentiment: -1, warmth: 0, threat: 1, modelId: 't' } } };
+  const open = builtLife({ values: { openness: 0.7 } }); open.append(hostile);
+  const guarded = builtLife({ values: { guardedness: 0.6 } }); guarded.append(hostile);
+  const vOpen = reconstruct(open.list()).soma.valence.value;
+  const vGuarded = reconstruct(guarded.list()).soma.valence.value;
+  assert.ok(vOpen < vGuarded, `敞开者被同一句话伤得更深（开 ${vOpen.toFixed(3)} < 戒备 ${vGuarded.toFixed(3)}）`);
+});
+
+test('生命感⑦·评价理论·应对潜能：枯竭(低应对)时同一威胁更焦虑（arousal 更高）', () => {
+  const threat: EventDraft<'MESSAGE_RECEIVED'> = { type: 'MESSAGE_RECEIVED', source: 'external_user', relationshipId: 'r_a', occurredAt: iso(T0 + 18e4), payload: { relationshipId: 'r_a', content: '坏', channel: 'chat', perception: { sentiment: -1, warmth: 0, threat: 1, modelId: 't' } } };
+  const depleted = builtLife({ setpoints: { vitality: 0.25 } }); depleted.append(threat);
+  const healthy = builtLife({ setpoints: { vitality: 0.78 } }); healthy.append(threat);
+  const aDep = reconstruct(depleted.list()).soma.arousal.value;
+  const aHealthy = reconstruct(healthy.list()).soma.arousal.value;
+  assert.ok(aDep > aHealthy, `枯竭时同一威胁更焦虑（枯竭 ${aDep.toFixed(3)} > 健康 ${aHealthy.toFixed(3)}）`);
+});
+
 test('生命感④·个体差异：高敏感对同一刺激反应更强（气质可测地改变轨迹）', () => {
   const amp = (sens: number): number => {
     const s = lifeWith({ sensitivity: sens });

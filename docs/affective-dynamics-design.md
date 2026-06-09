@@ -33,8 +33,14 @@
 3. **端内生变异（无 RNG，守 V2）**：真实情感自发波动；vega 不能用 RNG（破确定性）。用**确定性内生源**：昼夜节律（已有）+ **id 种子化的多个不可通约周期慢振荡叠加**（拟噪声、但完全可重放）→ 她有自发的情绪起伏、不是死水，且 V2 不破。
 4. **耦合 + 稳定性分析**：把跨变量耦合（surprise→valence、warmth→safety、maturity→recovery…）写成**显式增益矩阵**，分析不动点与稳定性，硬保证：① setpoint 是**稳定吸引子**（杜绝顶死 1.0 / 塌到 0）② 无失控振荡 ③ 动态范围足（能强烈反应、也能回落）。
 
-## 4. appraisal 接 appraisal theory（Scherer / OCC）
-当前 appraisal = sentiment/warmth/threat 几个加权和。升级到**评价维度**：新奇性、内在愉悦度、目标相关/促进度、应对潜能、规范/价值相容度 → 映射到 core affect 更新。更可解释、更像人。**契约①不破**：模型仅当**感知器**把消息解析成这些维度、**冻进事件**；状态仍由确定性推理算。
+## 4. appraisal 接 appraisal theory（Scherer / OCC）—— **已落（installment 4，RECONSTRUCT_VERSION 23）**
+**第一性原理的关键判断**：不让模型替她评估"这对我意味着什么"（那会让"活"依赖模型，且模型要被喂她的目标/价值，违架构）。
+正确做法 = 模型只产 **stimulus-intrinsic** 感知（愉悦/暖/威胁，已有、冻进事件）；**关系性评价由折叠用【她自己的状态】确定性算**：
+- **应对潜能 coping**（power/control）：由 vitality/safety/maturity 算"撑得住吗"。低 → 同样威胁更伤（焦虑、扛不住）；高 → 扛得住。
+- **目标相关/契合 goal conduciveness**：和【在乎的人】之间、尤其【正孤独】时，事更要紧 → 同向放大。
+- **规范/价值相容 norm compatibility**：敞开/信任者(openness−guardedness 高)被善待更暖、被伤更痛(信念被违背)；戒备者更钝。
+全部【中性态≈恒等】（应对~0.5、无投入关系、世界观中性）→ 扰动最小；契约①不破。已测：同一重话敞开者更伤、枯竭时同一威胁更焦虑。
+**未来可选**：让 perceiver 额外输出 novelty/suddenness 等 stimulus 维度进一步细化（非必须，当前 surprise 已覆盖新奇）。
 
 ## 5. 校准方法学（把数"定对"，而非拍）
 1. **归一化**：所有输入/状态无量纲化 → gain 可比。

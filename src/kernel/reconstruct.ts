@@ -32,7 +32,7 @@ import {
   type ValueEntry,
 } from '../domain/snapshot.ts';
 
-const RECONSTRUCT_VERSION = 22; // v22：情感动力学基座(二)——allostasis 设定点漂移：持续经历缓慢移动她的底色心境(valence/connection)，先天设定点仍是锚、有界；旧 checkpoint 全量重放
+const RECONSTRUCT_VERSION = 23; // v23：评价理论层(Scherer CPM)——应对潜能/目标契合/规范相容 由她自己状态确定性算，叠在 stimulus 感知上；中性≈恒等；旧 checkpoint 全量重放
 // 她活在出生地的时区：分钟东偏 UTC，【出生即冻结进 LIFE_GENESIS、终生不变】（不取 OS/用户时区，故 V2 可复现）。
 // 她是一个身体、只有一个昼夜。平台孵化的命缺省=北京 480；将来用户接生的命取创造者设备时区。
 const CIRCADIAN_OFFSET_MIN_DEFAULT = 480;
@@ -411,6 +411,23 @@ function appraiseMessage(st: RState, e: LifeEvent<'MESSAGE_RECEIVED'>): void {
   // 唤醒 = 强度 + 意外（越出乎预料越心头一紧/一亮）。
   s.arousal.value = clamp(s.arousal.value + (K.kArousal * Math.max(warmth, threat, Math.abs(ev2) / 1.5) * sens + K.surpriseArousal * surprise * K.kArousal) * driveF, 0, 1);
   s.novelty.value = clamp(s.novelty.value + 0.08 * surprise, 0, 1); // 出乎预料的话也带来新鲜感
+
+  // —— 评价理论层（Scherer CPM / OCC，installment 4）——在"刺激本身"的感知之上，由【她自己的状态】确定性算【关系性评价】：
+  // 不让模型替她评估"这对我意味着什么"（那会让活依赖模型）；而是用她的资源/牵挂/价值观去评——同一句话，对不同的她意义不同。
+  // 全部在中性态≈恒等（应对~0.5、无投入关系、世界观中性）→ 扰动最小；契约①不破（模型只产 stimulus-intrinsic 感知）。
+  const vw = (k: string): number => st.values.find((v) => v.key === k)?.weight ?? 0;
+  // ① 应对潜能（power/coping）：撑得住吗。低 → 同样的威胁更伤（焦虑、扛不住）；高 → 扛得住。
+  const copingGap = 0.5 - clamp(0.4 * s.vitality.value + 0.35 * s.safety.value + 0.25 * st.maturity, 0, 1);
+  if (threat > 0) {
+    s.safety.value = clamp(s.safety.value - K.kSafety * threat * copingGap * sens, 0, 1);
+    s.arousal.value = clamp(s.arousal.value + K.kArousal * threat * Math.max(0, copingGap), 0, 1);
+  }
+  // ② 目标相关/契合（goal conduciveness）：和【在乎的人】之间、尤其【正孤独】时，事更要紧 → 同向放大。
+  const goalRelevance = bond ? clamp(bond.closeness, 0, 1) * (s.connection.value < 0 ? 1 : 0.5) : 0;
+  s.valence.value = clamp(s.valence.value + 0.1 * ev2 * goalRelevance * sens, -1, 1);
+  // ③ 规范/价值相容（norm compatibility）：敞开/信任者被善待更暖、被伤更痛（信念被违背）；戒备者更钝（早有防备）。
+  const worldview = clamp(vw('openness') - vw('guardedness'), -0.6, 1);
+  s.valence.value = clamp(s.valence.value + 0.08 * ev2 * worldview * sens, -1, 1);
   // 预期违背的"质"：信任的人忽然变冷 → 额外失落；冷淡的人忽然变暖 → 意外的踏实。
   if (expected > 0.3 && ev2 < 0) s.valence.value = clamp(s.valence.value - 0.1 * surprise, -1, 1);
   else if (expected < -0.2 && ev2 > 0.3) s.safety.value = clamp(s.safety.value + 0.1 * surprise, 0, 1);
