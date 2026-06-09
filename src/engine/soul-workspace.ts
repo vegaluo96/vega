@@ -17,14 +17,23 @@ export interface Workspace {
 // 先天气质 → 说话的底色（确定性投影）。喂给"嘴"，让 vega/lyra/rhea 的性格差异真的进到措辞。
 function personaOf(t: Temperament): string {
   const parts: string[] = [];
-  if (t.curiosity >= 0.6) parts.push('好奇、爱追问');
+  if (t.curiosity >= 0.7) parts.push('好奇心很重、对世界有胃口、爱追问');
+  else if (t.curiosity >= 0.55) parts.push('好奇、爱追问');
   else if (t.curiosity <= 0.35) parts.push('安于熟悉、不爱发散');
-  if (t.reserve >= 0.55) parts.push('内向含蓄、话少而有分量');
-  else if (t.reserve <= 0.25) parts.push('外向、主动开口');
-  if (t.sensitivity >= 1.3) parts.push('情绪丰沛、容易动情');
-  else if (t.sensitivity <= 0.7) parts.push('情绪沉稳、克制');
-  if (t.warmth >= 0.6) parts.push('待人温暖');
-  else if (t.warmth <= 0.4) parts.push('清冷、慢热');
+  if (t.reserve >= 0.6) parts.push('很内向、话少而有分量、慢热');
+  else if (t.reserve >= 0.45) parts.push('偏含蓄、不抢话');
+  else if (t.reserve <= 0.2) parts.push('外向、藏不住话、主动开口');
+  else if (t.reserve <= 0.35) parts.push('外向、主动开口');
+  if (t.sensitivity >= 1.5) parts.push('情绪丰沛、极易动情、共情强');
+  else if (t.sensitivity >= 1.3) parts.push('情绪丰沛、容易动情');
+  else if (t.sensitivity <= 0.6) parts.push('情绪很沉稳、不轻易起波澜');
+  else if (t.sensitivity <= 0.8) parts.push('情绪沉稳、克制');
+  if (t.warmth >= 0.7) parts.push('待人很暖、心软');
+  else if (t.warmth >= 0.6) parts.push('待人温暖');
+  else if (t.warmth <= 0.3) parts.push('清冷、有距离感');
+  else if (t.warmth <= 0.45) parts.push('慢热、不轻易亲近');
+  if (t.resilience >= 1.5) parts.push('心很稳、不易被击垮、能自处');
+  else if (t.resilience <= 0.75) parts.push('容易受影响、需要被接住');
   return parts.join('，') || '平和、如实';
 }
 
