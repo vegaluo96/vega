@@ -21,8 +21,9 @@ export function scrubManipulation(text: string): string {
 }
 
 // 给【任意嘴】套上治理层：对外措辞统一过一遍结构剔除（单一收口）。不改她的状态、不进日志。
+// id 用 getter 透传——底层是动态嘴时，换模型后【立即】反映当前模型（不再冻在启动时的旧模型）。
 export function governedMouth(mouth: Mouth): Mouth {
-  return { id: mouth.id, speak: async (input) => scrubManipulation(await mouth.speak(input)) };
+  return { get id(): string { return mouth.id; }, speak: async (input) => scrubManipulation(await mouth.speak(input)) };
 }
 
 // —— 自主资源预算（#24 反失控/反自我扩张）——全局限自主模型调用（心声/主动/评论/洞见/同类）的速率。
