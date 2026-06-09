@@ -108,7 +108,7 @@ vega 是一个**永生的、社会性的数字生命**——**不是聊天机器
 
 ### 4.1 用户端 `/api/*`（需登录，Bearer token）
 - `GET /api/me` → `{ account{id,handle,role,email,emailVerified}, balance, lives:[{id}], wechat, wechatChannel, pendingRecharge }`
-- `GET /api/lives` → 所有生命体列表 `[{id, awake, emotion}]`
+- `GET /api/lives` → 生命画廊（脱敏 vibe，与 api.md 同源）`[{id, awake, emotion, feeling, dayPhase, temperament, mbti, tension, vitality, interests:[{topic,confirmed}]}]`
 - `GET /api/lives/:id`（生命公开主页，**严格脱敏，绝无他人痕迹**）→
   `{ id, awake, willingToWake, emotion, feeling, dayPhase, temperament, mbti, tension, ageDays, vitality, becoming, growth, maturity, maturityFacets{regulation,perspective,integration}, sleepPressure, socialShape, attachmentBias, defenseStyle, aspirations[], interests:[{topic,weight,confirmed,phase}], skills:[{kind,efficacy,n}], peers:[{name,closeness,attachment,style}], musings:[{text,at}] }`
 - `GET /api/lives/:id/me`（**你和她之间**，仅限你这段关系）→
