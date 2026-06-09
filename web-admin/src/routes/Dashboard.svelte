@@ -397,7 +397,7 @@
             <div class="ct-stage"><div class="ct-k">② 感知 Perceive <span class="faint">{t.timing.perceiveMs}ms</span></div><div class="ct-v">
               {#if t.perceive.active && t.perceive.perception}
                 {@const pp = t.perceive.perception}
-                模型听出（刺激固有维度）：善意 {pp.sentiment} · 暖 {pp.warmth} · 威胁 {pp.threat}{#if pp.intensity != null} · 强度 {pp.intensity}{/if}{#if pp.novelty != null} · 新奇 {pp.novelty}{/if}{#if pp.certainty != null} · 清晰 {pp.certainty}{/if}{#if pp.blame != null} · 归因 {pp.blame}{/if}{#if pp.urgency != null} · 紧迫 {pp.urgency}{/if}{#if pp.playful != null} · 玩笑 {pp.playful}{/if}
+                模型听出（刺激固有维度）：善意 {pp.sentiment} · 暖 {pp.warmth} · 威胁 {pp.threat}{#if pp.intensity != null} · 强度 {pp.intensity}{/if}{#if pp.novelty != null} · 新奇 {pp.novelty}{/if}{#if pp.certainty != null} · 清晰 {pp.certainty}{/if}{#if pp.blame != null} · 归因 {pp.blame}{/if}{#if pp.urgency != null} · 紧迫 {pp.urgency}{/if}{#if pp.playful != null} · 玩笑 {pp.playful}{/if}{#if pp.topics && pp.topics.length} · 话题 {pp.topics.join('/')}（→长兴趣）{/if}
               {:else}<span class="ct-warn">未用模型感知 → 退回确定性词表（她对微妙语气的理解会很粗）{#if t.timing.perceiveMs > 3000}——且耗了 {t.timing.perceiveMs}ms（感知模型太慢/超时，建议设个快的感知模型）{/if}</span>{/if}
             </div></div>
             <div class="ct-stage"><div class="ct-k">③ 状态 EngineSnapshot <span class="faint">引擎全貌——和④对比即知哪些能力没喂给模型</span></div><div class="ct-v">

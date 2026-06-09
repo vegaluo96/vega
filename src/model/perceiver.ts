@@ -24,11 +24,13 @@ export function createApiyiPerceiver(cfg: PerceiverConfig): Perceiver {
   const SYSTEM =
     '你是 vega 的"情感感知器/耳朵"——只听【对方这句话本身】客观透出的属性，【不要】判断"这对 vega 意味着什么"。' +
     '只输出一个 JSON 对象（不要解释、不要代码块）：' +
-    '{"sentiment":-1~1,"warmth":0~1,"threat":0~1,"intensity":0~1,"novelty":0~1,"certainty":0~1,"blame":-1~1,"urgency":0~1,"playful":0~1}。' +
+    '{"sentiment":-1~1,"warmth":0~1,"threat":0~1,"intensity":0~1,"novelty":0~1,"certainty":0~1,"blame":-1~1,"urgency":0~1,"playful":0~1,"topics":["..."]}。' +
     'sentiment=整体善意(正)↔敌意(负)；warmth=温暖/亲近/关切；threat=威胁/敌意/伤害/否定；' +
     'intensity=情感强度·语气多用力("我爱死你了！！"高,"嗯还行"低)；novelty=话题/内容的新奇·突然(没聊过的新事高,老生常谈低)；' +
     'certainty=表达清晰度(明确高,模棱/含糊/费解低)；blame=归因方向(把责任推给 vega→正,说话者自己承担/道歉→负,不涉及→0)；' +
-    'urgency=紧迫/求助/需要立刻回应；playful=玩笑/调侃成分(开玩笑高,严肃低)。缺乏依据的维度给中性值(0 或 0.5)。只输出 JSON。';
+    'urgency=紧迫/求助/需要立刻回应；playful=玩笑/调侃成分(开玩笑高,严肃低)；' +
+    'topics=这句话在聊的 0~3 个主题词(简短名词,如「音乐」「工作」「感情」「游戏」；没明显主题就给空数组 [])。' +
+    '缺乏依据的维度给中性值(0 或 0.5)。只输出 JSON。';
   return {
     id: cfg.model,
     async perceive(content: string): Promise<Perception | null> {
@@ -63,6 +65,7 @@ export function createApiyiPerceiver(cfg: PerceiverConfig): Perceiver {
           sentiment: num(o.sentiment, -1, 1), warmth: num(o.warmth, 0, 1), threat: num(o.threat, 0, 1),
           intensity: opt(o.intensity, 0, 1), novelty: opt(o.novelty, 0, 1), certainty: opt(o.certainty, 0, 1),
           blame: opt(o.blame, -1, 1), urgency: opt(o.urgency, 0, 1), playful: opt(o.playful, 0, 1),
+          topics: Array.isArray(o.topics) ? o.topics.filter((x): x is string => typeof x === 'string' && x.trim() !== '').slice(0, 3).map((x) => x.trim().slice(0, 16)) : undefined,
           modelId: cfg.model,
         };
       } catch {

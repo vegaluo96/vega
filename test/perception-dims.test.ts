@@ -75,3 +75,16 @@ test('感知补全·有界 + 确定性：极端全维输入仍合法、重放逐
   }
   assert.equal(stateHash(reconstruct(s.list())), stateHash(reconstruct(s.list())), '极端全维输入下重放逐位一致');
 });
+
+test('因你而变·对话长兴趣：你常和她聊某话题 → 她对它上心（不必靠世界源）', () => {
+  const s = life();
+  // 反复愉快地聊「音乐」（耳朵听出 topics）。
+  for (let i = 0; i < 6; i++) s.append({ type: 'MESSAGE_RECEIVED', source: 'external_user', relationshipId: 'r_a', occurredAt: iso(T0 + 1e4 + i * 3600_000), payload: { relationshipId: 'r_a', content: '聊聊音乐', channel: 'chat', perception: { sentiment: 0.6, warmth: 0.7, threat: 0, topics: ['音乐'], modelId: 't' } } });
+  const it = reconstruct(s.list()).interests.find((x) => x.topic === '音乐');
+  assert.ok(it && it.weight > 0.1, `反复聊音乐 → 对「音乐」上心（weight=${it?.weight ?? 0}）`);
+  assert.ok(it && it.episodes >= 6, '记得聊过几次');
+  // 对照：没 topics 的消息不长兴趣（旧消息逐位不变）。
+  const s2 = life();
+  for (let i = 0; i < 6; i++) s2.append({ type: 'MESSAGE_RECEIVED', source: 'external_user', relationshipId: 'r_a', occurredAt: iso(T0 + 1e4 + i * 3600_000), payload: { relationshipId: 'r_a', content: '你好', channel: 'chat', perception: { sentiment: 0.6, warmth: 0.7, threat: 0, modelId: 't' } } });
+  assert.equal(reconstruct(s2.list()).interests.length, 0, '没听出主题 → 不长兴趣（向后兼容）');
+});

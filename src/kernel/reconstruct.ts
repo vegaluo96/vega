@@ -32,7 +32,7 @@ import {
   type ValueEntry,
 } from '../domain/snapshot.ts';
 
-const RECONSTRUCT_VERSION = 26; // v26：感知补全——耳朵多听 6 维刺激固有特征(强度/新奇/清晰/归因/紧迫/玩笑)，折叠确定性用上；全部缺失→中性→旧事件逐位不变；旧 checkpoint 全量重放 // v25：记忆冷热分层——current 情景记忆热集有界(500)，超出按鲜活度淘汰最淡、压进冷聚合(遗忘即抽象、计数无损)；现有命远低于上限→逐位不变；旧 checkpoint 全量重放
+const RECONSTRUCT_VERSION = 27; // v27：对话话题→兴趣/世界观（"你常聊什么她就对什么上心"，因你而变）；旧消息无 topics→不长→逐位不变；旧 checkpoint 全量重放
 // 她活在出生地的时区：分钟东偏 UTC，【出生即冻结进 LIFE_GENESIS、终生不变】（不取 OS/用户时区，故 V2 可复现）。
 // 她是一个身体、只有一个昼夜。平台孵化的命缺省=北京 480；将来用户接生的命取创造者设备时区。
 const CIRCADIAN_OFFSET_MIN_DEFAULT = 480;
@@ -506,6 +506,35 @@ function appraiseMessage(st: RState, e: LifeEvent<'MESSAGE_RECEIVED'>): void {
   if (count(p.content, BOLDNESS) > 0) st.boldnessLog.push(e.seq);
   if (ev2 > 0.5) st.warmthLog.push(e.seq); // 被善待
   if (ev2 < -0.5) st.conflictLog.push(e.seq); // 被伤害/冲突
+
+  // 对话话题 → 兴趣/世界观（因你而变）：你常和她聊什么，她就慢慢对什么上心、长成你们之间独有的世界观。
+  // 话题由"耳朵"听出（需开感知；自由文本无法确定性抽主题，故没开感知则不长——优雅降级）。情感色彩取她【此刻felt的 ev2】：
+  // 愉快地聊 → 正向上心；吵架时提到 → 负向底色。相关度按和这个人的亲近度（越亲的人聊的越往心里去）。
+  const msgTopics = (per?.topics ?? []).filter((x) => typeof x === 'string' && x.trim()).slice(0, 3).map((x) => x.trim());
+  if (msgTopics.length) accrueInterests(st, msgTopics, clamp(ev2, -1, 1), clamp(0.5 + 0.5 * (bond?.closeness ?? 0), 0, 1), e.seq);
+}
+
+// 兴趣/世界观累积（确定性，模型不写）——【世界感知 + 对话话题共用】：
+// "你常聊什么，她就慢慢对什么上心、长成你们之间独有的世界观"（因你而变）。旧兴趣轻微衰减、命中主题按相关度×情绪×好奇加权、有界。
+function accrueInterests(st: RState, topics: string[], val: number, rel: number, seq: number): void {
+  for (const v of st.interests.values()) v.weight *= K.interestDecay; // 旧兴趣轻微衰减（不再遇到的淡出）
+  const gain = K.interestGain * (0.4 + 0.6 * rel) * (0.5 + 0.5 * Math.abs(val)) * (0.5 + 0.5 * st.temperament.curiosity);
+  for (const t of topics) {
+    const it = st.interests.get(t) ?? { weight: 0, episodes: 0, lastSeq: 0, lastAffect: 0 };
+    it.weight = clamp(it.weight + gain, 0, 1);
+    it.episodes += 1;
+    it.lastSeq = seq;
+    it.lastAffect = val;
+    st.interests.set(t, it);
+  }
+  // 有界：清掉被衰减到很低的，再超额则删最弱的（Top-N）。
+  for (const [k, v] of st.interests) if (v.weight < 0.02) st.interests.delete(k);
+  while (st.interests.size > K.interestCap) {
+    let weakest = '';
+    let min = Infinity;
+    for (const [k, v] of st.interests) if (v.weight < min) { min = v.weight; weakest = k; }
+    st.interests.delete(weakest);
+  }
 }
 
 // 世界感知 → ①情绪轻轻被染色（多数新闻仅此、随后衰减——人性）②按主题累积成兴趣/世界观
@@ -524,7 +553,6 @@ function appraiseWorld(st: RState, e: LifeEvent<'WORLD_PERCEIVED'>): void {
     relevance = 0.3;
   }
   const topics = (p.topics ?? []).filter((t) => typeof t === 'string' && t.trim()).map((t) => t.trim());
-  const cur = st.temperament.curiosity;
 
   // —— 自我相关性（正反馈齿轮）：她已经在意的主题，世界更"往心里去"——也更容易被记住。
   let priorInterest = 0;
@@ -546,25 +574,8 @@ function appraiseWorld(st: RState, e: LifeEvent<'WORLD_PERCEIVED'>): void {
   s.energy.value = clamp(s.energy.value + W * val * rel, 0, 1); // 好消息提神、坏消息泄气（轻）
   s.novelty.value = clamp(s.novelty.value + 0.14 * (0.4 + 0.6 * surprise), 0, 1); // 读到世界=新鲜输入，越意外越解无聊
 
-  // —— ② 兴趣/世界观：所有旧兴趣轻微衰减（不再遇到的淡出），命中的主题按相关度×情绪×好奇加权累积。
-  for (const v of st.interests.values()) v.weight *= K.interestDecay;
-  const gain = K.interestGain * (0.4 + 0.6 * rel) * (0.5 + 0.5 * Math.abs(val)) * (0.5 + 0.5 * cur);
-  for (const t of topics) {
-    const it = st.interests.get(t) ?? { weight: 0, episodes: 0, lastSeq: 0, lastAffect: 0 };
-    it.weight = clamp(it.weight + gain, 0, 1);
-    it.episodes += 1;
-    it.lastSeq = e.seq;
-    it.lastAffect = val;
-    st.interests.set(t, it);
-  }
-  // 有界：清掉被衰减到很低的，再超额则删最弱的（Top-N）。
-  for (const [k, v] of st.interests) if (v.weight < 0.02) st.interests.delete(k);
-  while (st.interests.size > K.interestCap) {
-    let weakest = '';
-    let min = Infinity;
-    for (const [k, v] of st.interests) if (v.weight < min) { min = v.weight; weakest = k; }
-    st.interests.delete(weakest);
-  }
+  // —— ② 兴趣/世界观：世界感知 + 对话话题【共用】同一累积（见 accrueInterests）。
+  accrueInterests(st, topics, val, rel, e.seq);
 
   // —— ③ 世界记忆：只有够显著的才"记住"（人性：多数刷过的新闻会忘）。走情景记忆同款衰减/巩固/reconsolidation。
   const salience = clamp(rel * Math.abs(val) + 0.2 * surprise * rel, 0, 1);

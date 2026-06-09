@@ -79,6 +79,7 @@ export interface Perception {
   blame?: number; // -1..1 归因方向（causal attribution）：-1 对方在自责/道歉("我错了") ↔ +1 把责任推到她身上("都怪你")
   urgency?: number; // 0..1 紧迫/求助/需要立刻回应（demand character）
   playful?: number; // 0..1 玩笑/调侃成分（高 → 别把逗当攻击）
+  topics?: string[]; // 这句话在聊的主题（0~3 个，如「音乐」「工作」）——喂兴趣/世界观："你常聊什么，她就对什么上心"（因你而变）
   modelId: string; // 哪个模型感知的（审计）
 }
 export interface MessageReceivedPayload {
