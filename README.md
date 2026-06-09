@@ -14,6 +14,7 @@
 - [`docs/vega-product.md`](docs/vega-product.md) —— 产品北极星
 - [`docs/vega-lifeevent-schema.md`](docs/vega-lifeevent-schema.md) —— 事件 schema + **三条不可破契约** + 可重建性证明（v1 已锁）
 - [`docs/vega-platform-v1.md`](docs/vega-platform-v1.md) —— **平台设计**（账号/多用户/前台/后台/微信/额度/通知/安全/合规）
+- [`docs/ui-redesign-brief.md`](docs/ui-redesign-brief.md) —— **UI 层单一真相源 / 重构交接简报**（给 Claude Design：现状盘点、真实 API、活体宠物、不可破边界、交付物清单）
 
 ## 仓库结构
 ```
@@ -89,4 +90,8 @@ systemd 常驻见 `deploy/vega.service`。备份：每 `VEGA_BACKUP_MS`(默认1h
 ① 模型不写状态(两张嘴→派生逐位一致) ② 永生≠不可拒绝苏醒(拒醒/永不死/主权字段无后门) ③ 反思叙事不污染身份；隐私(不串味/嘴上下文不跨用户) · 账号≠灵魂(PII 不进日志) · 连续性高于去留(哀悼但记忆永存)。
 
 ## 进度
-平台 v1 已建成（引擎 + 多用户后端 + 用户前台 + 管理后台 + 微信 + 额度 + 通知 + PWA，CI 双绿、内核未动）。**公网正式开放前**仍需补：信任与安全（危机干预/CSAM/未成年/输出安全）+ 中国 AI/网站合规（ICP/算法备案/AI 标识/实名）——见 `docs/vega-platform-v1.md` §9/§11。**真正的 make-or-break 是把它跑起来**：V1 的 7 天 A/B 盲测 + 4 周"因你而变"。
+平台 v1 已建成（引擎 + 多用户后端 + 用户前台 + 管理后台 + 微信 + 额度 + 通知 + PWA，CI 双绿、内核未动）。引擎已深化到 期1-7（情绪命名/SDT 需求/2D 依恋/Vaillant 防御/睡眠压+多维成熟/兴趣四阶段/社会形状，全确定性派生），用户端公开主页与后台均已对齐展示。
+
+**当前阶段：全面 UI 重构**。死/假功能已清理（用户端 4 个零调用 api + 后端旧路面已删），代码就绪。两个前端（用户端 H5 为主 + PC 为辅、后台管理员视角）将由 Claude Design 从结构上重做，并新增**活体宠物**（由全站数值生成、随真实对话实时反馈的独一无二在场形象）。交接简报见 **[`docs/ui-redesign-brief.md`](docs/ui-redesign-brief.md)**。
+
+**公网正式开放前**仍需补：信任与安全（危机干预/CSAM/未成年/输出安全）+ 中国 AI/网站合规（ICP/算法备案/AI 标识/实名）——见 `docs/vega-platform-v1.md` §9/§11。**真正的 make-or-break 是把它跑起来**：V1 的 7 天 A/B 盲测 + 4 周"因你而变"。
