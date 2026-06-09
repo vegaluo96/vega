@@ -17,6 +17,7 @@ import {
   type RelationshipEndedPayload,
   type RelationshipOpenedPayload,
 } from '../domain/events.ts';
+import { AFFECT } from './affect-config.ts';
 import {
   type Bond,
   type BondCore,
@@ -31,7 +32,7 @@ import {
   type ValueEntry,
 } from '../domain/snapshot.ts';
 
-const RECONSTRUCT_VERSION = 20; // v20：自我优化——从行动反馈学策略效能 skills（哪种做法被接住），调风险偏好/主动倾向；效能 0.5 中性处=恒等→老命不变；旧 checkpoint 全量重放
+const RECONSTRUCT_VERSION = 21; // v21：情感动力学数值基座(一)——时间常数 τ 文献标定 + valence 正/负不对称(哀伤久喜悦短)；情绪时长终于像人；旧 checkpoint 全量重放
 // 她活在出生地的时区：分钟东偏 UTC，【出生即冻结进 LIFE_GENESIS、终生不变】（不取 OS/用户时区，故 V2 可复现）。
 // 她是一个身体、只有一个昼夜。平台孵化的命缺省=北京 480；将来用户接生的命取创造者设备时区。
 const CIRCADIAN_OFFSET_MIN_DEFAULT = 480;
@@ -115,7 +116,6 @@ interface RState {
 }
 
 const clamp = (x: number, lo: number, hi: number): number => (x < lo ? lo : x > hi ? hi : x);
-const decay = (v: SomaVar, dtSec: number): number => v.setpoint + (v.value - v.setpoint) * Math.exp(-dtSec / v.tau);
 const decayTo = (value: number, target: number, dtSec: number, tau: number): number => target + (value - target) * Math.exp(-dtSec / tau);
 // 她在【出生地时区】下的"一天里第几小时"（确定性；offsetMin 来自冻结的出生属性）。
 const hourOfDay = (nowMs: number, offsetMin: number): number => (((nowMs / 3_600_000 + offsetMin / 60) % 24) + 24) % 24;
@@ -276,15 +276,22 @@ function advanceTime(st: RState, dtSec: number, awake: boolean, nowMs: number): 
   const eTarget = clamp(s.energy.setpoint + circadianEnergyOffset(nowMs, st.circadianOffsetMin), 0.05, 1);
   if (awake) {
     for (const key of SOMA_KEYS) {
-      if (key === 'energy') s.energy.value = decayTo(s.energy.value, eTarget, dt, s.energy.tau);
-      else s[key].value = decay(s[key], dt);
+      if (key === 'energy') s.energy.value = decayTo(s.energy.value, eTarget, dt, AFFECT.tau.energy);
+      else s[key].value = decayTo(s[key].value, s[key].setpoint, dt, effTau(key, s[key])); // 文献标定 τ + valence 正负不对称
     }
     s.vitality.value = clamp(s.vitality.value, st.vitalityFloor, 1);
   } else {
     // 休眠（§10 锁）：冻结 + 仅回暖——vitality 向设定点、energy 向昼夜目标恢复，其余不动。
-    s.vitality.value = clamp(decay(s.vitality, dt), st.vitalityFloor, 1);
-    s.energy.value = decayTo(s.energy.value, eTarget, dt, s.energy.tau);
+    s.vitality.value = clamp(decayTo(s.vitality.value, s.vitality.setpoint, dt, AFFECT.tau.vitality), st.vitalityFloor, 1);
+    s.energy.value = decayTo(s.energy.value, eTarget, dt, AFFECT.tau.energy);
   }
+}
+// 有效时间常数：全局校准(AFFECT.tau)，且 valence 按【偏离方向】不对称——从低落恢复远慢于从喜悦回落（哀伤久、喜悦短）。
+// 校准是全局的、不是个体特质，故不读冻结种子的 somaTau（那是早期把校准错塞进种子）；个体差异由 resilience/sensitivity 表达。
+function effTau(key: SomaKey, v: SomaVar): number {
+  if (key === 'valence') return v.value < v.setpoint ? AFFECT.tau.valenceNeg : AFFECT.tau.valencePos;
+  const t = (AFFECT.tau as Record<string, number>)[key];
+  return t ?? v.tau;
 }
 
 function applyEvent(st: RState, e: LifeEvent): void {

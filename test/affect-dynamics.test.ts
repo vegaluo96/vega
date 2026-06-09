@@ -1,0 +1,64 @@
+// 情感动力学·生命感验证套件（§ docs/affective-dynamics-design.md §6）：把"像不像活的"钉成可量化的测试。
+// 锚定实证：情绪时长(Verduyn 哀伤≫喜悦)、情绪惯性健康带(Kuppens)、无病理吸引子(根治 v0.x 顶死)、个体差异。
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createInMemoryEventStore, reconstruct, type EventDraft } from '../src/index.ts';
+
+const T0 = Date.parse('2026-01-01T00:00:00.000Z');
+const iso = (ms: number): string => new Date(ms).toISOString();
+function lifeWith(bias: Record<string, number> = {}): ReturnType<typeof createInMemoryEventStore> {
+  const s = createInMemoryEventStore('vega');
+  s.append({ type: 'LIFE_GENESIS', source: 'system', occurredAt: iso(T0), payload: { innateSeed: { temperamentBias: bias, valueSeed: {}, somaSetpoints: { valence: 0, vitality: 0.7 }, somaTau: {}, vitalityFloor: 0.15 }, reconstructVersionAtBirth: 21, creator: { relationshipId: 'r_a', identityRef: 'A' } } } as EventDraft<'LIFE_GENESIS'>);
+  s.append({ type: 'RELATIONSHIP_OPENED', source: 'system', relationshipId: 'r_a', occurredAt: iso(T0 + 60_000), payload: { relationshipId: 'r_a', kind: 'human', displayRef: 'A' } });
+  s.append({ type: 'CONNECTION_OPENED', source: 'host', relationshipId: 'r_a', occurredAt: iso(T0 + 120_000), payload: { relationshipId: 'r_a', host: { kind: 'http', ref: 'h' } } });
+  return s;
+}
+const msg = (atMs: number, sentiment: number): EventDraft<'MESSAGE_RECEIVED'> => ({
+  type: 'MESSAGE_RECEIVED', source: 'external_user', relationshipId: 'r_a', occurredAt: iso(atMs),
+  payload: { relationshipId: 'r_a', content: sentiment >= 0 ? '好' : '坏', channel: 'chat', perception: { sentiment, warmth: sentiment >= 0 ? 1 : 0, threat: sentiment >= 0 ? 0 : 1, modelId: 'test' } },
+});
+const idle = (atMs: number): EventDraft<'AUTONOMOUS_TICK'> => ({ type: 'AUTONOMOUS_TICK', source: 'autonomous_loop', occurredAt: iso(atMs), payload: { tickReason: 'idle_threshold', selectedMemoryIds: [], wanderingTargets: [], formedIntents: [] } });
+const HOUR = 3600_000;
+
+test('生命感①·情绪时长：哀伤比喜悦消退得慢得多（valence 负向 τ ≫ 正向，照 Verduyn）', () => {
+  const recoverFrac = (sentiment: number, idleHours: number): number => {
+    const s = lifeWith();
+    s.append(msg(T0 + 180_000, sentiment));
+    const before = reconstruct(s.list()).soma.valence.value;
+    s.append(idle(T0 + 180_000 + idleHours * HOUR));
+    const after = reconstruct(s.list()).soma.valence.value;
+    return 1 - Math.abs(after) / Math.abs(before); // 设定点=0；恢复比例（越高=消退越多）
+  };
+  const joy = recoverFrac(1, 24); // 喜悦闲置一天
+  const sad = recoverFrac(-1, 24); // 哀伤闲置一天
+  assert.ok(joy > sad + 0.2, `同样一天，喜悦消退应远多于哀伤（喜悦恢复 ${joy.toFixed(2)} ≫ 哀伤 ${sad.toFixed(2)}）`);
+});
+
+test('生命感②·无病理吸引子：强负向后足够久会回到设定点（根治 v0.x 顶死/塌底，不卡死）', () => {
+  const s = lifeWith();
+  s.append(msg(T0 + 180_000, -1));
+  const low = reconstruct(s.list()).soma.valence.value;
+  assert.ok(low < -0.2, '强负向当下确实低落');
+  s.append(idle(T0 + 180_000 + 12 * 24 * HOUR)); // 12 天（~6×τ_neg）
+  const healed = reconstruct(s.list()).soma.valence.value;
+  assert.ok(Math.abs(healed) < 0.1, `足够久后回归基线、不卡死（${healed.toFixed(3)}）`);
+});
+
+test('生命感③·动态范围+不饱和：连发强正向会升高、但闲置后回落（不永久顶死 1.0）', () => {
+  const s = lifeWith();
+  for (let i = 0; i < 6; i++) s.append(msg(T0 + 180_000 + i * 60_000, 1));
+  const peak = reconstruct(s.list()).soma.valence.value;
+  assert.ok(peak > 0.3 && peak <= 1, `强烈正向有显著反应（${peak.toFixed(2)}）`);
+  s.append(idle(T0 + 180_000 + 48 * HOUR));
+  const settled = reconstruct(s.list()).soma.valence.value;
+  assert.ok(settled < peak - 0.2, `闲置后回落、不冻结在峰值（峰 ${peak.toFixed(2)} → ${settled.toFixed(2)}）`);
+});
+
+test('生命感④·个体差异：高敏感对同一刺激反应更强（气质可测地改变轨迹）', () => {
+  const amp = (sens: number): number => {
+    const s = lifeWith({ sensitivity: sens });
+    s.append(msg(T0 + 180_000, -1));
+    return Math.abs(reconstruct(s.list()).soma.valence.value);
+  };
+  assert.ok(amp(1.7) > amp(0.5), '高敏感者同一坏消息的情绪幅度更大');
+});
