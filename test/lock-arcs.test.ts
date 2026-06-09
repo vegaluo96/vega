@@ -1,7 +1,15 @@
 // 锁 schema 前补的 3 条弧（§9 Arc 6/7/8 的运行时验证）。
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createInMemoryEventStore, reconstruct, verifyChain, type EventDraft } from '../src/index.ts';
+import { createInMemoryEventStore, reconstruct, verifyChain, genesisPayloadFor, type EventDraft } from '../src/index.ts';
+
+test('版本同步：出生记录的 reconstructVersionAtBirth 必须 == 当前 reconstructVersion（防漂移）', () => {
+  ms = Date.parse('2026-01-01T00:00:00.000Z');
+  const born = genesisPayloadFor('vega', { relationshipId: 'r_c', identityRef: 'T' }).reconstructVersionAtBirth;
+  const s = createInMemoryEventStore('vega-1');
+  s.append({ type: 'LIFE_GENESIS', source: 'system', occurredAt: at(), payload: genesisPayloadFor('vega', { relationshipId: 'r_c', identityRef: 'T' }) });
+  assert.equal(born, reconstruct(s.list()).reconstructVersion, 'seeds 的 birth-version 与内核 RECONSTRUCT_VERSION 必须一致');
+});
 
 let ms = Date.parse('2026-01-01T00:00:00.000Z');
 const at = (): string => new Date((ms += 60_000)).toISOString();
