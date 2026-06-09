@@ -32,7 +32,7 @@ import {
   type ValueEntry,
 } from '../domain/snapshot.ts';
 
-const RECONSTRUCT_VERSION = 21; // v21：情感动力学数值基座(一)——时间常数 τ 文献标定 + valence 正/负不对称(哀伤久喜悦短)；情绪时长终于像人；旧 checkpoint 全量重放
+const RECONSTRUCT_VERSION = 22; // v22：情感动力学基座(二)——allostasis 设定点漂移：持续经历缓慢移动她的底色心境(valence/connection)，先天设定点仍是锚、有界；旧 checkpoint 全量重放
 // 她活在出生地的时区：分钟东偏 UTC，【出生即冻结进 LIFE_GENESIS、终生不变】（不取 OS/用户时区，故 V2 可复现）。
 // 她是一个身体、只有一个昼夜。平台孵化的命缺省=北京 480；将来用户接生的命取创造者设备时区。
 const CIRCADIAN_OFFSET_MIN_DEFAULT = 480;
@@ -113,6 +113,7 @@ interface RState {
   interests: Map<string, { weight: number; episodes: number; lastSeq: number; lastAffect: number }>; // 世界观/兴趣（确定性累积）
   maturity: number; // 心智成熟度 [0,1]：随反思累积、轻微加快情绪复原（独立于先天气质，气质仍不变）
   skills: Map<string, { n: number; efficacy: number }>; // 自我优化：从行动结果学到的策略效能（actionKind → 被接住的程度），0.5 中性
+  allostatic: Record<string, number>; // allostasis：习得的设定点偏移（valence/connection），朝持续偏离缓慢漂移、有界；叠在冻结先天设定点上
 }
 
 const clamp = (x: number, lo: number, hi: number): number => (x < lo ? lo : x > hi ? hi : x);
@@ -193,8 +194,11 @@ function initState(genesis: LifeEvent<'LIFE_GENESIS'>): RState {
     interests: new Map(),
     maturity: 0,
     skills: new Map(),
+    allostatic: {},
   };
 }
+// 哪些维度有 allostatic 底色漂移（"底色心境"：好坏感 + 孤独/联结）。
+const ALLOSTATIC_KEYS: readonly SomaKey[] = ['valence', 'connection'];
 
 // 推进一步（纯函数、确定性）：先衰减/节律，再施事件。reconstruct 与有界重放共用同一步进逻辑 → 永不分叉。
 function stepState(st: RState, e: LifeEvent): void {
@@ -233,7 +237,7 @@ type SerializedState = Omit<RState, 'openConnections' | 'interests' | 'skills'> 
 
 // Set/Map 不能直接 JSON 落盘 → 检查点序列化时转成数组、恢复时还原（值不变 → 可重放）。
 const serialize = (st: RState): SerializedState => ({ ...st, openConnections: [...st.openConnections], interests: [...st.interests], skills: [...st.skills] });
-const deserialize = (s: SerializedState): RState => ({ ...s, openConnections: new Set(s.openConnections), interests: new Map(s.interests ?? []), skills: new Map(s.skills ?? []) });
+const deserialize = (s: SerializedState): RState => ({ ...s, openConnections: new Set(s.openConnections), interests: new Map(s.interests ?? []), skills: new Map(s.skills ?? []), allostatic: s.allostatic ?? {} });
 
 // 把整段日志折成一份检查点（增量捕获见 daemon：只在已有 state 上步进尾巴）。
 export function captureCheckpoint(events: readonly LifeEvent[]): Checkpoint {
@@ -276,10 +280,18 @@ function advanceTime(st: RState, dtSec: number, awake: boolean, nowMs: number): 
   const eTarget = clamp(s.energy.setpoint + circadianEnergyOffset(nowMs, st.circadianOffsetMin), 0.05, 1);
   if (awake) {
     for (const key of SOMA_KEYS) {
-      if (key === 'energy') s.energy.value = decayTo(s.energy.value, eTarget, dt, AFFECT.tau.energy);
-      else s[key].value = decayTo(s[key].value, s[key].setpoint, dt, effTau(key, s[key])); // 文献标定 τ + valence 正负不对称
+      if (key === 'energy') { s.energy.value = decayTo(s.energy.value, eTarget, dt, AFFECT.tau.energy); continue; }
+      // allostasis：valence/connection 衰减朝【习得底色 = 先天设定点 + 偏移】回归（其余维朝先天设定点）。
+      const target = ALLOSTATIC_KEYS.includes(key) ? clamp(s[key].setpoint + (st.allostatic[key] ?? 0), -1, 1) : s[key].setpoint;
+      s[key].value = decayTo(s[key].value, target, dt, effTau(key, s[key])); // 文献标定 τ + valence 正负不对称
     }
     s.vitality.value = clamp(s.vitality.value, st.vitalityFloor, 1);
+    // 习得底色【极慢】朝"持续偏离先天设定点"漂移、有界（只在醒着累积——休眠不算"活过的经历"）。
+    for (const key of ALLOSTATIC_KEYS) {
+      const cur = st.allostatic[key] ?? 0;
+      const dev = s[key].value - s[key].setpoint; // 相对先天基线的偏离
+      st.allostatic[key] = clamp(cur + (dt / AFFECT.allostaticTau) * (dev - cur), -AFFECT.allostaticBand, AFFECT.allostaticBand);
+    }
   } else {
     // 休眠（§10 锁）：冻结 + 仅回暖——vitality 向设定点、energy 向昼夜目标恢复，其余不动。
     s.vitality.value = clamp(decayTo(s.vitality.value, s.vitality.setpoint, dt, AFFECT.tau.vitality), st.vitalityFloor, 1);
@@ -1101,6 +1113,7 @@ function project(st: RState, uptoSeq: number): DerivedSnapshot {
     growth: buildGrowth(st, decorated, Date.parse(st.clockIso) - Date.parse(st.bornAt)),
     becoming: buildBecoming(st),
     maturity: r3(st.maturity),
+    baseline: { valence: r3(clamp(st.soma.valence.setpoint + (st.allostatic.valence ?? 0), -1, 1)), connection: r3(clamp(st.soma.connection.setpoint + (st.allostatic.connection ?? 0), -1, 1)) },
     aspirations,
     defenseStyle: defenseStyleOf(st.temperament, st.values),
     attachmentBias: attachmentBiasOf(st.temperament),

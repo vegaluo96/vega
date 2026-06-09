@@ -1321,7 +1321,7 @@ const server = createServer(async (req, res) => {
           values: s.values.map((v) => ({ key: v.key, weight: round3(v.weight), status: v.provenance.status, drifts: v.provenance.driftedAtSeqs.length })),
           // 灵魂内观·进化与人格（全确定性派生、脱敏，owner+steward 都看——是"她现在是谁"的全貌）：
           maturity: s.maturity, riskAppetite: s.riskAppetite, defenseStyle: s.defenseStyle, attachmentBias: s.attachmentBias,
-          becoming: s.becoming, growth: s.growth,
+          becoming: s.becoming, growth: s.growth, baseline: s.baseline, // baseline=习得底色(allostasis)：先天设定点+持续经历的漂移
           needs: s.needs, // 内在需求当前水平（低=缺口→欲望）
           interests: s.interests.map((it) => ({ topic: it.topic, weight: it.weight, confirmed: it.status === 'confirmed' })),
           skills: s.skills.map((sk) => ({ kind: sk.kind === 'muse' ? '公开表达' : sk.kind === 'reach_out' ? '主动找人' : sk.kind, efficacy: sk.efficacy, n: sk.n })),

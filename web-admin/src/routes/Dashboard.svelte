@@ -380,6 +380,7 @@
             {#if v.defenseStyle}<span class="chip">受伤时{v.defenseStyle}</span>{/if}
             <span class="chip">心智成熟 {Math.round((v.maturity ?? 0) * 100)}%</span>
             <span class="chip">敢冒险 {Math.round((v.riskAppetite ?? 0.5) * 100)}%</span>
+            {#if v.baseline}<span class="chip">底色 {v.baseline.valence > 0.06 ? '偏明亮' : v.baseline.valence < -0.06 ? '偏低沉' : '中性'}{v.baseline.connection < -0.06 ? '·偏孤' : ''}</span>{/if}
           </div>
           <div class="soma">
             {#each Object.entries(v.soma) as [k, x]}<span class="somacell"><span class="sk">{k}</span><span class="sv mono">{x}</span></span>{/each}

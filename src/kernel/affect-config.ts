@@ -24,6 +24,12 @@ export const AFFECT = {
     // —— 慢（天）——
     vitality: 24 * 3600, // 灵性基线，最慢（一天尺度）
   },
+  // —— allostasis（设定点漂移，installment 2）——
+  // 享乐适应回归 baseline 是【瞬态】（OU 衰减，上面的 τ）；但持续/重大经历造成【持久的基线漂移】
+  //（Lucas 设定点理论修订；HAP）。机制：在【先天设定点之上】叠一个【习得偏移】，朝"持续偏离"缓慢漂移、有界。
+  // 先天设定点(冻结种子)永远是锚 → 气质底色不被抹掉；习得偏移让"人生改变她的底色"且可被新的持续经历再改变。
+  allostaticTau: 14 * 24 * 3600, // 基线漂移时标 ~两周（极慢：只有持续数日~数周的境遇才移动底色，一时起落不算）
+  allostaticBand: 0.25, // 习得偏移上界（±0.25：底色会变明亮/低沉，但不极端、不盖过先天）
 } as const;
 
 export type AffectTauKey = keyof typeof AFFECT.tau;

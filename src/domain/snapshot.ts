@@ -143,6 +143,7 @@ export interface DerivedSnapshot {
   growth: string; // 阅历/成长：她活了多久、长成了什么形状（确定性合成，脱敏、不含任何用户）
   becoming: string; // 我正在成为的我：由 confirmed 价值 + 兴趣 + 气质合成的演化中独立自我（脱敏）
   maturity: number; // 心智成熟度 [0,1]：随阅历缓慢累积（持续变聪明、情绪更稳），独立于先天气质
+  baseline: { valence: number; connection: number }; // 习得的底色（allostasis）：先天设定点 + 持续经历造成的缓慢漂移
   aspirations: string[]; // 长期心愿（独立意志）：从 confirmed 价值/兴趣/牵挂确定性沉淀的"她想去的方向"
   defenseStyle: string; // 防御机制（由冻结气质+价值派生）：受伤/受威胁时的固定反应——退缩/变硬/幽默岔开/讨好
   attachmentBias: string; // 先天依恋底色（由冻结气质派生）：安全/焦虑/回避——偏置她如何读关系、多快敢亲近
