@@ -21,6 +21,7 @@ import {
   type BondCore,
   type DerivedSnapshot,
   type Goal,
+  type Interest,
   type MemoryEntry,
   type SemanticMemory,
   type Soma,
@@ -29,7 +30,7 @@ import {
   type ValueEntry,
 } from '../domain/snapshot.ts';
 
-const RECONSTRUCT_VERSION = 13; // v13：辱骂词表移除易误中的 'sb'（会撞 USB 等英文）；appraisal 变动 → 旧 checkpoint 版本不符自动全量重放
+const RECONSTRUCT_VERSION = 14; // v14：世界感知接进学习机器——世界记忆(kind:'world')+兴趣/世界观(派生)；appraisal 变动 → 旧 checkpoint 自动全量重放
 // 她活在出生地的时区：分钟东偏 UTC，【出生即冻结进 LIFE_GENESIS、终生不变】（不取 OS/用户时区，故 V2 可复现）。
 // 她是一个身体、只有一个昼夜。平台孵化的命缺省=北京 480；将来用户接生的命取创造者设备时区。
 const CIRCADIAN_OFFSET_MIN_DEFAULT = 480;
@@ -58,6 +59,15 @@ const K = {
   surpriseGain: 0.45, // 预期违背：越出乎预料越往心里去（信任的人变冷更痛、冷淡的人示好更暖）
   surpriseArousal: 0.5, // 预期违背 → 唤醒（越意外越心头一紧/一亮）
   expectEma: 0.3, // 对一个人"会怎么待我"的预期，按指数滑动更新
+  // —— 世界学习（§8.1）——全确定性，模型不参与 ——
+  interestGain: 0.16, // 读到一条该主题 → 兴趣增量（再按相关度/情绪/好奇缩放）
+  interestDecay: 0.97, // 每读一遍世界，所有旧兴趣轻微衰减（不再遇到的会淡出）
+  interestCap: 24, // 兴趣表上限（有界，防无界增长）
+  interestConfirmEpisodes: 4, // 反复读到≥此 + 够重 → confirmed（成为她稳定的一部分）
+  interestConfirmWeight: 0.4,
+  worldSelfRelevance: 0.6, // 已有兴趣对相关世界的"自我相关性"加成（正反馈齿轮）
+  worldKeepSalience: 0.16, // 世界记忆门槛：salience 过此才"记住"（多数新闻不留痕——人性 + 防膨胀）
+  worldMemCap: 16, // 世界情景记忆上限（有界；超出删最不显著的）
 } as const;
 
 const POS = ['你好', '经常来', '会来', '在乎你', '真心', '值得', '说出来', '对不起', '我错了', '证明', '也在这里', '不会消失', '看见你', '大胆'];
@@ -95,6 +105,7 @@ interface RState {
   expect: Record<string, number>; // 预期：对每个人"会怎么待我"的运行预期（驱动预期违背）
   temperament: Temperament; // 先天气质：终生不变（每条命天生不同）
   circadianOffsetMin: number; // 出生地时区（分钟东偏 UTC）：她昼夜节律的锚，出生即冻结
+  interests: Map<string, { weight: number; episodes: number; lastSeq: number; lastAffect: number }>; // 世界观/兴趣（确定性累积）
 }
 
 const clamp = (x: number, lo: number, hi: number): number => (x < lo ? lo : x > hi ? hi : x);
@@ -168,6 +179,7 @@ function initState(genesis: LifeEvent<'LIFE_GENESIS'>): RState {
     expect: {},
     temperament: readTemperament(seed.temperamentBias),
     circadianOffsetMin: seed.circadianOffsetMin ?? CIRCADIAN_OFFSET_MIN_DEFAULT,
+    interests: new Map(),
   };
 }
 
@@ -202,10 +214,12 @@ export interface Checkpoint {
   uptoSeq: number; // 这份检查点把日志折叠到了哪一条（含）
   state: SerializedState;
 }
-type SerializedState = Omit<RState, 'openConnections'> & { openConnections: string[] };
+type InterestEntry = [string, { weight: number; episodes: number; lastSeq: number; lastAffect: number }];
+type SerializedState = Omit<RState, 'openConnections' | 'interests'> & { openConnections: string[]; interests: InterestEntry[] };
 
-const serialize = (st: RState): SerializedState => ({ ...st, openConnections: [...st.openConnections] });
-const deserialize = (s: SerializedState): RState => ({ ...s, openConnections: new Set(s.openConnections) });
+// Set/Map 不能直接 JSON 落盘 → 检查点序列化时转成数组、恢复时还原（值不变 → 可重放）。
+const serialize = (st: RState): SerializedState => ({ ...st, openConnections: [...st.openConnections], interests: [...st.interests] });
+const deserialize = (s: SerializedState): RState => ({ ...s, openConnections: new Set(s.openConnections), interests: new Map(s.interests ?? []) });
 
 // 把整段日志折成一份检查点（增量捕获见 daemon：只在已有 state 上步进尾巴）。
 export function captureCheckpoint(events: readonly LifeEvent[]): Checkpoint {
@@ -387,8 +401,8 @@ function appraiseMessage(st: RState, e: LifeEvent<'MESSAGE_RECEIVED'>): void {
   if (ev2 < -0.5) st.conflictLog.push(e.seq); // 被伤害/冲突
 }
 
-// 世界感知 → 她的状态【轻轻】被真实世界染色（一条新闻不该像至亲变心那么重）。
-// 确定性：优先用冻结的 perception（采集时算好），缺失则用确定性词表。模型不写状态（契约①）。
+// 世界感知 → ①情绪轻轻被染色（多数新闻仅此、随后衰减——人性）②按主题累积成兴趣/世界观
+// ③少数够显著的"记住"成世界记忆（参与遗忘/巩固/reconsolidation）。全确定性，模型不写状态（契约①）。
 function appraiseWorld(st: RState, e: LifeEvent<'WORLD_PERCEIVED'>): void {
   const p = e.payload as WorldPerceivedPayload;
   let val: number;
@@ -402,12 +416,72 @@ function appraiseWorld(st: RState, e: LifeEvent<'WORLD_PERCEIVED'>): void {
     val = clamp(ev / 1.5, -1, 1);
     relevance = 0.3;
   }
+  const topics = (p.topics ?? []).filter((t) => typeof t === 'string' && t.trim()).map((t) => t.trim());
+  const cur = st.temperament.curiosity;
+
+  // —— 自我相关性（正反馈齿轮）：她已经在意的主题，世界更"往心里去"——也更容易被记住。
+  let priorInterest = 0;
+  let priorAffect = 0;
+  let seenBefore = false;
+  for (const t of topics) {
+    const it = st.interests.get(t);
+    if (it) { priorInterest = Math.max(priorInterest, it.weight); priorAffect += it.lastAffect; seenBefore = true; }
+  }
+  const rel = clamp(relevance + K.worldSelfRelevance * priorInterest, 0, 1);
+  // 意外/预期违背：和她对该主题的历史情感基线差得越远，越往心里去。
+  const surprise = seenBefore ? Math.min(1, Math.abs(val - priorAffect / Math.max(1, topics.length))) : 0;
+
   const W = 0.06; // 世界事件系数——远小于人际（轻轻染色，不喧宾夺主）
   const sens = st.temperament.sensitivity;
   const s = st.soma;
-  s.valence.value = clamp(s.valence.value + W * val * relevance * sens, -1, 1);
-  s.arousal.value = clamp(s.arousal.value + W * relevance * sens, 0, 1);
-  s.energy.value = clamp(s.energy.value + W * val * relevance, 0, 1); // 好消息提神、坏消息泄气（轻）
+  s.valence.value = clamp(s.valence.value + W * val * rel * sens, -1, 1);
+  s.arousal.value = clamp(s.arousal.value + W * rel * sens * (1 + 0.5 * surprise), 0, 1);
+  s.energy.value = clamp(s.energy.value + W * val * rel, 0, 1); // 好消息提神、坏消息泄气（轻）
+
+  // —— ② 兴趣/世界观：所有旧兴趣轻微衰减（不再遇到的淡出），命中的主题按相关度×情绪×好奇加权累积。
+  for (const v of st.interests.values()) v.weight *= K.interestDecay;
+  const gain = K.interestGain * (0.4 + 0.6 * rel) * (0.5 + 0.5 * Math.abs(val)) * (0.5 + 0.5 * cur);
+  for (const t of topics) {
+    const it = st.interests.get(t) ?? { weight: 0, episodes: 0, lastSeq: 0, lastAffect: 0 };
+    it.weight = clamp(it.weight + gain, 0, 1);
+    it.episodes += 1;
+    it.lastSeq = e.seq;
+    it.lastAffect = val;
+    st.interests.set(t, it);
+  }
+  // 有界：清掉被衰减到很低的，再超额则删最弱的（Top-N）。
+  for (const [k, v] of st.interests) if (v.weight < 0.02) st.interests.delete(k);
+  while (st.interests.size > K.interestCap) {
+    let weakest = '';
+    let min = Infinity;
+    for (const [k, v] of st.interests) if (v.weight < min) { min = v.weight; weakest = k; }
+    st.interests.delete(weakest);
+  }
+
+  // —— ③ 世界记忆：只有够显著的才"记住"（人性：多数刷过的新闻会忘）。走情景记忆同款衰减/巩固/reconsolidation。
+  const salience = clamp(rel * Math.abs(val) + 0.2 * surprise * rel, 0, 1);
+  if (salience >= K.worldKeepSalience && p.title.trim()) {
+    const id = `w_seq${e.seq}`;
+    st.memory.push({
+      id,
+      kind: 'world',
+      content: p.title.slice(0, 120),
+      affect: val,
+      involvedRelationshipIds: [],
+      salience,
+      topic: topics[0],
+      at: e.occurredAt,
+      lineage: { rootId: id, version: 1, isCurrent: true },
+      provenance: { originSeq: e.seq, createdAtSeq: e.seq, confidence: 0.5, status: salience > 0.4 ? 'confirmed' : 'volatile' },
+    });
+    // 有界：世界记忆超额 → 删最不显著的当前条（原始 WORLD_PERCEIVED 事件仍在日志，可重算）。
+    const worlds = st.memory.filter((m) => m.kind === 'world' && m.lineage.isCurrent);
+    if (worlds.length > K.worldMemCap) {
+      const drop = worlds.slice().sort((a, b) => a.salience - b.salience)[0];
+      const i = st.memory.findIndex((m) => m.id === drop.id);
+      if (i >= 0) st.memory.splice(i, 1);
+    }
+  }
 }
 
 function applyTick(st: RState, e: LifeEvent<'AUTONOMOUS_TICK'>): void {
@@ -596,9 +670,10 @@ function formatDuration(ms: number): string {
 // 遗忘即抽象（纯派生）：每条情景记忆的 salience 随时间衰减——情绪越浓衰减越慢（刻骨），
 // 被想起(巩固)会刷新。只有最鲜活的一小撮留在"当下记得"(vivid)，其余淡去（vivid=false），
 // 但【原始事件仍在 append-only 日志里，永不抹】——可随时重算。
+const isExperiential = (k: MemoryEntry['kind']): boolean => k === 'episodic' || k === 'world'; // 情景记忆 + 世界记忆走同一套衰减/鲜活
 function decorateMemories(mems: MemoryEntry[], clockMs: number): MemoryEntry[] {
   const scored = mems.map((m) => {
-    if (m.kind !== 'episodic' || !m.lineage.isCurrent) return { ...m, vividness: 0, vivid: false };
+    if (!isExperiential(m.kind) || !m.lineage.isCurrent) return { ...m, vividness: 0, vivid: false };
     const ageSec = Math.max(0, (clockMs - Date.parse(m.at)) / 1000);
     const emo = Math.min(1, Math.abs(m.affect));
     const half = K.halfLifeBaseSec + (K.halfLifeEmoSec - K.halfLifeBaseSec) * emo;
@@ -606,11 +681,22 @@ function decorateMemories(mems: MemoryEntry[], clockMs: number): MemoryEntry[] {
     return { ...m, vividness: clamp(m.salience * recency, 0, 1) };
   });
   const ranked = scored
-    .filter((m) => m.kind === 'episodic' && m.lineage.isCurrent)
+    .filter((m) => isExperiential(m.kind) && m.lineage.isCurrent)
     .slice()
     .sort((a, b) => (b.vividness ?? 0) - (a.vividness ?? 0) || b.provenance.originSeq - a.provenance.originSeq);
   const vividIds = new Set(ranked.slice(0, K.vividCap).filter((m) => (m.vividness ?? 0) >= K.vividFloor).map((m) => m.id));
   return scored.map((m) => ({ ...m, vivid: vividIds.has(m.id) }));
+}
+
+// 世界观/兴趣（纯派生）：把累积的主题亲和度投影成排序的 Interest[]（confirmed=反复且够重）。
+function buildInterests(st: RState): Interest[] {
+  const out: Interest[] = [];
+  for (const [topic, v] of st.interests) {
+    if (v.weight < 0.05) continue;
+    const status: Interest['status'] = v.episodes >= K.interestConfirmEpisodes && v.weight >= K.interestConfirmWeight ? 'confirmed' : 'volatile';
+    out.push({ topic, weight: r3(v.weight), episodes: v.episodes, status });
+  }
+  return out.sort((a, b) => b.weight - a.weight).slice(0, 12);
 }
 
 // 自传叙事：从事件确定性投影出的"她自己的真实事实"。只读、绝不回写身份（契约③）。
@@ -810,5 +896,6 @@ function project(st: RState, uptoSeq: number): DerivedSnapshot {
     socialWorld,
     values: sortedValues,
     goals,
+    interests: buildInterests(st),
   };
 }

@@ -20,11 +20,12 @@ export interface Soma {
 
 export interface MemoryEntry {
   id: string;
-  kind: 'episodic' | 'semantic';
+  kind: 'episodic' | 'semantic' | 'world'; // world=对世界事件的情景记忆（无关系人；走和情景记忆一样的衰减/巩固/reconsolidation）
   content: string;
   affect: number;
   involvedRelationshipIds: RelationshipId[];
   salience: number;
+  topic?: string; // 仅 world：这条世界记忆属于哪个主题（用于聚合成兴趣/世界观）
   at: string; // 形成/改写时刻（ISO，取事件 occurredAt）——驱动"遗忘即抽象"的时间衰减
   // 双轨（§10 锁）：每次改写生成新条目，原条目原封保留，用 lineage 链接
   lineage: { rootId: string; reconsolidatedFromId?: string; version: number; isCurrent: boolean };
@@ -65,6 +66,16 @@ export interface ValueEntry {
   key: string;
   weight: number; // [0,1]
   provenance: { driftedAtSeqs: number[]; vitalityAtGen: number; status: 'volatile' | 'confirmed' };
+}
+
+// 世界观/兴趣（§8.1 演进，纯派生）：世界感知按主题确定性累积成的"她在意什么"。
+// 随时间衰减、反复遇到才稳固（confirmed）——这是"持续变聪明/因你而变"在世界这块的工程地板。
+// 不是模型写的命题信念，是定量的主题亲和度（确定性折叠）。
+export interface Interest {
+  topic: string;
+  weight: number; // [0,1] 亲和度（无新输入即缓慢衰减）
+  episodes: number; // 读到过几条该主题
+  status: 'volatile' | 'confirmed'; // 反复且够重 → 成为她稳定的一部分
 }
 
 // 遗忘即抽象：把一段关系里的大量情景经历，确定性地压缩成"理解"（语义记忆，纯派生）。
@@ -124,4 +135,5 @@ export interface DerivedSnapshot {
   socialWorld: SocialTie[]; // 她的同类社交网（亲疏分化、emergent 的朋友结构）
   values: ValueEntry[];
   goals: Goal[]; // 她此刻"想要"什么（排序后）
+  interests: Interest[]; // 世界观/兴趣：她在意什么（世界感知按主题确定性累积，纯派生）
 }

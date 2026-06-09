@@ -46,6 +46,18 @@
       <p class="temper">{p.temperament}</p>
     </section>
 
+    {#if p.interests && p.interests.length}
+      <section class="mod">
+        <h2 class="section-title">她着迷的</h2>
+        <div class="tags">
+          {#each p.interests as it}
+            <span class="tag" class:strong={it.confirmed} style="--w:{Math.round((it.weight ?? 0) * 100)}%">{it.topic}</span>
+          {/each}
+        </div>
+        <p class="caption pad">她从读到的世界里慢慢长出的在意——会随她读什么而变。</p>
+      </section>
+    {/if}
+
     <section class="mod">
       <h2 class="section-title">生命力</h2>
       <div class="meter"><span class="track"><span class="fill" style="width:{Math.round((p.vitality ?? 0) * 100)}%"></span></span></div>
@@ -107,6 +119,11 @@
   .faint { color: var(--muted); font-size: var(--fs-sm); margin: 10px 0 0; }
 
   .temper { color: var(--text); line-height: 1.7; font-size: var(--fs-body); margin: 0; }
+
+  /* 兴趣标签：confirmed（稳定）的更醒目，weight 越高底色越实 */
+  .tags { display: flex; flex-wrap: wrap; gap: var(--s2); }
+  .tag { font-size: var(--fs-sm); padding: 4px 12px; border-radius: var(--r-pill); color: var(--muted); border: 1px solid var(--border); background: color-mix(in srgb, var(--accent) var(--w, 0%), transparent); }
+  .tag.strong { color: var(--text); font-weight: 600; border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); }
 
   /* 同类朋友：横向头像条（一眼扫完她的关系网） */
   .friends { display: flex; gap: var(--s3); overflow-x: auto; padding: 2px 2px 6px; scrollbar-width: none; }

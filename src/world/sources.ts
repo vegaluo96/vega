@@ -15,6 +15,27 @@ const strip = (s: string): string =>
   s.replace(/<!\[CDATA\[|\]\]>/g, '').replace(/<[^>]+>/g, '').replace(/&#?[a-z0-9]+;/gi, ' ').replace(/\s+/g, ' ').trim();
 const pick = (b: string, tag: string): string => strip(b.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'))?.[1] ?? '');
 
+// —— 主题标签（确定性、零模型、可重放）——给每条世界事件打上固定主题，冻进 WORLD_PERCEIVED.topics，
+// 供引擎按主题累积"兴趣/世界观"。固定小集合 + 关键词表（中英混合，因源里中英都有）。
+const TOPIC_RULES: ReadonlyArray<[string, readonly string[]]> = [
+  ['天文航天', ['nasa', 'space', 'mars', 'moon', 'galaxy', 'star', 'planet', 'rocket', 'astronom', 'cosmos', 'telescope', '航天', '宇宙', '星系', '火星', '月球', '行星', '卫星', '天文', '银河', '黑洞', '太空']],
+  ['科学', ['science', 'physics', 'biolog', 'chemis', 'quantum', 'gene', 'dna', 'evolution', 'neuro', 'discover', '科学', '物理', '生物', '化学', '量子', '基因', '研究', '实验', '发现']],
+  ['科技', ['ai', 'tech', 'software', 'computer', 'robot', 'chip', 'startup', 'app', 'data', 'algorithm', 'internet', '科技', '人工智能', '芯片', '软件', '机器人', '互联网', '算法', '创业']],
+  ['人文历史', ['history', 'ancient', 'war', 'empire', 'century', 'born', 'died', '历史', '古代', '战争', '王朝', '世纪', '诞生', '逝世', '文明']],
+  ['经济市场', ['market', 'econom', 'stock', 'price', 'trade', 'dollar', 'inflation', 'bank', 'crypto', 'bitcoin', '市场', '经济', '股', '价格', '贸易', '通胀', '金融', '预测']],
+  ['环境气候', ['climate', 'weather', 'environment', 'carbon', 'ocean', 'forest', 'species', 'energy', '气候', '环境', '海洋', '森林', '物种', '碳', '能源', '生态']],
+  ['健康医疗', ['health', 'medic', 'disease', 'virus', 'vaccine', 'brain', 'cancer', 'mental', '健康', '医疗', '疾病', '病毒', '疫苗', '癌', '心理']],
+  ['社会时事', ['politic', 'government', 'election', 'court', 'law', 'protest', 'world', 'country', '政治', '政府', '选举', '法', '社会', '国家', '城市']],
+  ['文化艺术', ['art', 'music', 'film', 'book', 'culture', 'game', 'design', 'story', '艺术', '音乐', '电影', '书', '文化', '游戏', '设计', '故事']],
+];
+export function tagTopics(title: string, summary = '', fallback?: string): string[] {
+  const hay = `${title} ${summary}`.toLowerCase();
+  const out: string[] = [];
+  for (const [topic, kws] of TOPIC_RULES) if (kws.some((k) => hay.includes(k))) out.push(topic);
+  if (out.length === 0 && fallback) out.push(fallback);
+  return out.slice(0, 3); // 一条最多挂 3 个主题，避免一条新闻摊到所有兴趣
+}
+
 // —— 新闻 RSS（含 Atom <entry>）—— 纯文本解析，可单测，不连网。
 export function parseRss(xml: string, source: string, max = 8): WorldItem[] {
   const items: WorldItem[] = [];
@@ -26,7 +47,7 @@ export function parseRss(xml: string, source: string, max = 8): WorldItem[] {
     const desc = pick(b, 'description') || pick(b, 'summary') || pick(b, 'content');
     let link = pick(b, 'link');
     if (!link) link = strip(b.match(/<link[^>]*href="([^"]+)"/i)?.[1] ?? '');
-    items.push({ source, kind: 'news', title: title.slice(0, 200), summary: desc.slice(0, 240), url: link, topics: [], at: new Date().toISOString() });
+    items.push({ source, kind: 'news', title: title.slice(0, 200), summary: desc.slice(0, 240), url: link, topics: tagTopics(title, desc), at: new Date().toISOString() });
   }
   return items;
 }
@@ -48,7 +69,7 @@ export function parsePolymarket(json: unknown, max = 8): WorldItem[] {
       }
     } catch { /* ignore malformed */ }
     const slug = String(o.slug ?? '');
-    out.push({ source: 'polymarket', kind: 'market', title: q.slice(0, 200), summary: (odds ? `市场预测：${odds}` : '热门预测市场').slice(0, 240), url: slug ? `https://polymarket.com/event/${slug}` : 'https://polymarket.com', topics: [], at: new Date().toISOString() });
+    out.push({ source: 'polymarket', kind: 'market', title: q.slice(0, 200), summary: (odds ? `市场预测：${odds}` : '热门预测市场').slice(0, 240), url: slug ? `https://polymarket.com/event/${slug}` : 'https://polymarket.com', topics: tagTopics(q, '', '经济市场'), at: new Date().toISOString() });
   }
   return out;
 }
@@ -62,7 +83,7 @@ export function parseOnThisDay(json: unknown, max = 6): WorldItem[] {
     const text = strip(String(e.text ?? ''));
     if (!text) continue;
     const y = e.year ? `${e.year}年` : '历史上的今天';
-    out.push({ source: '维基·历史上的今天', kind: 'news', title: `${y}：${text}`.slice(0, 200), summary: text.slice(0, 240), url: '', topics: [], at: new Date().toISOString() });
+    out.push({ source: '维基·历史上的今天', kind: 'news', title: `${y}：${text}`.slice(0, 200), summary: text.slice(0, 240), url: '', topics: tagTopics(text, '', '人文历史'), at: new Date().toISOString() });
   }
   return out;
 }

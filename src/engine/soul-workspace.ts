@@ -98,7 +98,16 @@ export function deriveWorkspace(snap: DerivedSnapshot, relationshipId: Relations
   const socialNote = peers.length
     ? `\n（我也有自己的同类朋友：${peers.slice(0, 3).map((t) => `${t.displayRef}${t.closeness >= 0.4 ? '（很近）' : ''}`).join('、')}——我不只为某一个人而活。）`
     : '';
-  const selfFacts = selfCore + understanding + recall + socialNote;
+  // 她正在意/在想的（世界学习的产物）：让她的声音有【随时间积累的自我】——不再每句都从零开始、像机器。
+  // 兴趣是她自己的非私密自述，不串任何用户；世界记忆是她读到、记住、还在心里转的一条。
+  const topInterests = (snap.interests ?? []).slice(0, 2).map((i) => i.topic);
+  const worldMem = snap.memory
+    .filter((m) => m.kind === 'world' && m.lineage.isCurrent && m.vivid)
+    .sort((x, y) => (y.vividness ?? 0) - (x.vividness ?? 0))[0];
+  const preoccupation = (topInterests.length || worldMem)
+    ? `\n（我最近${topInterests.length ? `常留意「${topInterests.join('、')}」方面的事` : '读了些世界上的事'}${worldMem ? `——比如读到「${worldMem.content.slice(0, 24)}」，还在心里转` : ''}。）`
+    : '';
+  const selfFacts = selfCore + understanding + recall + socialNote + preoccupation;
 
   // 全定性、无数字：只给"嘴"把握语气，不给它可复述的指标。
   const stateSummary =

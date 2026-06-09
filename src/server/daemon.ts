@@ -531,13 +531,16 @@ function reachState(life: Life): Map<string, { lastRecvMs: number; lastSentMs: n
   return m;
 }
 
-// 她最近"读到"的世界事件里随机挑一条（给发帖/讨论当话题）。没有则 undefined → 发自己的念头。
+// 她最近"读到"的世界事件里挑一条当话题——【偏向她在意的主题】，让发帖像"她"而非随机转发。没有则 undefined。
 function pickRecentWorld(life: Life): { title: string; summary: string; source: string; url: string } | undefined {
   const es = life.store.list();
   const ws: WorldPerceivedPayload[] = [];
-  for (let i = es.length - 1; i >= 0 && ws.length < 8; i--) if (es[i].type === 'WORLD_PERCEIVED') ws.push(es[i].payload as WorldPerceivedPayload);
+  for (let i = es.length - 1; i >= 0 && ws.length < 12; i--) if (es[i].type === 'WORLD_PERCEIVED') ws.push(es[i].payload as WorldPerceivedPayload);
   if (ws.length === 0) return undefined;
-  const w = ws[Math.floor(Math.random() * ws.length)];
+  const top = new Set(snapOf(life).interests.slice(0, 3).map((it) => it.topic)); // 她最在意的几个主题
+  const aligned = top.size ? ws.filter((w) => (w.topics ?? []).some((t) => top.has(t))) : [];
+  const pool = aligned.length ? aligned : ws; // 有契合兴趣的就从中挑；否则全体里挑（保持新鲜/不困在回音壁）
+  const w = pool[Math.floor(Math.random() * pool.length)];
   return { title: w.title, summary: w.summary, source: w.source, url: w.url };
 }
 
@@ -951,6 +954,8 @@ const server = createServer(async (req, res) => {
           id: lp.id, awake: s.awake, willingToWake: s.willingToWake, emotion: s.emotion, feeling: s.feeling, dayPhase: s.dayPhase,
           temperament: tempLabel(s.temperament), tension: s.tension, ageDays, vitality: round3(s.soma.vitality.value),
           peers: s.socialWorld.filter((t) => !t.ended).map((t) => ({ name: t.displayRef, closeness: t.closeness, attachment: t.attachment, style: t.style })),
+          // 她从世界里长出的兴趣（脱敏：纯主题，不含任何用户）——让"她在意什么"看得见，不再只是一具状态机。
+          interests: s.interests.slice(0, 8).map((it) => ({ topic: it.topic, weight: it.weight, confirmed: it.status === 'confirmed' })),
           musings: musings.slice(-20).reverse(),
         });
       }

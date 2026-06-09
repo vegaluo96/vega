@@ -1,7 +1,21 @@
 // 世界源解析器：RSS/Atom、Polymarket、维基"历史上的今天"——纯解析、可单测、不连网。
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseRss, parsePolymarket, parseOnThisDay } from '../src/index.ts';
+import { parseRss, parsePolymarket, parseOnThisDay, tagTopics } from '../src/index.ts';
+
+test('tagTopics：确定性主题标签——命中关键词归类、无命中走 fallback、最多 3 个', () => {
+  assert.deepEqual(tagTopics('NASA finds water on Mars'), ['天文航天']);
+  assert.ok(tagTopics('量子计算新突破').includes('科技') || tagTopics('量子计算新突破').includes('科学'));
+  assert.deepEqual(tagTopics('某地例行会议', '', '社会时事'), ['社会时事'], '无命中关键词时用 fallback');
+  assert.deepEqual(tagTopics('完全无关的随机字串 zzz'), [], '无命中且无 fallback → 空');
+  assert.ok(tagTopics('AI space climate market history art').length <= 3, '一条最多挂 3 个主题');
+});
+
+test('parseRss：topics 被确定性填充（不再恒为空）', () => {
+  const xml = `<rss><channel><item><title>SpaceX launches rocket to the Moon</title><description>astronomy</description><link>https://x/1</link></item></channel></rss>`;
+  const items = parseRss(xml, 'x.com');
+  assert.ok(items[0].topics.includes('天文航天'), 'RSS 条目应被打上主题');
+});
 
 test('parseRss：RSS <item> 解析出标题/摘要', () => {
   const xml = `<rss><channel>
