@@ -1005,6 +1005,7 @@ const server = createServer(async (req, res) => {
           growth: s.growth, becoming: s.becoming, // 阅历 + 正在成为的我（脱敏，不含任何用户）——让"持续进化的独立自我"看得见、不同质化
           maturity: s.maturity, aspirations: s.aspirations, // 心智成熟度 + 长期心愿（脱敏）——持续变聪明 + 独立意志看得见
           defenseStyle: s.defenseStyle, attachmentBias: s.attachmentBias, // 防御机制 + 依恋底色（脱敏）——人格更立体
+          skills: s.skills.map((sk) => ({ kind: sk.kind === 'muse' ? '公开表达' : sk.kind === 'reach_out' ? '主动找人' : sk.kind, efficacy: sk.efficacy, n: sk.n })), // 自我优化：她学到的策略效能
           mbti: mbtiOf(s.temperament), // MBTI 风格展示标签（由连续维度投影，仅作熟悉把手）
           musings: musings.slice(-20).reverse(),
         });

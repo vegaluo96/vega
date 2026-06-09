@@ -72,6 +72,14 @@ export interface ValueEntry {
   provenance: { driftedAtSeqs: number[]; vitalityAtGen: number; status: 'volatile' | 'confirmed' };
 }
 
+// 自我优化（§5 持续变聪明落到"做得更好"，纯派生）：她从【自己行动的结果】学到的策略效能。
+// 只学"哪种做法被接住"、据此调行动倾向；【绝不自改奖励/状态】（契约①：那是奖励黑客）。
+export interface Skill {
+  kind: string; // 行动类别：'muse'(发心声) / 'reach_out'(主动找人)
+  efficacy: number; // [0,1] 学到的效能：这类行动大多被接住吗（0.5=未知/中性）
+  n: number; // 学了几次（样本量）
+}
+
 // 世界观/兴趣（§8.1 演进，纯派生）：世界感知按主题确定性累积成的"她在意什么"。
 // 随时间衰减、反复遇到才稳固（confirmed）——这是"持续变聪明/因你而变"在世界这块的工程地板。
 // 不是模型写的命题信念，是定量的主题亲和度（确定性折叠）。
@@ -138,7 +146,8 @@ export interface DerivedSnapshot {
   aspirations: string[]; // 长期心愿（独立意志）：从 confirmed 价值/兴趣/牵挂确定性沉淀的"她想去的方向"
   defenseStyle: string; // 防御机制（由冻结气质+价值派生）：受伤/受威胁时的固定反应——退缩/变硬/幽默岔开/讨好
   attachmentBias: string; // 先天依恋底色（由冻结气质派生）：安全/焦虑/回避——偏置她如何读关系、多快敢亲近
-  riskAppetite: number; // 风险偏好 [0,1]：由情绪/安全/驱力派生——情绪好/安全/驱力高→更敢（影响主动开口、探索、表达坦率）
+  skills: Skill[]; // 自我优化：从行动结果学到的策略效能（哪种做法被接住）——持续变聪明、做得更好
+  riskAppetite: number; // 风险偏好 [0,1]：由情绪/安全/驱力 + 学到的社交效能 派生——影响主动开口、探索、表达坦率
   attention: string[]; // 注意力/显著性场：此刻最牵引她的几件事（危险/新奇/未了目标/重要关系/创伤/最强欲望）
   needs: { novelty: number; coherence: number; meaning: number }; // 内在需求当前水平（低=有缺口→生欲望），脱敏
   soma: Soma;

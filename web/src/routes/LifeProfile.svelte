@@ -56,6 +56,18 @@
       </section>
     {/if}
 
+    {#if p.skills && p.skills.length}
+      <section class="mod">
+        <h2 class="section-title">她学到的</h2>
+        <ul class="aspir">
+          {#each p.skills as sk}
+            <li>{sk.kind}：{sk.efficacy >= 0.6 ? '大多被接住，越来越有底气' : sk.efficacy <= 0.4 ? '常落空，学着收着点' : '还在摸索'}</li>
+          {/each}
+        </ul>
+        <p class="caption pad">从自己行动的结果里慢慢学会的——什么管用、什么不必强求。</p>
+      </section>
+    {/if}
+
     {#if p.aspirations && p.aspirations.length}
       <section class="mod">
         <h2 class="section-title">她想去的方向</h2>

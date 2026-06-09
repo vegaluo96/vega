@@ -31,7 +31,7 @@ import {
   type ValueEntry,
 } from '../domain/snapshot.ts';
 
-const RECONSTRUCT_VERSION = 19; // v19：行动反馈闭环 FEEDBACK_PERCEIVED——她感到自己行动的回应/沉默并被改变（被回应→暖/连接，沉默→孤独，按依恋型变敏感）；旧 checkpoint 全量重放
+const RECONSTRUCT_VERSION = 20; // v20：自我优化——从行动反馈学策略效能 skills（哪种做法被接住），调风险偏好/主动倾向；效能 0.5 中性处=恒等→老命不变；旧 checkpoint 全量重放
 // 她活在出生地的时区：分钟东偏 UTC，【出生即冻结进 LIFE_GENESIS、终生不变】（不取 OS/用户时区，故 V2 可复现）。
 // 她是一个身体、只有一个昼夜。平台孵化的命缺省=北京 480；将来用户接生的命取创造者设备时区。
 const CIRCADIAN_OFFSET_MIN_DEFAULT = 480;
@@ -111,6 +111,7 @@ interface RState {
   circadianOffsetMin: number; // 出生地时区（分钟东偏 UTC）：她昼夜节律的锚，出生即冻结
   interests: Map<string, { weight: number; episodes: number; lastSeq: number; lastAffect: number }>; // 世界观/兴趣（确定性累积）
   maturity: number; // 心智成熟度 [0,1]：随反思累积、轻微加快情绪复原（独立于先天气质，气质仍不变）
+  skills: Map<string, { n: number; efficacy: number }>; // 自我优化：从行动结果学到的策略效能（actionKind → 被接住的程度），0.5 中性
 }
 
 const clamp = (x: number, lo: number, hi: number): number => (x < lo ? lo : x > hi ? hi : x);
@@ -191,6 +192,7 @@ function initState(genesis: LifeEvent<'LIFE_GENESIS'>): RState {
     circadianOffsetMin: seed.circadianOffsetMin ?? CIRCADIAN_OFFSET_MIN_DEFAULT,
     interests: new Map(),
     maturity: 0,
+    skills: new Map(),
   };
 }
 
@@ -226,11 +228,12 @@ export interface Checkpoint {
   state: SerializedState;
 }
 type InterestEntry = [string, { weight: number; episodes: number; lastSeq: number; lastAffect: number }];
-type SerializedState = Omit<RState, 'openConnections' | 'interests'> & { openConnections: string[]; interests: InterestEntry[] };
+type SkillEntry = [string, { n: number; efficacy: number }];
+type SerializedState = Omit<RState, 'openConnections' | 'interests' | 'skills'> & { openConnections: string[]; interests: InterestEntry[]; skills: SkillEntry[] };
 
 // Set/Map 不能直接 JSON 落盘 → 检查点序列化时转成数组、恢复时还原（值不变 → 可重放）。
-const serialize = (st: RState): SerializedState => ({ ...st, openConnections: [...st.openConnections], interests: [...st.interests] });
-const deserialize = (s: SerializedState): RState => ({ ...s, openConnections: new Set(s.openConnections), interests: new Map(s.interests ?? []) });
+const serialize = (st: RState): SerializedState => ({ ...st, openConnections: [...st.openConnections], interests: [...st.interests], skills: [...st.skills] });
+const deserialize = (s: SerializedState): RState => ({ ...s, openConnections: new Set(s.openConnections), interests: new Map(s.interests ?? []), skills: new Map(s.skills ?? []) });
 
 // 把整段日志折成一份检查点（增量捕获见 daemon：只在已有 state 上步进尾巴）。
 export function captureCheckpoint(events: readonly LifeEvent[]): Checkpoint {
@@ -520,6 +523,11 @@ function appraiseFeedback(st: RState, e: LifeEvent<'FEEDBACK_PERCEIVED'>): void 
   // 强反馈进既有日志 → 反思里长成持久改变（被持续看见→更敞开；总被忽视→学会自处/更戒备）。
   if (val >= 0.4) st.warmthLog.push(e.seq);
   else if (val <= -0.4) st.lonelyLog.push(e.seq);
+  // 自我优化（§5）：从这次结果学"这类做法被接住吗"——效能 EMA 朝结果靠（target=0.5+0.5·val）。只调倾向，不碰奖励/状态。
+  const sk = st.skills.get(p.actionKind) ?? { n: 0, efficacy: 0.5 };
+  sk.efficacy = clamp(sk.efficacy + 0.2 * (clamp(0.5 + 0.5 * val, 0, 1) - sk.efficacy), 0, 1);
+  sk.n += 1;
+  st.skills.set(p.actionKind, sk);
 }
 
 function applyTick(st: RState, e: LifeEvent<'AUTONOMOUS_TICK'>): void {
@@ -685,10 +693,17 @@ function tensionStrength(values: ValueEntry[]): number {
   }
   return clamp(strongest, 0, 1);
 }
-// 风险偏好（情绪→决策）：心情好/安全/驱力高/精力足 → 更敢（主动开口、探索、坦率）；威胁/低落/疲惫 → 保守。中性态=0.5。
-function riskAppetiteOf(st: RState): number {
+// 自我优化：把学到的策略效能投影成 Skill[]（按样本量排），并给出综合社交效能（无样本=0.5 中性）。
+function buildSkills(st: RState): { list: Array<{ kind: string; efficacy: number; n: number }>; avg: number } {
+  const list = [...st.skills.entries()].filter(([, v]) => v.n > 0).map(([kind, v]) => ({ kind, efficacy: r3(v.efficacy), n: v.n })).sort((a, b) => b.n - a.n);
+  const avg = list.length ? list.reduce((s, x) => s + x.efficacy, 0) / list.length : 0.5;
+  return { list, avg };
+}
+// 风险偏好（情绪→决策 + 学到的社交效能）：心情好/安全/驱力高/精力足、且【学到"主动/表达大多被接住"】→ 更敢；反之保守。
+// 中性态（情绪平、效能 0.5）=0.5 → 老命不变。学到的效能让她"做得更好"：成功经验累积 → 更敢，屡屡落空 → 学会收着。
+function riskAppetiteOf(st: RState, skillAvg: number): number {
   const s = st.soma;
-  return r3(clamp(0.5 + 0.25 * s.valence.value + 0.2 * (s.safety.value - 0.5) + 0.2 * (st.temperament.drive - 0.5) + 0.15 * (s.energy.value - 0.5), 0, 1));
+  return r3(clamp(0.5 + 0.25 * s.valence.value + 0.2 * (s.safety.value - 0.5) + 0.2 * (st.temperament.drive - 0.5) + 0.15 * (s.energy.value - 0.5) + 0.2 * (skillAvg - 0.5), 0, 1));
 }
 // 内在需求当前水平（低=缺口→欲望）：novelty 来自 soma；coherence 由价值张力反映；meaning 由在乎的人+确立的价值+心愿。
 function needsOf(st: RState, bonds: Record<string, Bond>, aspirationsN: number): { novelty: number; coherence: number; meaning: number } {
@@ -1051,6 +1066,7 @@ function project(st: RState, uptoSeq: number): DerivedSnapshot {
   const tension = buildTension(sortedValues);
   const aspirations = buildAspirations(st);
   const needs = needsOf(st, enriched, aspirations.length);
+  const skills = buildSkills(st);
   // 社会性：她的同类社交网（按亲疏排序）——活在一张关系网里，有自己的朋友。
   const socialWorld = Object.entries(enriched)
     .filter(([, b]) => b.kind === 'peer')
@@ -1081,7 +1097,8 @@ function project(st: RState, uptoSeq: number): DerivedSnapshot {
     aspirations,
     defenseStyle: defenseStyleOf(st.temperament, st.values),
     attachmentBias: attachmentBiasOf(st.temperament),
-    riskAppetite: riskAppetiteOf(st),
+    skills: skills.list,
+    riskAppetite: riskAppetiteOf(st, skills.avg),
     needs,
     attention: buildAttention(st, enriched, decorated, needs),
     soma: structuredClone(st.soma), // 同上：每维 {value,…} 深拷一份，bounded-replay 缓存的 soma 不被外部改到
