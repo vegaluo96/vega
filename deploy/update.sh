@@ -51,6 +51,14 @@ build_spa() {  # $1=目录
   echo "▶ 重建 $dir …"
   ( cd "$dir"
     if [ ! -d node_modules ] || echo "$CHANGED" | grep -q "^$dir/package"; then npm ci || npm install; fi
+    # 先清旧产物再构建：避免 vite emptyDir 撞上【非本用户构建过的 dist】（root 拥有 → EACCES）。
+    # 删不掉就明确报出修复办法，而不是让 vite 抛一长串 rimraf/EACCES 栈。
+    if ! rm -rf dist 2>/dev/null; then
+      echo "✗ 删不掉旧 $dir/dist（多半早先用 root 构建过、属主不一致）。一次性修复后再重跑：" >&2
+      echo "    sudo chown -R \"\$(whoami)\" \"$PWD\"   # 或：sudo rm -rf \"$PWD/dist\"" >&2
+      echo "    然后： bash deploy/update.sh force" >&2
+      exit 1
+    fi
     npm run build )
 }
 if echo "$CHANGED" | grep -q '^web/';       then build_spa web;      else echo "· 用户端 web 无改动，跳过"; fi
