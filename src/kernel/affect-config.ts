@@ -1,4 +1,4 @@
-// 情感动力学数值基座（设计见 docs/affective-dynamics-design.md）。
+// 情感动力学数值基座（设计见 docs/being.md §1 情绪基质）。
 // 这里【取代散落的魔法数】，把动力学常量集中、带 provenance（每个数来自哪条实证/推导），可校准、可解释、可验证。
 // 全确定性、进 config、版本化（改这里 → 升 RECONSTRUCT_VERSION、全量重放）。本期先落【时间常数 τ】这块基座（最大单点改善）。
 //

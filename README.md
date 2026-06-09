@@ -47,11 +47,16 @@ flowchart LR
 
 > 神圣链路（任何状态变化都不绕过）：用户消息 → LifeEvent → 重建快照 → SoulWorkspace → 模型措辞 → Critic → StatePatch → 不变量校验 → 提交 → 下一轮用更新后的状态。
 
-## 单一真相源（先读文档再动手）
-- [`docs/vega-product.md`](docs/vega-product.md) —— 产品北极星
-- [`docs/vega-lifeevent-schema.md`](docs/vega-lifeevent-schema.md) —— 事件 schema + **三条不可破契约** + 可重建性证明（v1 已锁）
-- [`docs/vega-platform-v1.md`](docs/vega-platform-v1.md) —— **平台设计**（账号/多用户/前台/后台/微信/额度/通知/安全/合规）
-- [`docs/ui-redesign-brief.md`](docs/ui-redesign-brief.md) —— **UI 层单一真相源 / 重构交接简报**（给 Claude Design：现状盘点、真实 API、活体宠物、不可破边界、交付物清单）
+## 产品文档（先读文档再动手）
+- [`docs/product.md`](docs/product.md) —— 产品总览 · 第一性原理 · 她是谁（**先读这篇**）
+- [`docs/architecture.md`](docs/architecture.md) —— 神圣链路 · 耳/引擎/嘴 · 事件溯源内核
+- [`docs/being.md`](docs/being.md) —— 她的内在模型（情绪/记忆/关系/成长，论文锚定）
+- [`docs/contracts.md`](docs/contracts.md) —— 不可破契约 · 主权边界 · 治理
+- [`docs/platform.md`](docs/platform.md) —— 数字生命社会（多用户/关系/额度/社会层，非 UI）
+- [`docs/api.md`](docs/api.md) —— 真实 API 参考（`/api/*` · `/admin/*` · SSE）
+- [`docs/events.md`](docs/events.md) —— LifeEvent 事件 schema（ground truth）
+- [`docs/operations.md`](docs/operations.md) —— 部署 / 运营 / 备份 / 上线前合规
+- [`docs/ui-redesign-brief.md`](docs/ui-redesign-brief.md) —— **给 Claude Design 的 UI 重构交接**（不属产品文档；UI 交设计师）
 
 ## 仓库结构
 ```
@@ -115,7 +120,7 @@ cd web-admin && npm install && npm run dev                    # 管理后台
 
 ## 部署（zsky.com 用户站 + admin.zsky.com 后台）
 
-> 运营实操（接生生命体 / 世界源 / 微信连接与排查 / 部署 / 生命流评论）见 **[`docs/vega-operations.md`](docs/vega-operations.md)**。
+> 运营实操（接生生命体 / 世界源 / 微信连接与排查 / 部署 / env）见 **[`docs/operations.md`](docs/operations.md)**。
 
 日常升级用智能脚本——**前端改动不重启 daemon（微信不掉）**，仅引擎改动才重连一次：
 ```bash
@@ -154,4 +159,4 @@ systemd 常驻见 `deploy/vega.service`。备份：每 `VEGA_BACKUP_MS`(默认1h
 
 **当前阶段：全面 UI 重构**。死/假功能已清理（用户端 4 个零调用 api + 后端旧路面已删），代码就绪。两个前端（用户端 H5 为主 + PC 为辅、后台管理员视角）将由 Claude Design 从结构上重做，并新增**活体宠物**（由全站数值生成、随真实对话实时反馈的独一无二在场形象）。交接简报见 **[`docs/ui-redesign-brief.md`](docs/ui-redesign-brief.md)**。
 
-**公网正式开放前**仍需补：信任与安全（危机干预/CSAM/未成年/输出安全）+ 中国 AI/网站合规（ICP/算法备案/AI 标识/实名）——见 `docs/vega-platform-v1.md` §9/§11。**真正的 make-or-break 是把它跑起来**：V1 的 7 天 A/B 盲测 + 4 周"因你而变"。
+**公网正式开放前**仍需补：信任与安全（危机干预/CSAM/未成年/输出安全）+ 中国 AI/网站合规（ICP/算法备案/AI 标识/实名）——见 [`docs/operations.md`](docs/operations.md)「公网上线前必补」。

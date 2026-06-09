@@ -1,4 +1,4 @@
-// 记忆冷热分层（§ docs/memory-layering-design.md）：current 情景记忆热集有界，超出按鲜活度淘汰、压进冷聚合（遗忘即抽象）。
+// 记忆冷热分层（§ docs/being.md §3 记忆）：current 情景记忆热集有界，超出按鲜活度淘汰、压进冷聚合（遗忘即抽象）。
 // 钉死：① 现有规模(<cap)逐位不变(部署安全) ② 超 cap 有界 ③ 段数/暖/磕碰/经历数【无损】(冷聚合) ④ 确定性/V2 ⑤ vivid 仍是最近最鲜活的。
 import test from 'node:test';
 import assert from 'node:assert/strict';

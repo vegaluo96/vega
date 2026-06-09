@@ -57,7 +57,7 @@ const K = {
   halfLifeEmoSec: 30 * 24 * 3600,
   vividCap: 9, // "当下记得"的工作集上限；其余淡入"理解"（原始日志永不抹）
   vividFloor: 0.04, // 鲜活度低于此 → 算淡去
-  memoryHotCap: 500, // 记忆冷热分层（见 docs/memory-layering-design.md）：current 情景记忆热集上限。超出→按鲜活度淘汰最淡的、压进冷聚合（遗忘即抽象）。慷慨取值→现有命逐位不变、部署安全；原始事件日志永不抹。
+  memoryHotCap: 500, // 记忆冷热分层（见 docs/being.md §3 记忆）：current 情景记忆热集上限。超出→按鲜活度淘汰最淡的、压进冷聚合（遗忘即抽象）。慷慨取值→现有命逐位不变、部署安全；原始事件日志永不抹。
   circadianAmp: 0.22, // 昼夜节律：精力随她内在时钟"一天"起伏的幅度（内生、不靠输入）
   surpriseGain: 0.45, // 预期违背：越出乎预料越往心里去（信任的人变冷更痛、冷淡的人示好更暖）
   surpriseArousal: 0.5, // 预期违背 → 唤醒（越意外越心头一紧/一亮）
@@ -131,7 +131,7 @@ interface RState {
   // —— 期5：多维成熟 + 睡眠压 ——
   maturityFacets: { regulation: number; perspective: number; integration: number }; // 多维成熟（情绪调节/视角采择/整合）；maturity=三者均值
   sleepPressure: number; // 睡眠压 S（Borbély 双过程）：醒着活跃期累积、休息期释放，[0,1]，下压精力=真实疲劳
-  // 记忆冷热分层（见 docs/memory-layering-design.md）：被淘汰出热集的 current 情景记忆，确定性压进【冷聚合】（遗忘即抽象）。
+  // 记忆冷热分层（见 docs/being.md §3 记忆）：被淘汰出热集的 current 情景记忆，确定性压进【冷聚合】（遗忘即抽象）。
   coldByRel: Map<string, { episodes: number; warm: number; conflict: number; affectSum: number }>; // 按关系：供 semanticMemory 无损计数
   coldLived: number; // 已淡入冷聚合的情景记忆总数：供 growth 无损计数
 }

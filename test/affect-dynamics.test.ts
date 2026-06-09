@@ -1,4 +1,4 @@
-// 情感动力学·生命感验证套件（§ docs/affective-dynamics-design.md §6）：把"像不像活的"钉成可量化的测试。
+// 情感动力学·生命感验证套件（§ docs/being.md §1 情绪基质）：把"像不像活的"钉成可量化的测试。
 // 锚定实证：情绪时长(Verduyn 哀伤≫喜悦)、情绪惯性健康带(Kuppens)、无病理吸引子(根治 v0.x 顶死)、个体差异。
 import test from 'node:test';
 import assert from 'node:assert/strict';

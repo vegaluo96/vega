@@ -1,4 +1,4 @@
-// 情感动力学·离线数据集拟合（installment 六，§ docs/affective-dynamics-design.md §5.4 / §6）。
+// 情感动力学·离线数据集拟合（设计见 docs/being.md §1 情绪基质）。
 // 目标：把"凭直觉拍的"动力学常量，拟合到【实证健康带】——但守两条铁律：
 //   ① 两条时标分开拟（这是关键，盲拟会毁掉哀伤持续）：
 //      · valence 是【心境/情绪事件】层的慢潜变量 → 只用【情绪时长数据】(Verduyn 哀伤≫喜悦)定它的 τ，
@@ -275,8 +275,8 @@ ${block}
 > **关键判断**：valence τ 由情绪时长定、与瞬时自相关脱钩 → "哀伤持续"被结构性保住（盲拟会把它压到 ~1h、毁掉她的悲伤）。
 > endogenousAmp 与 arousal τ 都不被数据拉走（前者是反应性的活、她已有 appraisal；后者是 Verduyn 时长锚）。数据只精修内生 fast 周期——installment 5 里最弱锚定的手拍项。
 `;
-writeFileSync('docs/affect-calibration-report.md', report);
-console.log('\n── 建议常量（已写入 docs/affect-calibration-report.md）──');
+writeFileSync('affect-calibration-report.md', report); // 离线工具产物（仓根，不进 docs/ 产品文档）
+console.log('\n── 建议常量（已写入 affect-calibration-report.md）──');
 console.log(block);
 console.log('\n' + '─'.repeat(72));
 console.log(SYNTH ? '⚠ 合成数据集（确定性自测，按已知统计造、循环 → 仅验证 --dataset 管线跑通，非新证据）。换真 ESM CSV：把 --synthesize 换成 --dataset <真csv>。'

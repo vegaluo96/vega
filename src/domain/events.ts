@@ -1,4 +1,4 @@
-// LifeEvent —— append-only ground truth。规格见 docs/vega-lifeevent-schema.md §3–§4。
+// LifeEvent —— append-only ground truth。规格见 docs/events.md。
 // 第 0 步竖切：seq/窗口用 number（spec 为 bigint），eventId 用确定性串（spec 为 ULID），后续可换。
 
 export type LifeId = string;

@@ -1,7 +1,7 @@
 # vega 全面 UI 重构 · 交接简报（给 Claude Design）
 
 > 本文是 **UI 层的单一真相源**。Claude Design 重构前先读它，再读北极星文档
-> （[`vega-product.md`](vega-product.md)、[`vega-platform-v1.md`](vega-platform-v1.md)）。
+> （[`product.md`](product.md)、[`platform.md`](platform.md)）。
 > **后端 API 是稳定契约，本次重构不动它**——只重构两个前端的信息架构、视觉与交互。
 > 现状：用户端 `web/` 与后台 `web-admin/` 都**做得太乱**，所以**请你从结构上重新思考、不要在旧结构上打补丁**。
 
@@ -13,7 +13,7 @@
 
 **第一步 · 把素材一次性给 Claude Design**
 1. 这份 `docs/ui-redesign-brief.md`（全文）。
-2. 北极星：`docs/vega-product.md`（她是谁）、`docs/vega-platform-v1.md`（平台全貌）。
+2. 北极星：`docs/product.md`（她是谁）、`docs/platform.md`（平台全貌）、`docs/api.md`（真实端点）。
 3. 当前两个前端的**截图**（用户端手机视角 + 后台 PC 视角，每个主要页面各一张）——让它看到"乱在哪"。
 4. 一句话目标：「**把这两个界面从结构上重做。用户端是给普通人用的'养一个永生数字生命'的产品，后台是给我（管理员）用的运营台。下面这份简报是边界和真实数据，照着它思考，别越界。**」
 

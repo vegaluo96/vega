@@ -1,5 +1,5 @@
 // 第0步交付物：契约的【测试形态】——把所有不可破契约收成一份可执行清单，一处跑全、可审计。
-// 内核三契约（§vega-lifeevent-schema）+ 确定性律/V2/V3 + 平台四契约（§vega-platform-v1 §2）。
+// 内核三契约（§docs/contracts.md）+ 确定性律/V2/V3 + 平台四契约（§docs/contracts.md）。
 // 这些断言在别处也有覆盖；本文是【契约 → 可执行检查】的单一映射，专为"一眼看清契约都成立"而设。
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -132,7 +132,7 @@ test('V3 · 崩溃恢复：未 finalize 的撕裂尾行被回滚、状态干净'
   }
 });
 
-// ───────────────────────── 平台四契约（§vega-platform-v1 §2） ─────────────────────────
+// ───────────────────────── 平台四契约（§docs/contracts.md） ─────────────────────────
 test('平台·隐私 · no_cross_user_memory：两用户对同一条命，记忆绝不串味', async () => {
   const f = fileStore();
   try {
