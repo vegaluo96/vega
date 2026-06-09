@@ -905,24 +905,6 @@ const server = createServer(async (req, res) => {
         write(': connected\n\n');
         return; // 长连接，保持打开
       }
-      // 微信绑定（账号级）：生成一次性绑定码 → 用户发给 clawbot → openid 绑到这个账号。
-      // 初始"在微信里和谁聊"= body.lifeId（有则用），否则第一条遇见的命/第一条命；之后在网页随时切换。
-      if (req.method === 'POST' && url === '/api/bindings') {
-        const b = await readJson(req);
-        const initLife = (lifeById(String(b.lifeId ?? '')) ?? lifeById(livesMetBy(me)[0]?.id ?? '') ?? lives[0]);
-        if (!initLife) return send(res, 404, { error: 'no life' });
-        const token = accounts.createBindToken(me.id, initLife.id);
-        return send(res, 200, { bindToken: token, qr: `zsky-bind:${token}`, expiresInSec: 600 });
-      }
-      // 切换"在微信里和哪条命聊"——账号已绑微信即可，不用重绑。
-      if (req.method === 'POST' && url === '/api/wechat/active-life') {
-        const b = await readJson(req);
-        const lifeId = String(b.lifeId ?? '');
-        if (!lifeById(lifeId)) return send(res, 404, { error: 'no such life' });
-        if (!accounts.wechatBindingFor(me.id)) return send(res, 400, { error: '尚未绑定微信' });
-        accounts.setWechatLife(me.id, lifeId);
-        return send(res, 200, { ok: true, lifeId });
-      }
       // 微信扫码连接（ZSKY 自己当机器人）：① 取登录二维码 ② 轮询状态，confirmed 即绑定+起收发循环。
       if (req.method === 'POST' && url === '/api/wechat/connect/start') {
         let r = await ilink.getQrcode();
@@ -1097,10 +1079,6 @@ const server = createServer(async (req, res) => {
         if (!postId || !text) return send(res, 400, { error: 'postId/text required' });
         return send(res, 200, feed.addComment(postId, me.id, me.handle, text, replyTo));
       }
-      if (req.method === 'GET' && url.split('?')[0] === '/api/feed/comments') {
-        const postId = new URLSearchParams((req.url ?? '').split('?')[1] ?? '').get('postId') ?? '';
-        return send(res, 200, feed.commentsFor(postId, 50));
-      }
       // 单条心声详情（点开帖子看留言互动）：正文 + 出处 + 表情 + 评论一次返回。
       if (req.method === 'GET' && url.split('?')[0] === '/api/feed/post') {
         const postId = new URLSearchParams((req.url ?? '').split('?')[1] ?? '').get('postId') ?? '';
@@ -1139,11 +1117,6 @@ const server = createServer(async (req, res) => {
         const sub = b.subscription as { endpoint?: string; keys?: { p256dh?: string; auth?: string } } | undefined;
         if (!sub?.endpoint || !sub.keys?.p256dh || !sub.keys?.auth) return send(res, 400, { error: 'bad subscription' });
         accounts.addPushSub(me.id, sub.endpoint, sub.keys.p256dh, sub.keys.auth);
-        return send(res, 200, { ok: true });
-      }
-      if (req.method === 'POST' && url === '/api/push/unsubscribe') {
-        const b = await readJson(req);
-        accounts.removePushSub(String(b.endpoint ?? ''));
         return send(res, 200, { ok: true });
       }
       // 钱包：申请充值（暂后台审批）。
