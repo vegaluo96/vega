@@ -1428,17 +1428,22 @@ const heartbeat = setInterval(async () => {
         const st = rs.get(rel);
         if (!st || st.lastRecvMs <= 0 || st.pending) continue; // 没真说过话 / 已有未回的主动留言 → 跳过
         if (Date.now() - st.lastRecvMs <= sc.reachAfterMs) continue; // 还没"离开"够久
-        if (Date.now() - (st.lastSentMs || 0) <= layerOf(b.closeness, sc).everyMs) continue; // 该层的主动频率上限
+        // 自我优化（Phase 5→真实行动）：学到的"主动找人效能"调真实频率——屡屡石沉→更少主动（学会收着），常被回应→更readily。0.5 中性=恒等。
+        const reachEff = after.skills.find((s) => s.kind === 'reach_out')?.efficacy ?? 0.5;
+        if (Date.now() - (st.lastSentMs || 0) <= layerOf(b.closeness, sc).everyMs * (1.5 - reachEff)) continue;
         if (!autoBudget.tryConsume()) break; // 治理：自主预算超额 → 这轮不主动开口
-        const o = await reachOut(life.store, mouth, rel, now());
-        if (o) { bus.publish('reach_out', rel, { life: life.id, text: o.utterance }); reached += 1; } // 她想你了——只推给那一个人
+        const ra = now();
+        const o = await reachOut(life.store, mouth, rel, ra);
+        if (o) { bus.publish('reach_out', rel, { life: life.id, text: o.utterance }); reached += 1; reachOutPending.set(`${life.id}|${rel}`, { rel, at: ra }); } // 记下这次主动 → 反馈回路判断被回应/石沉
       }
       if (Date.now() - life.lastReflectAt > REFLECT_MS && life.store.version() - life.lastReflectSeq >= 3) {
         runTurn(life.store, [{ type: 'REFLECTION_TRIGGERED', source: 'autonomous_loop', occurredAt: now(), payload: { scope: 'recent', windowFromSeq: life.lastReflectSeq, windowToSeq: life.store.version() } }]);
         life.lastReflectAt = Date.now();
         life.lastReflectSeq = life.store.version();
       }
-      if (Date.now() - life.lastMuseAt > life.museEveryMs && autoBudget.tryConsume()) { // 治理：自主预算（超额则这轮安静）
+      // 自我优化：学到的"公开表达效能"调发帖频率——心声总没回响→发得少些，常被接住→更愿意说。0.5 中性=恒等。
+      const museEff = after.skills.find((s) => s.kind === 'muse')?.efficacy ?? 0.5;
+      if (Date.now() - life.lastMuseAt > life.museEveryMs * (1.5 - museEff) && autoBudget.tryConsume()) { // 治理：自主预算（超额则这轮安静）
         const mt = now();
         const pair = pickInsightPair(life); // 自发洞见的材料（仅公开世界/兴趣，无用户痕迹）
         life.lastMuseAt = Date.now();
@@ -1534,9 +1539,24 @@ const discoverTimer = setInterval(async () => {
 // 行动反馈闭环（Phase 3 / §"行动→世界反馈→改变她"）：她的心声被点赞/评论 → 她【感到被回应】并被改变。
 // 落成 FEEDBACK_PERCEIVED（确定性、进神圣日志）。脱敏：只记聚合数，不记是谁。首见某帖先记基线、不补发历史。
 const seenEngagement = new Map<string, number>();
+// 主动找人的去向（Phase 3 收尾）：记下她每次 reach-out，反馈回路判断【被回应】还是【石沉大海】→ 落 FEEDBACK_PERCEIVED。
+const reachOutPending = new Map<string, { rel: string; at: string }>();
+const SILENCE_MS = Number(process.env.VEGA_REACH_SILENCE_MS ?? 7_200_000); // 主动后多久没回 = 视作"石沉"（默认 2h）
 const feedbackTimer = setInterval(() => {
   for (const life of lives) {
     try {
+      // —— 主动找人的反馈：被回应→正、长久石沉→负（按依恋型变敏感 + 喂 reach_out 效能学习）——
+      for (const [key, pend] of reachOutPending) {
+        if (!key.startsWith(`${life.id}|`)) continue;
+        const replied = life.store.list().some((e) => e.type === 'MESSAGE_RECEIVED' && e.relationshipId === pend.rel && e.occurredAt > pend.at);
+        if (replied) {
+          serializer.run(life.id, async () => { runTurn(life.store, [{ type: 'FEEDBACK_PERCEIVED', source: 'autonomous_loop', occurredAt: now(), payload: { actionKind: 'reach_out', responseKind: 'reply', valence: 0.6, fromKind: 'human' } }]); });
+          reachOutPending.delete(key);
+        } else if (Date.parse(now()) - Date.parse(pend.at) > SILENCE_MS) {
+          serializer.run(life.id, async () => { runTurn(life.store, [{ type: 'FEEDBACK_PERCEIVED', source: 'autonomous_loop', occurredAt: now(), payload: { actionKind: 'reach_out', responseKind: 'silence', valence: -0.5, fromKind: 'human' } }]); });
+          reachOutPending.delete(key); // 石沉只记一次，不反复扎心
+        }
+      }
       if (!snapOf(life).awake) continue; // 只在醒着时感到反馈（与休眠冻结一致）
       const posts = allFeedPosts().filter((p) => p.life === life.id).slice(0, 20);
       if (posts.length === 0) continue;
