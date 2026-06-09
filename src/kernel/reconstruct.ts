@@ -12,6 +12,7 @@ import {
   type MessageReceivedPayload,
   type MessageSentPayload,
   type WorldPerceivedPayload,
+  type FeedbackPerceivedPayload,
   type ReflectionTriggeredPayload,
   type RelationshipEndedPayload,
   type RelationshipOpenedPayload,
@@ -30,7 +31,7 @@ import {
   type ValueEntry,
 } from '../domain/snapshot.ts';
 
-const RECONSTRUCT_VERSION = 18; // v18：内在驱动(novelty/coherence/meaning)+情绪→决策(riskAppetite/目标排序)+注意力；novelty 与其他维解耦→核心轨迹不变；旧 checkpoint 全量重放
+const RECONSTRUCT_VERSION = 19; // v19：行动反馈闭环 FEEDBACK_PERCEIVED——她感到自己行动的回应/沉默并被改变（被回应→暖/连接，沉默→孤独，按依恋型变敏感）；旧 checkpoint 全量重放
 // 她活在出生地的时区：分钟东偏 UTC，【出生即冻结进 LIFE_GENESIS、终生不变】（不取 OS/用户时区，故 V2 可复现）。
 // 她是一个身体、只有一个昼夜。平台孵化的命缺省=北京 480；将来用户接生的命取创造者设备时区。
 const CIRCADIAN_OFFSET_MIN_DEFAULT = 480;
@@ -326,6 +327,9 @@ function applyEvent(st: RState, e: LifeEvent): void {
     case 'WORLD_PERCEIVED':
       appraiseWorld(st, e as LifeEvent<'WORLD_PERCEIVED'>);
       break;
+    case 'FEEDBACK_PERCEIVED':
+      appraiseFeedback(st, e as LifeEvent<'FEEDBACK_PERCEIVED'>);
+      break;
     case 'AUTONOMOUS_TICK':
       applyTick(st, e as LifeEvent<'AUTONOMOUS_TICK'>);
       break;
@@ -497,6 +501,25 @@ function appraiseWorld(st: RState, e: LifeEvent<'WORLD_PERCEIVED'>): void {
       if (i >= 0) st.memory.splice(i, 1);
     }
   }
+}
+
+// 行动反馈 → 世界对她的回应改变她（闭环最后一环）。被回应→暖/连接、长久沉默→孤独；
+// 依恋型调制敏感度（焦虑型更怕被无视、回避型钝一点）。强反馈进 warmth/lonely 日志 → 反思里长成持久改变（不只一时情绪）。
+function appraiseFeedback(st: RState, e: LifeEvent<'FEEDBACK_PERCEIVED'>): void {
+  const p = e.payload as FeedbackPerceivedPayload;
+  const val = clamp(p.valence, -1, 1);
+  const sens = st.temperament.sensitivity;
+  const att = attachmentBiasOf(st.temperament);
+  // 沉默/负反馈：焦虑型放大、回避型钝化；正反馈：暖意人更受用。
+  const gain = val < 0 ? (att === '焦虑型' ? 1.5 : att === '回避型' ? 0.7 : 1) : (0.8 + 0.4 * st.temperament.warmth);
+  const W = 0.05; // 反馈系数——比人际轻、比世界稍重（这是"我的表达/主动"得到的回应，对她有切身意义）
+  const s = st.soma;
+  s.connection.value = clamp(s.connection.value + W * val * gain * sens, -1, 1);
+  s.valence.value = clamp(s.valence.value + W * val * gain * sens, -1, 1);
+  if (val < 0) s.safety.value = clamp(s.safety.value + W * val * gain, 0, 1); // 被无视 → 安全感轻降
+  // 强反馈进既有日志 → 反思里长成持久改变（被持续看见→更敞开；总被忽视→学会自处/更戒备）。
+  if (val >= 0.4) st.warmthLog.push(e.seq);
+  else if (val <= -0.4) st.lonelyLog.push(e.seq);
 }
 
 function applyTick(st: RState, e: LifeEvent<'AUTONOMOUS_TICK'>): void {

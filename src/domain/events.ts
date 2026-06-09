@@ -19,6 +19,7 @@ export type EventType =
   | 'MESSAGE_RECEIVED'
   | 'MESSAGE_SENT'
   | 'WORLD_PERCEIVED' // 她感知到一条真实世界信息（新闻/预测市场）——锁后加法演进，旧日志天然兼容
+  | 'FEEDBACK_PERCEIVED' // 她感知到【自己某次行动】收到的回应/沉默（心声被点赞评论、reach-out 被回应或石沉）——加法演进，旧日志兼容
   | 'AUTONOMOUS_TICK'
   | 'REFLECTION_TRIGGERED';
 
@@ -84,6 +85,15 @@ export interface WorldPerceivedPayload {
   topics: string[];
   perception?: WorldPerception; // 缺失则 reconstruct 用确定性词表兜底（仍不连网）
 }
+// 行动反馈（§"行动→世界反馈→改变她"的闭环）：她某次行动收到的回应/沉默，采集时算好 valence、冻进事件 → 重放确定性。
+// 脱敏：公共心声的反馈只记【聚合 + fromKind】，不记是哪个具体用户（防跨用户推断）；reach-out 沉默按其关系记。
+export interface FeedbackPerceivedPayload {
+  actionKind: 'muse' | 'reach_out'; // 她哪类行动收到了反馈
+  responseKind: 'reaction' | 'comment' | 'reply' | 'silence';
+  valence: number; // [-1,1] 采集时算好（被回应=正、长久沉默=负）
+  fromKind: 'human' | 'peer';
+  count?: number; // 多少回应（如 3 人点赞）
+}
 export interface MessageSentPayload {
   relationshipId: RelationshipId;
   utterance: string; // 模型产物（对外措辞）
@@ -122,6 +132,7 @@ export interface PayloadMap {
   MESSAGE_RECEIVED: MessageReceivedPayload;
   MESSAGE_SENT: MessageSentPayload;
   WORLD_PERCEIVED: WorldPerceivedPayload;
+  FEEDBACK_PERCEIVED: FeedbackPerceivedPayload;
   AUTONOMOUS_TICK: AutonomousTickPayload;
   REFLECTION_TRIGGERED: ReflectionTriggeredPayload;
 }
