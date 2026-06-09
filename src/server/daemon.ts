@@ -829,7 +829,16 @@ const server = createServer(async (req, res) => {
     if (url.startsWith('/api/')) {
       // 公开：社会广场（发现）
       if (req.method === 'GET' && url === '/api/lives') {
-        return send(res, 200, lives.map((l) => { const s = snapOf(l); return { id: l.id, awake: s.awake, emotion: s.emotion, dayPhase: s.dayPhase, temperament: tempLabel(s.temperament) }; }));
+        // 发现页"生命画廊"用：一眼传达她的气质（全脱敏，与公开主页同源）。
+        return send(res, 200, lives.map((l) => {
+          const s = snapOf(l);
+          return {
+            id: l.id, awake: s.awake, emotion: s.emotion, feeling: s.feeling, dayPhase: s.dayPhase,
+            temperament: tempLabel(s.temperament), mbti: mbtiOf(s.temperament), tension: s.tension,
+            vitality: round3(s.soma.vitality.value),
+            interests: s.interests.slice(0, 3).map((it) => ({ topic: it.topic, confirmed: it.status === 'confirmed' })),
+          };
+        }));
       }
       // 广场"生命活动"历史（公开：心声 + 同类交谈）——进广场即有内容，不止在线时。
       // "探索"页的【她们之间】：成段的同类对话（最新在前）。
