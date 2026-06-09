@@ -59,7 +59,7 @@ test('Phase1 内在驱动/情绪→决策/注意力：novelty 衰减→无聊→
   const s = createInMemoryEventStore('vega-p1');
   s.append(genesis());
   s.append({ type: 'RELATIONSHIP_OPENED', source: 'system', relationshipId: 'r_c', occurredAt: at(), payload: { relationshipId: 'r_c', kind: 'human', displayRef: 'T' } });
-  s.append({ type: 'CONNECTION_OPENED', source: 'host', relationshipId: 'r_c', occurredAt: at(), payload: { relationshipId: 'r_c' } }); // 醒着——休眠会冻结 novelty（仅 vitality/energy 回暖）
+  s.append({ type: 'CONNECTION_OPENED', source: 'host', relationshipId: 'r_c', occurredAt: at(), payload: { relationshipId: 'r_c', host: { kind: 'http', ref: 'say' } } }); // 醒着——休眠会冻结 novelty（仅 vitality/energy 回暖）
   const snap0 = reconstruct(s.list());
   assert.ok(snap0.riskAppetite >= 0 && snap0.riskAppetite <= 1, 'riskAppetite 在 [0,1]');
   assert.ok(typeof snap0.needs.novelty === 'number' && typeof snap0.needs.coherence === 'number' && typeof snap0.needs.meaning === 'number', 'needs 三项派生');

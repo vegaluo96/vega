@@ -67,7 +67,7 @@ export {
   type LoginResult,
   type RechargeRequest,
 } from './platform/accounts.ts';
-export { ensureUserRelationship, userSay, meterMouth } from './platform/conversation.ts';
+export { ensureUserRelationship, userSay, meterMouth, resourceBand, resourceAwareMouth, type ResourceBand } from './platform/conversation.ts';
 export { createSerializer, type Serializer } from './platform/serialize.ts';
 export { createEventBus, visibleTo, type EventBus, type BusEvent } from './platform/eventbus.ts';
 export { generateVapidKeys, sendPush, type VapidKeys, type PushSubscription } from './platform/webpush.ts';

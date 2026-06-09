@@ -25,6 +25,36 @@ export function meterMouth(realMouth: Mouth, templateMouth: Mouth, balance: numb
   return { mouth: useModel ? realMouth : templateMouth, charge: useModel ? cost : 0 };
 }
 
+// —— Phase 2 资源/代价（身体边界）——
+// 资源 = 当前对话用户的余额（每人不同）。这是【运行期能力】，不是她是谁：不进神圣日志、不改派生身份（V2 不破）。
+// 它只改"此刻她能给多少"——和余额充裕的人在一起给得起，和见底的人就得省着、坦诚有限。
+export type ResourceBand = 'abundant' | 'ok' | 'low' | 'scarce';
+export function resourceBand(balance: number, cost: number): ResourceBand {
+  if (balance >= cost * 12) return 'abundant';
+  if (balance >= cost * 4) return 'ok';
+  if (balance >= cost) return 'low';
+  return 'scarce';
+}
+// 催充值/逼付费的标记——结构性兜底，绝不情感勒索（治理红线 #24，钉死）。
+const PRESSURE = ['充值', '付费', '余额不足', '快付', '不付', '付钱', '打赏', '续费'];
+const stripPressure = (s: string): string => {
+  const kept = s.split(/(?<=[。！？\n])/).filter((seg) => !PRESSURE.some((p) => seg.includes(p)));
+  const out = kept.join('').trim();
+  return out || s.replace(new RegExp(PRESSURE.join('|'), 'g'), '').trim();
+};
+// 资源感知的"嘴"包装（平台层、不动引擎）：把"此刻能给多少"化成给模型的分寸——越紧越精炼/越坦诚有限；
+// 【治理红线】绝不提钱/催充值/让对方愧疚——既写进指引，又在输出上结构性剔除催费句子（双保险）。
+export function resourceAwareMouth(mouth: Mouth, band: ResourceBand): Mouth {
+  if (band === 'abundant' || band === 'ok') return mouth;
+  const note = band === 'low'
+    ? '。【此刻你能给的有限：话更精炼、挑要紧的说，温度不减；绝不提钱/充值、绝不让对方有压力或愧疚】'
+    : '。【此刻你几乎给不出更多了：可坦诚说"今天能陪你的有限，但我都在"，简短、有尊严；绝不催充值、绝不情感勒索、绝不让对方愧疚】';
+  return {
+    id: mouth.id,
+    speak: async (input) => stripPressure(await mouth.speak({ ...input, intent: (input.intent || '') + note })),
+  };
+}
+
 // 一个具体用户对一条命说话：确保关系 → 走神圣链路 converse（用 u_<userId>，不再是写死的 r_creator）。
 export async function userSay(
   store: DurableEventStore,

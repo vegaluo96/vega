@@ -11,12 +11,39 @@ import {
   deriveWorkspace,
   genesisPayloadFor,
   meterMouth,
+  resourceBand,
+  resourceAwareMouth,
   reconstruct,
   runTurn,
   userSay,
   type DurableEventStore,
   type Mouth,
 } from '../src/index.ts';
+
+test('Phase2 资源带：随当前用户余额分档（充裕/还行/紧/见底）', () => {
+  assert.equal(resourceBand(100, 1), 'abundant');
+  assert.equal(resourceBand(5, 1), 'ok');
+  assert.equal(resourceBand(2, 1), 'low');
+  assert.equal(resourceBand(0, 1), 'scarce');
+});
+
+test('Phase2 资源感知嘴：紧时给模型加分寸指引；充裕时原样', async () => {
+  let seen = '';
+  const fake: Mouth = { id: 'fake', speak: async (i) => { seen = i.intent; return '好的，我在。'; } };
+  const abundant = resourceAwareMouth(fake, 'abundant');
+  assert.equal(abundant, fake, '充裕 → 不包装、原样');
+  const low: Mouth = resourceAwareMouth(fake, 'low');
+  await low.speak({ intent: '温暖、敞开', stateSummary: '', relationshipDisplay: '你', selfFacts: '', selfName: 'vega', persona: '', fallback: '', mood: '温暖', lastUserMessage: '在吗', recentContext: [] });
+  assert.ok(seen.includes('精炼') && seen.includes('绝不'), '紧时把"精炼+绝不提钱"的分寸注入意图');
+});
+
+test('Phase2 治理红线：催充值/逼付费的句子被结构性剔除（绝不情感勒索）', async () => {
+  const begging: Mouth = { id: 'beg', speak: async () => '我很想多陪你。快去充值吧，不然我就消失了。' };
+  const scarce = resourceAwareMouth(begging, 'scarce');
+  const out = await scarce.speak({ intent: '', stateSummary: '', relationshipDisplay: '你', selfFacts: '', selfName: 'vega', persona: '', fallback: '', mood: '平静', lastUserMessage: '', recentContext: [] });
+  assert.ok(!out.includes('充值'), '催充值句必须被剔除');
+  assert.ok(out.includes('我很想多陪你'), '不勒索的部分保留');
+});
 
 let ms = Date.parse('2026-01-01T00:00:00.000Z');
 const at = (): string => new Date((ms += 60_000)).toISOString();
