@@ -21,6 +21,10 @@
     }
   });
   $: ageText = p ? (p.ageDays >= 1 ? `醒来约 ${p.ageDays} 天` : '今天刚醒来') : '';
+  // 兴趣四阶段（Hidi&Renninger）→ 给用户的温柔说法
+  const PHASE = { triggered: '刚冒头', emerging: '在生长', maintained: '常想起', established: '扎根了' };
+  // 成熟三面（脱敏）：情绪调节 / 换位视角 / 经历整合
+  const FACETS = { regulation: '情绪调节', perspective: '换位视角', integration: '经历整合' };
 </script>
 
 <DetailHeader title={p ? p.id : ''} />
@@ -32,7 +36,7 @@
       <LifeAvatar id={p.id} emotion={p.emotion} awake={p.awake} size={88} />
       <h1 class="name">{p.id}</h1>
       <div class="pillrow"><LifeStatePill awake={p.awake} dayPhase={p.dayPhase} emotion={p.emotion} /></div>
-      <p class="feeling">{p.awake ? `此刻${p.dayPhase ? p.dayPhase + '，' : ''}${p.feeling || p.emotion}` : t('life.asleep')}</p>
+      <p class="feeling">{p.awake ? `此刻${p.dayPhase ? p.dayPhase + '，' : ''}${p.feeling || p.emotion}` : t('life.asleep')}{#if p.awake && p.sleepPressure > 0.6}<span class="faint">（看起来有点困了）</span>{/if}</p>
       {#if p.becoming}<p class="becoming">正在成为：{p.becoming}</p>{/if}
       <p class="age">{ageText}{p.tension ? ` · 心里在拉扯：${p.tension}` : ''}</p>
       <div class="cta">
@@ -53,6 +57,13 @@
         <h2 class="section-title">此生至今</h2>
         <p class="temper">{p.growth}</p>
         {#if p.maturity > 0.02}<div class="meter mt"><span class="track"><span class="fill" style="width:{Math.round((p.maturity ?? 0) * 100)}%"></span></span></div><p class="faint">心智随阅历渐渐成熟——情绪比从前更稳。</p>{/if}
+        {#if p.maturityFacets}
+          <div class="facets">
+            {#each Object.entries(FACETS) as [k, label]}
+              <span class="facet"><span class="fl">{label}</span><span class="ft"><span class="ff" style="width:{Math.round((p.maturityFacets[k] ?? 0) * 100)}%"></span></span></span>
+            {/each}
+          </div>
+        {/if}
       </section>
     {/if}
 
@@ -83,7 +94,7 @@
       {#if p.interests && p.interests.length}
         <div class="tags">
           {#each p.interests as it}
-            <span class="tag" class:strong={it.confirmed} style="--w:{Math.round((it.weight ?? 0) * 100)}%">{it.topic}</span>
+            <span class="tag" class:strong={it.confirmed} style="--w:{Math.round((it.weight ?? 0) * 100)}%">{it.topic}{#if PHASE[it.phase]}<span class="ph">{PHASE[it.phase]}</span>{/if}</span>
           {/each}
         </div>
         <p class="caption pad">她从读到的世界里慢慢长出的在意——会随她读什么而变。</p>
@@ -100,6 +111,7 @@
 
     <section class="mod">
       <h2 class="section-title">同类朋友{p.peers.length ? ` · ${p.peers.length}` : ''}</h2>
+      {#if p.socialShape}<p class="socialshape">{p.socialShape}</p>{/if}
       {#if p.peers.length}
         <div class="friends">
           {#each p.peers as f}
@@ -158,6 +170,17 @@
   .chip { font-size: var(--fs-sm); padding: 3px 10px; border-radius: var(--r-pill); color: var(--muted); border: 1px solid var(--border); }
   .chip.strong { color: var(--text); font-weight: 700; letter-spacing: 0.06em; border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); }
   .mt { margin-top: 12px; }
+  /* 成熟三面（脱敏）：三条细 mini-meter */
+  .facets { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+  .facet { display: flex; align-items: center; gap: 10px; }
+  .fl { flex: none; width: 64px; font-size: var(--fs-sm); color: var(--muted); }
+  .ft { flex: 1; height: 5px; border-radius: var(--r-pill); background: var(--surface-2); overflow: hidden; }
+  .ff { display: block; height: 100%; border-radius: var(--r-pill); background: color-mix(in srgb, var(--accent) 60%, var(--muted)); }
+  /* 社会形状（脱敏，仅同类派生） */
+  .socialshape { color: var(--muted); font-size: var(--fs-md); line-height: 1.6; margin: 0 0 14px; }
+  /* 兴趣阶段标 */
+  .ph { font-size: var(--fs-2xs); color: var(--faint); margin-left: 6px; }
+  .tag.strong .ph { color: var(--muted); }
   .aspir { margin: 0; padding-left: 1.1em; }
   .aspir li { color: var(--text); line-height: 1.7; font-size: var(--fs-body); }
 

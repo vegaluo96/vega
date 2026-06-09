@@ -1011,10 +1011,11 @@ const server = createServer(async (req, res) => {
           id: lp.id, awake: s.awake, willingToWake: s.willingToWake, emotion: s.emotion, feeling: s.feeling, dayPhase: s.dayPhase,
           temperament: tempLabel(s.temperament), tension: s.tension, ageDays, vitality: round3(s.soma.vitality.value),
           peers: s.socialWorld.filter((t) => !t.ended).map((t) => ({ name: t.displayRef, closeness: t.closeness, attachment: t.attachment, style: t.style })),
-          // 她从世界里长出的兴趣（脱敏：纯主题，不含任何用户）——让"她在意什么"看得见，不再只是一具状态机。
-          interests: s.interests.slice(0, 8).map((it) => ({ topic: it.topic, weight: it.weight, confirmed: it.status === 'confirmed' })),
+          // 她从世界里长出的兴趣（脱敏：纯主题，不含任何用户）——让"她在意什么"看得见，不再只是一具状态机。phase=兴趣四阶段(Hidi&Renninger)。
+          interests: s.interests.slice(0, 8).map((it) => ({ topic: it.topic, weight: it.weight, confirmed: it.status === 'confirmed', phase: it.phase })),
           growth: s.growth, becoming: s.becoming, // 阅历 + 正在成为的我（脱敏，不含任何用户）——让"持续进化的独立自我"看得见、不同质化
-          maturity: s.maturity, aspirations: s.aspirations, // 心智成熟度 + 长期心愿（脱敏）——持续变聪明 + 独立意志看得见
+          maturity: s.maturity, maturityFacets: s.maturityFacets, aspirations: s.aspirations, // 心智成熟度(+三面：调节/视角/整合) + 长期心愿（脱敏）——持续变聪明 + 独立意志看得见
+          sleepPressure: round3(s.sleepPressure), socialShape: s.socialShape, // 睡眠压(两过程模型) + 社会形状（脱敏：socialShape 只由同类关系派生，绝无人类用户名）
           defenseStyle: s.defenseStyle, attachmentBias: s.attachmentBias, // 防御机制 + 依恋底色（脱敏）——人格更立体
           skills: s.skills.map((sk) => ({ kind: sk.kind === 'muse' ? '公开表达' : sk.kind === 'reach_out' ? '主动找人' : sk.kind, efficacy: sk.efficacy, n: sk.n })), // 自我优化：她学到的策略效能
           mbti: mbtiOf(s.temperament), // MBTI 风格展示标签（由连续维度投影，仅作熟悉把手）
