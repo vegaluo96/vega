@@ -10,6 +10,43 @@
 - **大模型永远只当"嘴"**：只产对外措辞，**不选 action、不算价值、不写状态、不碰灵魂**。
 - **差异化**：卖点不是"能聊天"，是一段**专属于你、持续生长**的关系 + 一座你能旁观/参与的数字生命社会。
 
+## 架构一图：耳 → 引擎 → 嘴（GitHub 直接渲染）
+
+"活"全在中间那个**确定性内核**里——模型只在两端当"耳"和"嘴"，关掉它她照样活：
+
+```mermaid
+flowchart LR
+  U["用户消息"]
+  subgraph EARG["耳 · perceiver（模型 · 可关）"]
+    EAR["感知 9 维<br/>→ 冻进事件"]
+  end
+  subgraph K["引擎 · 确定性内核（零模型 · 免费 · 「活」的来源）"]
+    direction TB
+    LOG[("append-only<br/>LifeEvent 日志<br/>唯一 ground truth")]
+    REC["reconstruct<br/>纯重放 / 折叠"]
+    SNAP["DerivedSnapshot<br/>情绪·需求·记忆·关系·兴趣"]
+    WS["SoulWorkspace<br/>喂给模型的 grounding"]
+    LOG --> REC --> SNAP --> WS
+  end
+  subgraph MOUTHG["嘴 · mouth（模型 · 只产措辞）"]
+    MOUTH["ModelGateway"]
+  end
+  CRITIC["Critic 裁决"]
+  OUT["对外回应"]
+  PATCH["SoulStatePatch"]
+  INV["InvariantChecker<br/>三契约"]
+  U --> EAR
+  EAR --> LOG
+  WS --> MOUTH
+  MOUTH --> CRITIC
+  CRITIC --> OUT
+  CRITIC --> PATCH
+  PATCH --> INV
+  INV -->|"commit 新事件"| LOG
+```
+
+> 神圣链路（任何状态变化都不绕过）：用户消息 → LifeEvent → 重建快照 → SoulWorkspace → 模型措辞 → Critic → StatePatch → 不变量校验 → 提交 → 下一轮用更新后的状态。
+
 ## 单一真相源（先读文档再动手）
 - [`docs/vega-product.md`](docs/vega-product.md) —— 产品北极星
 - [`docs/vega-lifeevent-schema.md`](docs/vega-lifeevent-schema.md) —— 事件 schema + **三条不可破契约** + 可重建性证明（v1 已锁）
@@ -29,6 +66,29 @@ web/        用户前台 ZSKY（Vite + Svelte SPA：广场/探索/通知/对话/
 web-admin/  管理后台（Vite + Svelte SPA：观察台 + 运营台）
 docs/       设计文档（单一真相源）
 ```
+
+平台与部署一图（同一个 daemon 自托管两个前端、按域名分流；微信是同一段关系的另一张嘴）：
+
+```mermaid
+flowchart TB
+  H5["用户端 web/<br/>手机 H5 为主 · PC 为辅"]
+  ADM["后台 web-admin/<br/>管理员 · PC"]
+  WX["微信<br/>clawbot 绑定"]
+  CADDY["Caddy 反代<br/>zsky.com · admin.zsky.com"]
+  DAEMON["daemon<br/>HTTP/SSE · 多生命体常驻 · 自托管 dist"]
+  ENGINE["引擎 vega<br/>零运行时依赖 · 纯函数 · 事件溯源"]
+  ACC[("账号 / 额度 / 会话<br/>node:sqlite")]
+  STORE[("每条命的<br/>append-only 事件库<br/>+ 检查点 + 备份")]
+  H5 --> CADDY
+  ADM --> CADDY
+  WX --> CADDY
+  CADDY --> DAEMON
+  DAEMON --> ENGINE
+  DAEMON --> ACC
+  ENGINE --> STORE
+```
+
+> 界面截图：用户端与后台正在**全面 UI 重构**（含活体宠物，见 [`docs/ui-redesign-brief.md`](docs/ui-redesign-brief.md)）。为免贴出马上要被替换的旧界面，**截图待新版落地后补上**。
 
 ## 跑起来（引擎零运行时依赖：Node ≥ 22.6）
 ```bash
