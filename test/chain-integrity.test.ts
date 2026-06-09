@@ -78,6 +78,26 @@ function flaky(real: DurableEventStore, failFirst: number): DurableEventStore {
   };
 }
 
+// ⑦ 性能：converse 传入【已追平缓存态】走增量折叠，结果必须与全量重放【逐位一致】（提速不改语义）。
+test('链路⑦·增量==全量：converse 缓存态增量折叠 与 全量重放 结果逐位一致', async () => {
+  const A = fileBoot('r'); const B = fileBoot('r');
+  try {
+    const mouth = createTemplateMouth();
+    // 先各跑几轮，造一点历史（两边事件完全相同）。
+    for (let i = 0; i < 3; i++) { const t = at(); await converse(A.s, mouth, 'r', `历史${i}`, t); await converse(B.s, mouth, 'r', `历史${i}`, t); }
+    // A：全量重放路径（不传 cached）。B：传入追平到末条的缓存态 → 增量折叠路径。
+    const tt = at();
+    const rA = await converse(A.s, mouth, 'r', '你好呀', tt);
+    const { st } = resumeFromCheckpoint(captureCheckpoint(B.s.list()));
+    const lastSeq = B.s.list()[B.s.list().length - 1].seq;
+    const rB = await converse(B.s, mouth, 'r', '你好呀', tt, undefined, 'chat', { st, uptoSeq: lastSeq });
+    assert.equal(stateHash(rB.snapshot), stateHash(rA.snapshot), '增量与全量的"收到后"快照必须逐位一致');
+    assert.equal(rB.utterance, rA.utterance, '同一确定性嘴 → 同一句');
+    assert.equal(stateHash(reconstruct(B.s.list())), stateHash(reconstruct(A.s.list())), '两边落库后整体状态一致');
+    assert.equal(B.s.version(), A.s.version());
+  } finally { A.cleanup(); B.cleanup(); }
+});
+
 // ① 原子性：提交失败 → 神圣日志纹丝不动（无半截：既无 MESSAGE_RECEIVED 也无 MESSAGE_SENT）。
 test('链路①·原子性：converse 提交崩了 → 整批回滚，version 不变、无半截 turn', async () => {
   const { s, cleanup } = fileBoot();

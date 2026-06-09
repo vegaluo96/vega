@@ -9,7 +9,11 @@ import {
 } from '../domain/events.ts';
 import { type DerivedSnapshot } from '../domain/snapshot.ts';
 import { buildEvent } from '../kernel/event-store.ts';
-import { reconstruct } from '../kernel/reconstruct.ts';
+import { reconstruct, advanceState, projectState, type RState } from '../kernel/reconstruct.ts';
+
+// 性能（响应速度）：聊天热路径不再每条消息全量重放（O(全部事件)）。调用方（daemon）可传入【已追平到末条的缓存态】，
+// converse 克隆它、只把"这条新消息"增量折进去 → O(1) 而非 O(n)。缓存不匹配时安全回退全量重放，结果逐位一致。
+export interface CachedState { st: RState; uptoSeq: number }
 import { type DurableEventStore } from '../persistence/file-event-store.ts';
 import { type Mouth } from '../model/mouth.ts';
 import { type Perceiver } from '../model/perceiver.ts';
@@ -62,11 +66,13 @@ export async function converse(
   occurredAt: string,
   perceiver?: Perceiver,
   channel = 'chat',
+  cached?: CachedState, // 可选：daemon 传入已追平的缓存态 → 增量折叠，省掉全量重放（热路径提速）
 ): Promise<ConverseResult> {
   // 乐观锁令牌：开头读一次，覆盖整个 await 窗口（不再在 append 瞬间才读——那样 CAS 永不冲突）。
   const expected = store.version();
   const events = store.list();
   const head = store.head();
+  const lastSeq = events.length ? events[events.length - 1].seq : -1;
   // 之前的对话（不含本条），给"嘴"做上下文。
   const recentContext = recentTurns(store, relationshipId, 6);
 
@@ -90,7 +96,11 @@ export async function converse(
   // 关键（原子性）：模型若在下方 await 中崩，神圣日志什么都没写 → 重试干净，无半截 turn、无二次 appraise。
   // recordedAt 不入 contentHash、不影响重建，故此预演快照与最终提交逐位一致。
   const previewReceived = buildEvent(head ? head.lifeId : '', expected, head, head ? head.occurredAt : '', receivedDraft);
-  const snapshot = reconstruct([...events, previewReceived]);
+  // 缓存态【恰好追平到末条】时：克隆它（绝不改调用方缓存）+ 只折进这条预演消息 → 与全量重放逐位一致、但 O(1)。
+  // 否则（缓存陈旧/首次开关系改了版本）安全回退全量重放。
+  const snapshot = cached && cached.uptoSeq === lastSeq
+    ? (() => { const st = structuredClone(cached.st); advanceState(st, [previewReceived]); return projectState(st, previewReceived.seq); })()
+    : reconstruct([...events, previewReceived]);
 
   // ③ SoulWorkspace：确定性装配"状态摘要 + 语气倾向"。
   const workspace = deriveWorkspace(snapshot, relationshipId);
