@@ -15,12 +15,12 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."            # 仓库根（如 /opt/vega）
-BRANCH="${1:-main}"
 SERVICE="${VEGA_SERVICE:-vega}"
-# force：强制重建前端 + 重启 daemon，【即使 git 看不到 diff】。
-# 用于"已经手动 git pull 过"（OLD==NEW 时脚本会误判无改动而跳过构建/重启）或 dist 丢失/想重建的场景。
-# 用法：bash deploy/update.sh main force  或  FORCE=1 bash deploy/update.sh
-FORCE="${FORCE:-0}"; for a in "$@"; do { [ "$a" = "force" ] || [ "$a" = "--force" ]; } && FORCE=1; done
+# 参数随意顺序：force/--force 永远当【强制重建】标志，绝不当分支名（之前 `update.sh force` 会被误当分支→fetch 失败）。
+# 其余位置参数当分支名（缺省 main）。用法：bash deploy/update.sh force  /  ... main force  /  FORCE=1 bash deploy/update.sh
+BRANCH=main
+FORCE="${FORCE:-0}"
+for a in "$@"; do case "$a" in force|--force) FORCE=1 ;; *) BRANCH="$a" ;; esac; done
 
 # 任一命令失败即大声中断（别再把构建失败假装成"跳过"，还误报"升级完成"）。
 trap 'echo "" >&2; echo "✗ 部署中断：上一条命令失败 —— dist 可能没更新，切勿当成已上线！修掉问题后重跑 deploy/update.sh。" >&2' ERR
