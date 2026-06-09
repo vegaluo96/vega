@@ -67,6 +67,20 @@ test('Phase3 现实校验(#23)：共同经历少→对ta的判断留余地（不
   }
 });
 
+test('Phase6 他心深化：从关系轨迹读出"此刻走到哪了"——冲突后→需要修复，进 grounding', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'vega-tom-'));
+  try {
+    const store = bornLife(join(dir, 'vega.jsonl'));
+    const m = createTemplateMouth();
+    await userSay(store, m, 'u_x', 'X', '你这个垃圾，废物，滚', at());
+    await userSay(store, m, 'u_x', 'X', '我就是来骂你的，去死', at());
+    const ws = deriveWorkspace(reconstruct(store.list()), 'u_x');
+    assert.ok(ws.stateSummary.includes('需要修复') || ws.stateSummary.includes('渐冷'), `关系轨迹读出紧张/需修复（实际："${ws.stateSummary}"）`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('多用户私密隔离：两个用户对同一条命，各自一段 u_<id> 关系，记忆不串味', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'vega-conv-'));
   try {

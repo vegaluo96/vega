@@ -145,12 +145,24 @@ export function deriveWorkspace(snap: DerivedSnapshot, relationshipId: Relations
   const att = (snap.attention ?? []).length ? `\n（此刻最牵着我的：${snap.attention.slice(0, 2).join('、')}。）` : '';
   const selfFacts = selfCore + understanding + tentative + recall + socialNote + preoccupation + aspir + style + att;
 
+  // 他心深化（Phase 6）：从这段关系的真实轨迹确定性读出"此刻走到哪了" + "我多大程度摸得准ta"——
+  // 给模型更准的关系语境去推理（深层因果/意图推断是模型的活，但建立在这份确定性脚手架上，不悬空）。
+  const relStage = (b: NonNullable<typeof bond>): string => {
+    if (b.repairNeed > 0.5 && b.trust < 0.2) return '此刻有点紧张、需要修复';
+    if (b.repairNeed > 0.3) return '正在慢慢修复';
+    if (b.theoryOfMind.trend > 0.15) return '在升温';
+    if (b.theoryOfMind.trend < -0.15) return '有点渐冷';
+    if (b.closeness >= 0.5) return '稳定而亲近';
+    if (b.closeness < 0.2) return '才刚开始认识';
+    return '平稳';
+  };
+  const readConf = (b: NonNullable<typeof bond>): string => (b.theoryOfMind.predictability >= 0.6 ? '我大致摸得准ta' : b.theoryOfMind.predictability <= 0.35 ? '我还看不太透ta' : '');
   // 全定性、无数字：只给"嘴"把握语气，不给它可复述的指标。
   const stateSummary =
     `${valWord(val)}，${vitWord(vit)}` +
     (bond ? `；对${name}${trustWord(bond.trust)}、${closeWord(bond.closeness)}${bond.repairNeed > 0.5 ? '，这段关系此刻有点需要修复' : ''}` : '') +
     `；心情：${snap.feeling}` +
-    (bond ? `；我读${name}是「${bond.theoryOfMind.style}」，和ta在一起时我${bond.relationalSelf.stance}` : '');
+    (bond ? `；我读${name}是「${bond.theoryOfMind.style}」，这段关系${relStage(bond)}${readConf(bond) ? `（${readConf(bond)}）` : ''}，和ta在一起时我${bond.relationalSelf.stance}` : '');
 
   return {
     intent,
