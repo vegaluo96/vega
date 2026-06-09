@@ -84,7 +84,7 @@
   }
   async function testModel() {
     testing = true; testMsg = '测试中…';
-    try { const r = await api.testModel(); testMsg = r.ok ? `✓ ${r.model} 通了：${r.sample}` : `✗ ${r.error}`; }
+    try { const r = await api.testModel(); testMsg = r.ok ? `✓ ${r.model} 通了（${r.latencyMs}ms${r.slow ? ' ⚠ 偏慢，聊天易超时回落' : ''}）：${r.sample}` : `✗ ${r.error}`; }
     catch (e) { testMsg = '✗ ' + e.message; } finally { testing = false; }
   }
   async function clearKey() {
@@ -393,9 +393,9 @@
             </div>
 
             <div class="ct-stage"><div class="ct-k">① 输入</div><div class="ct-v">{t.input}</div></div>
-            <div class="ct-stage"><div class="ct-k">② 感知 Perceive</div><div class="ct-v">
+            <div class="ct-stage"><div class="ct-k">② 感知 Perceive <span class="faint">{t.timing.perceiveMs}ms</span></div><div class="ct-v">
               {#if t.perceive.active && t.perceive.perception}模型解析：善意 {t.perceive.perception.sentiment} · 暖 {t.perceive.perception.warmth} · 威胁 {t.perceive.perception.threat}
-              {:else}<span class="ct-warn">未用模型感知 → 退回确定性词表（她对微妙语气的理解会很粗）</span>{/if}
+              {:else}<span class="ct-warn">未用模型感知 → 退回确定性词表（她对微妙语气的理解会很粗）{#if t.timing.perceiveMs > 3000}——且耗了 {t.timing.perceiveMs}ms（感知模型太慢/超时，建议设个快的感知模型）{/if}</span>{/if}
             </div></div>
             <div class="ct-stage"><div class="ct-k">③ 状态 EngineSnapshot</div><div class="ct-v">
               <b>{t.state.emotion}</b> · {t.state.feeling}
@@ -408,7 +408,8 @@
               <div class="ct-sub">状态摘要</div><div class="ct-prose">{t.workspace.stateSummary}</div>
               <div class="ct-sub">自我事实 selfFacts（grounding）</div><pre class="ct-pre">{t.workspace.selfFacts}</pre>
             </div></div>
-            <div class="ct-stage"><div class="ct-k">⑤ 模型 ModelGateway {#if t.model.usedRealModel}<span class="tag ok">用了真模型 · {t.model.id}</span>{:else}<span class="tag sensitive">模板嘴 · 没用模型</span>{/if}</div><div class="ct-v">
+            <div class="ct-stage"><div class="ct-k">⑤ 模型 ModelGateway {#if t.model.usedRealModel}<span class="tag ok">用了真模型 · {t.model.id}</span><span class="faint">{t.timing.modelMs}ms</span>{:else}<span class="tag sensitive">模板嘴 · 没用模型</span>{/if}</div><div class="ct-v">
+              {#if t.raw.error && t.timing.modelMs > 6000}<p class="ct-warn">⚠ 模型耗时 {t.timing.modelMs}ms 后失败（多半超时）——这个模型对聊天太慢，用户会频繁看到"接不上"。换个快模型（qwen-plus / qwen-turbo / deepseek-chat / gpt-4o-mini）。</p>{/if}
               {#if t.model.prompt.length}
                 <div class="ct-sub">真正发给模型的 prompt（{t.model.prompt.length} 条）</div>
                 {#each t.model.prompt as msg}<div class="ct-msg"><span class="ct-role">{msg.role}</span><pre class="ct-pre">{msg.content}</pre></div>{/each}

@@ -156,7 +156,9 @@ function effPerceiveConfig(): PerceiverConfig | null {
   const apiKey = (o.apiKey ?? process.env.VEGA_MODEL_API_KEY ?? '').trim();
   const on = o.perceive ?? (process.env.VEGA_PERCEIVE === '1');
   if (!apiKey || !on) return null;
-  return { baseUrl: o.baseUrl ?? process.env.VEGA_MODEL_BASE_URL ?? DEFAULT_BASE, apiKey, model: o.perceiveModel ?? o.model ?? process.env.VEGA_PERCEIVE_MODEL ?? process.env.VEGA_MODEL ?? 'gemini-2.5-flash-lite', timeoutMs: o.timeoutMs ?? envTimeout() };
+  // 感知=极小的情感分类任务，不该占满对话超时；给它更短的独立超时 → 慢/挂时【快速失败回退词表】，不吃掉嘴的预算。
+  const perceiveTimeout = process.env.VEGA_PERCEIVE_TIMEOUT_MS ? Number(process.env.VEGA_PERCEIVE_TIMEOUT_MS) : Math.min(8000, o.timeoutMs ?? envTimeout());
+  return { baseUrl: o.baseUrl ?? process.env.VEGA_MODEL_BASE_URL ?? DEFAULT_BASE, apiKey, model: o.perceiveModel ?? o.model ?? process.env.VEGA_PERCEIVE_MODEL ?? process.env.VEGA_MODEL ?? 'gemini-2.5-flash-lite', timeoutMs: perceiveTimeout };
 }
 const mouth = governedMouth(createDynamicMouth(effMouthConfig)); // 治理层（#24）：所有真模型对外措辞过一遍反操控收口
 const templateMouth = createTemplateMouth(); // 余额耗尽时的免费兜底嘴（她仍回应；确定性、不会操控）
@@ -1194,6 +1196,7 @@ const server = createServer(async (req, res) => {
         if (req.method === 'POST' && path === '/admin/model-config/test') {
           const cfg = effMouthConfig();
           if (!cfg) return send(res, 200, { ok: false, error: '未配置 API Key——当前是离线模板嘴' });
+          const t0 = Date.now();
           try {
             const ctrl = new AbortController();
             const timer = setTimeout(() => ctrl.abort(), Math.min(cfg.timeoutMs, 15_000));
@@ -1204,12 +1207,17 @@ const server = createServer(async (req, res) => {
               signal: ctrl.signal,
             });
             clearTimeout(timer);
-            if (!r.ok) { const tx = await r.text().catch(() => ''); return send(res, 200, { ok: false, model: cfg.model, error: `HTTP ${r.status} ${tx.slice(0, 200)}` }); }
+            const latencyMs = Date.now() - t0;
+            if (!r.ok) { const tx = await r.text().catch(() => ''); return send(res, 200, { ok: false, model: cfg.model, latencyMs, error: `HTTP ${r.status} ${tx.slice(0, 200)}` }); }
             const d = (await r.json()) as { choices?: { message?: { content?: string } }[] };
             const sample = (d.choices?.[0]?.message?.content ?? '(空响应)').toString().slice(0, 120);
-            return send(res, 200, { ok: true, model: cfg.model, sample });
+            // 慢=聊天会频繁超时回落。一个字都要这么久，正常对话(几百 token)只会更慢。
+            const slow = latencyMs > 6000;
+            return send(res, 200, { ok: true, model: cfg.model, latencyMs, slow, sample });
           } catch (e) {
-            return send(res, 200, { ok: false, model: cfg.model, error: (e as Error).message || '请求失败' });
+            const latencyMs = Date.now() - t0;
+            const aborted = (e as { name?: string }).name === 'AbortError';
+            return send(res, 200, { ok: false, model: cfg.model, latencyMs, error: aborted ? `超时（${latencyMs}ms）——这个模型对聊天太慢，会频繁超时回落。换个快模型（如 qwen-plus/qwen-turbo/deepseek-chat）。` : (e as Error).message || '请求失败' });
           }
         }
         return send(res, 405, { error: 'method not allowed' });

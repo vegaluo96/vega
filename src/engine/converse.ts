@@ -290,6 +290,7 @@ export interface ChainTrace {
   model: { id: string; usedRealModel: boolean; prompt: { role: string; content: string }[] }; // usedRealModel=false → 当前是模板嘴（没用模型）
   raw: { ok: boolean; text: string; error?: string }; // 模型原始输出（或失败原因）
   critic: { verdict: 'accepted' | 'fallback'; finalUtterance: string }; // 裁决 + 用户最终会看到的话
+  timing: { perceiveMs: number; modelMs: number }; // 各环节真实耗时——一眼看出"是不是模型太慢→超时→fallback"
   committed: false; // 不变量：链路检查永不写日志
 }
 const tr3 = (x: number): number => Math.round(x * 1000) / 1000;
@@ -298,9 +299,10 @@ export async function traceConverse(
 ): Promise<ChainTrace> {
   const events = store.list();
   const head = store.head();
-  // ① 感知（与真链路同：模型当耳朵；未启用/失败 → 词表兜底）。
+  // ① 感知（与真链路同：模型当耳朵；未启用/失败 → 词表兜底）。计时：看感知是否拖慢/超时。
   let perception: Perception | undefined;
-  if (perceiver) { try { perception = (await perceiver.perceive(content)) ?? undefined; } catch { perception = undefined; } }
+  let perceiveMs = 0;
+  if (perceiver) { const ps = Date.now(); try { perception = (await perceiver.perceive(content)) ?? undefined; } catch { perception = undefined; } perceiveMs = Date.now() - ps; }
   // ② 预演折叠（与 converse 同）：得到"收到这句后/开口前"的真实驱动状态——只读、不提交。
   const receivedDraft: EventDraft<'MESSAGE_RECEIVED'> = { type: 'MESSAGE_RECEIVED', source: 'external_user', relationshipId, occurredAt, payload: { relationshipId, content, channel: 'chat', ...(perception ? { perception } : {}) } };
   const previewReceived = buildEvent(head ? head.lifeId : '', store.version(), head, head ? head.occurredAt : '', receivedDraft);
@@ -311,7 +313,9 @@ export async function traceConverse(
   // ④ 模型当嘴：真调一次当前配置的嘴。usedRealModel=非模板；prompt 用 apiyiMessages 还原（真嘴发出去的同一构造）。
   const usedRealModel = mouth.id !== 'template';
   let raw = '', ok = false, error: string | undefined;
+  const ms0 = Date.now();
   try { raw = await mouth.speak(input); ok = raw.trim() !== ''; } catch (e) { error = (e as Error).message || '调用失败'; }
+  const modelMs = Date.now() - ms0;
   // ⑤ Critic（与真链路同），并算出用户最终会看到的话。
   const { verdict, utterance } = critique(raw, workspace);
   const finalUtterance = verdict === 'fallback' ? honestDisconnect(content) : utterance;
@@ -324,6 +328,7 @@ export async function traceConverse(
     model: { id: mouth.id, usedRealModel, prompt: usedRealModel ? apiyiMessages(input) : [] },
     raw: { ok, text: raw, error },
     critic: { verdict, finalUtterance },
+    timing: { perceiveMs, modelMs },
     committed: false,
   };
 }
