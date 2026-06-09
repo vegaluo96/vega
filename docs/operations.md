@@ -24,6 +24,18 @@ cd web && npm install && npm run dev                          # 用户前台
 cd web-admin && npm install && npm run dev                    # 管理后台
 ```
 
+## 守护进程代码结构（`src/server/`）
+
+daemon 是薄的**组装根**，业务逻辑分到几个只读 ctx 的模块，便于维护/阅读：
+
+- `daemon.ts` —— 接线：env/单例/生效配置解析器/生命体(snapOf·boot·birthLife)/写链路(respondAsUser)/微信通道/聚合器；组装 `ctx` 后挂 HTTP（静态/健康/OpenAI 入口 + 两行派发）+ 起回路 + 生命周期。
+- `context.ts` —— `Ctx` 接口与共享类型（`Life`/`EffWorld`/`EffSocial`/`PeerExchange`）：路由层与回路层共同的"接口面"。
+- `routes/user.ts`(`handleUserApi`) · `routes/admin.ts`(`handleAdmin`) —— 用户态/管理态路由，逐段吃 ctx；匹配顺序/脱敏/角色门即真相。
+- `loops.ts`(`startLoops`) —— 六个自主社会回路（心跳/寒暄/发现/反馈/评论/共鸣）。
+- `http.ts`（收发/静态/取体）· `format.ts`（展示层纯函数：round3/maskKey/tempLabel/mbtiOf/moodReactionFor/eventLabel）。
+
+> 内核（`src/engine`）零依赖、纯函数、不参与上面这层；服务层只在内核外编排。
+
 ## 部署（智能升级，微信不掉）
 
 ```bash
@@ -87,4 +99,5 @@ Caddy 把 `zsky.com`（用户站）与 `admin.zsky.com`（后台）都反代给 
 
 - `npm test`（确定性可重放 / 崩溃恢复 / 三契约 / 跨用户隔离）· `npm run check`（22 项能力自检）· `npm run typecheck`。
 - 双前端：`cd web && npm run build && npm run lint:ui`（接缝/令牌守卫）· `cd web-admin && npm run build`。
+- 守护进程冒烟：`bash scripts/smoke.sh`（启 daemon 打一圈代表性端点、归一化输出可 diff）· `bash scripts/loops-smoke.sh`（极短间隔验证自主回路在跑、进程稳）。改 daemon/路由/回路后跑一遍，行为应保持。
 - 情感参数已按 Verduyn/Kuppens 文献锚定校准，落在人类情绪时间尺度的健康带内（喜 τ~12h、悲 τ~48h 等）。
