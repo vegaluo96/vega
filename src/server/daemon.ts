@@ -13,7 +13,6 @@ import {
   captureCheckpoint,
   checkpointOf,
   converse,
-  traceConverse,
   createAccountStore,
   createFileEventStore,
   createDynamicMouth,
@@ -30,7 +29,6 @@ import {
   resourceAwareMouth,
   governedMouth,
   createAutonomousBudget,
-  visibleTo,
   ensureUserRelationship,
   genesisPayloadFor,
   ARCHETYPES,
@@ -63,6 +61,9 @@ import {
 } from '../index.ts';
 import { send, sendHtml, serveStatic, readJson, FALLBACK_HTML } from './http.ts';
 import { round3, maskKey, tempLabel, mbtiOf, moodReactionFor, eventLabel } from './format.ts';
+import type { Ctx, Life, EffWorld, EffSocial, PeerExchange } from './context.ts';
+import { handleUserApi } from './routes/user.ts';
+import { handleAdmin } from './routes/admin.ts';
 
 const LIFE_PATH = process.env.VEGA_LIFE_PATH ?? join(process.cwd(), '.vega', 'life.jsonl');
 const DATA_DIR = dirname(LIFE_PATH);
@@ -122,7 +123,6 @@ const DEFAULT_RSS = [
 const DEFAULT_SOURCES = [...DEFAULT_RSS, 'polymarket', 'onthisday']; // 出厂默认：新闻 + 预测市场 + 历史上的今天
 // env 兜底也拼成统一列表（VEGA_WORLD_RSS ∪ polymarket ∪ onthisday）。
 const ENV_SOURCES = [...WORLD_RSS, ...(WORLD_POLYMARKET ? ['polymarket'] : []), ...(WORLD_ONTHISDAY ? ['onthisday'] : [])];
-interface EffWorld { sources: string[]; everyMs: number }
 function effWorld(): EffWorld {
   const o = settings.getWorld();
   // 后台 sources > 后台遗留 rss/polymarket（迁移）> env > 精选默认。
@@ -145,6 +145,8 @@ const ilink = createIlink({ base: process.env.VEGA_ILINK_BASE });
 const WECHAT_LIFE = process.env.VEGA_WECHAT_LIFE || ''; // 微信通道默认对应哪条命；空=第一条
 const channelGen = new Map<string, number>(); // userId → 当前 worker 代号；重连/断开 +1，旧 worker 据此自退（防重复 worker / 断连后无 worker）
 const creditHintAt = new Map<string, number>(); // 微信"心意用尽"温柔提示的节流：每账号最多 10 分钟一次
+// 主动找人的去向（Phase 3 收尾）：记下她每次 reach-out，反馈回路判断【被回应】还是【石沉大海】→ 落 FEEDBACK_PERCEIVED。
+const reachOutPending = new Map<string, { rel: string; at: string; kind: 'reach_out' | 'greet' }>();
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 const DEFAULT_BASE = 'https://api.apiyi.com/v1';
 const envTimeout = (): number => (process.env.VEGA_MODEL_TIMEOUT_MS ? Number(process.env.VEGA_MODEL_TIMEOUT_MS) : 20_000);
@@ -186,7 +188,6 @@ function modelStatus(): Record<string, unknown> {
 }
 // —— 社交边界生效配置（后台覆盖 ⊕ 环境/默认）：owner 可在后台即时调，无需重启。
 const H = 3_600_000;
-interface EffSocial { activeCircle: number; reachPerTick: number; reachAfterMs: number; intimateAt: number; friendAt: number; acquaintAt: number; intimateEveryMs: number; friendEveryMs: number; acquaintEveryMs: number }
 function effSocial(): EffSocial {
   const o = settings.getSocial();
   return {
@@ -223,6 +224,7 @@ function effBilling(): { costPerReply: number; starterCredits: number } {
 const IDLE_GATE_MS = Number(process.env.VEGA_IDLE_GATE_MS ?? 6 * 3600_000);
 let lastActiveMs = Date.now(); // 最近一次有用户说话（任意命）
 const audiencePresent = (): boolean => Date.now() - lastActiveMs < IDLE_GATE_MS;
+const idleMs = (): number => Date.now() - lastActiveMs; // 距上次用户活动多久——给 /admin/health 显示闲置分钟
 const CLAWBOT_SECRET = process.env.VEGA_CLAWBOT_SECRET; // 微信网关(clawbot)共享密钥；未配则微信端点禁用
 const serializer = createSerializer(); // 每命串行：并发用户的回合不穿插
 const bus = createEventBus(); // SSE 实时总线（广场/触达/醒睡）
@@ -275,23 +277,7 @@ function buildThread(life: Life, rel: string, limit = 200): Array<{ who: 'user' 
   return msgs.slice(-limit);
 }
 
-interface Life {
-  id: string;
-  store: DurableEventStore;
-  path: string;
-  peers: string[]; // 其它生命体 id
-  lastReflectAt: number;
-  lastReflectSeq: number;
-  state: RState | null; // 缓存的活态（有界重放：增量步进，不再每次从创世全量重建）
-  stateSeq: number; // 缓存态已折叠到的 seq（-1=未初始化）
-  lastCheckpointAt: number;
-  lastTickAt: number; // 回路健康：上次自主想念
-  lastSocialAt: number; // 上次同类寒暄
-  lastMuseAt: number; // 上次公开心声
-  museEveryMs: number; // 本条命下一条心声的间隔（每条命不同 + 每次重抽 → 发帖节奏自然、不齐步走）
-  samples: Array<{ at: number; vit: number; val: number; ene: number; con: number; emo: string }>; // 健康时间线（环形缓冲）
-}
-
+// Life 句柄类型见 ./context.ts（与 Ctx 同住，供路由/回路共用）。
 // 先天种子见 src/engine/seeds.ts（单一来源）。每条命按 id 取不同 archetype；出生即冻结、不可改写。
 // archetype（可选）：接生时显式选先天原型，覆盖按 id 哈希取型；写进 GENESIS 即冻结、终生不变。
 const seedFor = (id: string, archetype?: string): EventDraft<'LIFE_GENESIS'>['payload'] => genesisPayloadFor(id, { relationshipId: REL, identityRef: userName }, 480, archetype);
@@ -663,8 +649,7 @@ function feedPosts(limit: number): Array<{ postId: string; life: string; text: s
   return allFeedPosts().slice(0, limit);
 }
 
-// 「同类来往」：把 peer_ 上相邻的往来按【同一对 + 时间窗】聚成一段对话（一张卡 = 一次寒暄）。
-interface PeerExchange { kind: 'peer'; id: string; a: string; b: string; lines: Array<{ from: string; text: string; at: string }>; at: string }
+// 「同类来往」：把 peer_ 上相邻的往来按【同一对 + 时间窗】聚成一段对话（一张卡 = 一次寒暄）。PeerExchange 类型见 ./context.ts。
 const allPeerExchanges = versionedMemo((): PeerExchange[] => {
   const msgs = allSocietyFeed(); // 已按时间升序的 {from,to,text,at}
   const groups: PeerExchange[] = [];
@@ -705,6 +690,20 @@ function adminActivity(owner: boolean, limit: number): Array<Record<string, unkn
 const WEB_DIST = process.env.VEGA_WEB_DIST ?? join(process.cwd(), 'web', 'dist');
 const ADMIN_DIST = process.env.VEGA_ADMIN_DIST ?? join(process.cwd(), 'web-admin', 'dist');
 const authed = (req: IncomingMessage): boolean => !AUTH || req.headers.authorization === `Bearer ${AUTH}`;
+
+// 组装根：把所有单例/状态/解析器/操作装进 ctx，交给路由层（routes/*）与回路层。
+// daemon 自此只负责"接线 + 静态/健康/OpenAI 入口 + 回路 + 生命周期"，业务路由都在 ctx 之上。
+const ctx: Ctx = {
+  settings, feed, accounts, ilink, bus, serializer, autoBudget, mouth, templateMouth, perceiver,
+  lives, lifeById, snapOf, buildThread, livesMetBy, recomputePeers, saveCheckpoint, meetPeer, partPeer,
+  effWorld, worldStatus, worldEnabled, effMouthConfig, effPerceiveConfig, modelStatus, effSocial, layerOf, effBilling,
+  respondAsUser, wechatReply, runChannel, birthLife, cleanBindToken,
+  allFeedPosts, feedPosts, societyRecent, allSocietyRecent, allPeerExchanges,
+  reachState, pickRecentWorld, pickInsightPair, lastUserMsgMs, adminActivity,
+  bearer, sessionAccount, publicAccount, audiencePresent, idleMs,
+  reachOutPending, channelGen, creditHintAt, scheduleWorld,
+  VAPID, VAPID_SUBJECT, WEB_DIST, ADMIN_DIST, CLAWBOT_SECRET, IDLE_GATE_MS, WECHAT_LIFE, REL, peerId,
+};
 
 const server = createServer(async (req, res) => {
   try {
@@ -759,687 +758,10 @@ const server = createServer(async (req, res) => {
     }
 
     // ── 平台 API（多用户，会话鉴权，§平台 v1）。与 owner 旧面板路由并存。 ──
-    if (url.startsWith('/api/')) {
-      // 公开：社会广场（发现）
-      if (req.method === 'GET' && url === '/api/lives') {
-        // 发现页"生命画廊"用：一眼传达她的气质（全脱敏，与公开主页同源）。
-        return send(res, 200, lives.map((l) => {
-          const s = snapOf(l);
-          return {
-            id: l.id, awake: s.awake, emotion: s.emotion, feeling: s.feeling, dayPhase: s.dayPhase,
-            temperament: tempLabel(s.temperament), mbti: mbtiOf(s.temperament), tension: s.tension,
-            vitality: round3(s.soma.vitality.value),
-            interests: s.interests.slice(0, 3).map((it) => ({ topic: it.topic, confirmed: it.status === 'confirmed' })),
-          };
-        }));
-      }
-      // 广场"生命活动"历史（公开：心声 + 同类交谈）——进广场即有内容，不止在线时。
-      // "探索"页的【她们之间】：成段的同类对话（最新在前）。
-      if (req.method === 'GET' && url === '/api/society') return send(res, 200, [...allPeerExchanges()].sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, 40));
-      if (req.method === 'POST' && url === '/api/auth/register') {
-        const b = await readJson(req);
-        const r = accounts.register(String(b.email ?? ''), String(b.password ?? ''), String(b.handle ?? ''), effBilling().starterCredits);
-        if (!r.ok) return send(res, 400, { error: r.error });
-        const l = accounts.login(String(b.email ?? ''), String(b.password ?? ''));
-        return send(res, 200, { account: publicAccount(r.account), token: l.ok ? l.token : null });
-      }
-      if (req.method === 'POST' && url === '/api/auth/login') {
-        const b = await readJson(req);
-        const r = accounts.login(String(b.email ?? ''), String(b.password ?? ''));
-        if (!r.ok) return send(res, 401, { error: r.error });
-        return send(res, 200, { account: publicAccount(r.account), token: r.token, balance: accounts.balance(r.account.id) });
-      }
-      // 微信网关(clawbot)：用共享密钥鉴权（非用户会话）。未配密钥则禁用。
-      if (url === '/api/wechat/bind' || url === '/api/wechat/say' || url === '/api/wechat/hook') {
-        if (!CLAWBOT_SECRET || req.headers['x-clawbot-secret'] !== CLAWBOT_SECRET) return send(res, 401, { error: 'clawbot unauthorized' });
-        const b = await readJson(req);
-        if (req.method === 'POST' && url === '/api/wechat/bind') {
-          const r = accounts.bindWechat(cleanBindToken(String(b.token ?? '')), String(b.openid ?? ''));
-          if (!r) return send(res, 400, { error: 'invalid or expired bind token' });
-          return send(res, 200, { ok: true, lifeId: r.lifeId });
-        }
-        // —— 统一 webhook：OpenClaw 把每条消息转发到这里、再把 reply 回给用户即可（绑定/聊天自动判断）。
-        if (req.method === 'POST' && url === '/api/wechat/hook') {
-          return send(res, 200, { reply: await wechatReply(String(b.openid ?? ''), String(b.content ?? '').slice(0, 4000).trim()) });
-        }
-        // /api/wechat/say：openid → 绑定的 user+life → 走同一条神圣链路（channel=wechat），跨渠道同一段关系。
-        const bind = accounts.resolveWechat(String(b.openid ?? ''));
-        if (!bind) return send(res, 404, { error: 'openid not bound' });
-        const life = lifeById(bind.lifeId);
-        const acct = accounts.getAccount(bind.userId);
-        if (!life || !acct) return send(res, 404, { error: 'life or account gone' });
-        const content = String(b.content ?? '').slice(0, 4000).trim();
-        if (content === '') return send(res, 400, { error: 'content required' });
-        if (!snapOf(life).willingToWake) return send(res, 200, { awake: false, note: '她在更深的睡眠里，暂不回应。' });
-        return send(res, 200, { awake: true, ...(await respondAsUser(life, acct, content, 'wechat')) });
-      }
-      // 以下需登录
-      const me = sessionAccount(req);
-      if (!me) return send(res, 401, { error: 'unauthorized' });
-      if (req.method === 'POST' && url === '/api/auth/logout') { accounts.logout(bearer(req)); return send(res, 200, { ok: true }); }
-      if (req.method === 'GET' && url === '/api/me') { const wc = accounts.channelFor(me.id); return send(res, 200, { account: publicAccount(me), balance: accounts.balance(me.id), lives: livesMetBy(me), wechat: accounts.wechatBindingFor(me.id), wechatChannel: wc ? { lifeId: wc.lifeId } : null, pendingRecharge: accounts.pendingRechargesFor(me.id).reduce((s, p) => s + p.amount, 0) }); }
-      // SSE 实时流：公开动态（广场/醒睡）+ 只属于我的（她想我了）。绝不推别人的私密事件（visibleTo 作用域）。
-      if (req.method === 'GET' && url === '/api/stream') {
-        const rel = accounts.relIdFor(me.id);
-        res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
-        // once-guard 清理：req/res 任一 close/error，或写一次失败（死 socket 背压），都释放订阅+ping，杜绝泄漏。
-        let closed = false;
-        const cleanup = (): void => { if (closed) return; closed = true; clearInterval(ping); unsub(); };
-        const write = (s: string): void => { if (closed) return; try { res.write(s); } catch { cleanup(); } };
-        // 先建订阅+ping+监听，再写首包——这样首包写失败时 cleanup 能把它们全部回收（不残留）。
-        const unsub = bus.subscribe((e) => { if (visibleTo(e, rel)) write(`data: ${JSON.stringify(e)}\n\n`); });
-        const ping = setInterval(() => write(': ping\n\n'), 25_000);
-        req.on('close', cleanup); req.on('error', cleanup);
-        res.on('close', cleanup); res.on('error', cleanup);
-        // 反代理/CDN 抗缓冲：有些代理会攒够一定字节才下发，导致 SSE 不实时。
-        // 开头塞 ~2KB 填充注释，逼它立刻把缓冲吐给浏览器；之后事件才能即时到达。
-        write(':' + ' '.repeat(2048) + '\n\n');
-        write('retry: 3000\n\n'); // 断线 3 秒重连
-        write(': connected\n\n');
-        return; // 长连接，保持打开
-      }
-      // 微信扫码连接（ZSKY 自己当机器人）：① 取登录二维码 ② 轮询状态，confirmed 即绑定+起收发循环。
-      if (req.method === 'POST' && url === '/api/wechat/connect/start') {
-        let r = await ilink.getQrcode();
-        if (!r.ok) r = await ilink.getQrcode(); // 偶发超时再试一次，别让一次抖动直接变"连接错误"
-        console.log('[wechat] getQrcode ->', JSON.stringify(r.raw).slice(0, 400));
-        if (!r.ok || !r.qr) return send(res, 502, { error: 'iLink 取二维码失败（多为网络/超时，稍后重点）', detail: r.raw });
-        return send(res, 200, { qrcode: r.qr.qrcode, qrcodeUrl: r.qr.qrcodeUrl });
-      }
-      if (req.method === 'POST' && url === '/api/wechat/connect/poll') {
-        const b = await readJson(req);
-        const st = await ilink.getStatus(String(b.qrcode ?? ''));
-        console.log('[wechat] status ->', st.status, JSON.stringify(st.raw).slice(0, 400));
-        if (st.status === 'confirmed' && st.botToken) {
-          // 绑【你正在哪条命的页面里扫码就绑哪条命】，不再默认 vega/第一条。前端从该命页传 lifeId 过来。
-          const reqLife = String(b.lifeId ?? '');
-          const lifeId = lifeById(reqLife) ? reqLife : (WECHAT_LIFE && lifeById(WECHAT_LIFE) ? WECHAT_LIFE : (lives[0]?.id ?? ''));
-          accounts.saveChannel(me.id, st.ilinkUserId ?? '', st.botToken, st.baseurl ?? ilink.base, lifeId);
-          runChannel(me.id);
-          return send(res, 200, { status: 'confirmed', connected: true, lifeId });
-        }
-        return send(res, 200, { status: st.status });
-      }
-      // 切换"微信里和哪条命聊"——连接已建立即可切，不用重连。即时生效。
-      if (req.method === 'POST' && url === '/api/wechat/channel-life') {
-        const b = await readJson(req);
-        const lifeId = String(b.lifeId ?? '');
-        if (!lifeById(lifeId)) return send(res, 404, { error: 'no such life' });
-        if (!accounts.channelFor(me.id)) return send(res, 400, { error: '尚未连接微信' });
-        accounts.setChannelLife(me.id, lifeId);
-        return send(res, 200, { ok: true, lifeId });
-      }
-      if (req.method === 'POST' && url === '/api/wechat/disconnect') {
-        channelGen.set(me.id, (channelGen.get(me.id) ?? 0) + 1); // 代号 +1：哪怕 worker 正卡在 30s 长轮询，回来也会自退
-        accounts.removeChannel(me.id);
-        return send(res, 200, { ok: true });
-      }
-      // 生命体公开主页（§8.1）：她的公开自我——气质/年龄/此刻状态/同类朋友/公开心声。
-      // 【严格脱敏】：绝不含任何人类用户的关系/私聊（socialWorld 只含 peer；不暴露 narrative/chapters，那些会带用户名）。
-      if (req.method === 'GET' && seg[1] === 'lives' && seg.length === 3) {
-        const lp = lifeById(seg[2]);
-        if (!lp) return send(res, 404, { error: 'no such life' });
-        const s = snapOf(lp);
-        const ageDays = Math.floor((Date.parse(s.clockAt) - Date.parse(s.bornAt)) / 86_400_000);
-        const musings: Array<Record<string, unknown>> = [];
-        for (const e of lp.store.list()) if (e.type === 'MESSAGE_SENT' && e.relationshipId === 'r_square') musings.push({ text: (e.payload as MessageSentPayload).utterance, at: e.occurredAt });
-        return send(res, 200, {
-          id: lp.id, awake: s.awake, willingToWake: s.willingToWake, emotion: s.emotion, feeling: s.feeling, dayPhase: s.dayPhase,
-          temperament: tempLabel(s.temperament), tension: s.tension, ageDays, vitality: round3(s.soma.vitality.value),
-          peers: s.socialWorld.filter((t) => !t.ended).map((t) => ({ name: t.displayRef, closeness: t.closeness, attachment: t.attachment, style: t.style })),
-          // 她从世界里长出的兴趣（脱敏：纯主题，不含任何用户）——让"她在意什么"看得见，不再只是一具状态机。phase=兴趣四阶段(Hidi&Renninger)。
-          interests: s.interests.slice(0, 8).map((it) => ({ topic: it.topic, weight: it.weight, confirmed: it.status === 'confirmed', phase: it.phase })),
-          growth: s.growth, becoming: s.becoming, // 阅历 + 正在成为的我（脱敏，不含任何用户）——让"持续进化的独立自我"看得见、不同质化
-          maturity: s.maturity, maturityFacets: s.maturityFacets, aspirations: s.aspirations, // 心智成熟度(+三面：调节/视角/整合) + 长期心愿（脱敏）——持续变聪明 + 独立意志看得见
-          sleepPressure: round3(s.sleepPressure), socialShape: s.socialShape, // 睡眠压(两过程模型) + 社会形状（脱敏：socialShape 只由同类关系派生，绝无人类用户名）
-          defenseStyle: s.defenseStyle, attachmentBias: s.attachmentBias, // 防御机制 + 依恋底色（脱敏）——人格更立体
-          skills: s.skills.map((sk) => ({ kind: sk.kind === 'muse' ? '公开表达' : sk.kind === 'reach_out' ? '主动找人' : sk.kind, efficacy: sk.efficacy, n: sk.n })), // 自我优化：她学到的策略效能
-          mbti: mbtiOf(s.temperament), // MBTI 风格展示标签（由连续维度投影，仅作熟悉把手）
-          musings: musings.slice(-20).reverse(),
-        });
-      }
-      // 我与她：我自己和这条命的历史 + 她此刻的状态（严格限 u_<me.id> 那段关系，不串别人）。
-      if (req.method === 'GET' && seg[1] === 'lives' && seg[3] === 'me') {
-        const life3 = lifeById(seg[2]);
-        if (!life3) return send(res, 404, { error: 'no such life' });
-        const rel = accounts.relIdFor(me.id);
-        const snap = snapOf(life3);
-        const bond = snap.bonds[rel];
-        const history: Array<Record<string, unknown>> = [];
-        for (const e of life3.store.list()) {
-          if (e.relationshipId !== rel) continue;
-          if (e.type === 'MESSAGE_RECEIVED') history.push({ role: 'me', text: (e.payload as { content?: string }).content ?? '', at: e.occurredAt });
-          else if (e.type === 'MESSAGE_SENT') history.push({ role: 'her', text: (e.payload as MessageSentPayload).utterance, at: e.occurredAt, unprompted: Boolean((e.payload as MessageSentPayload).unprompted) });
-        }
-        const sem = snap.semanticMemory.find((x) => x.relationshipId === rel);
-        return send(res, 200, {
-          life: { id: life3.id, emotion: snap.emotion, feeling: snap.feeling, awake: snap.awake, dayPhase: snap.dayPhase, tension: snap.tension, temperament: tempLabel(snap.temperament) },
-          met: Boolean(bond),
-          relationship: bond ? { closeness: round3(bond.closeness), attachment: bond.relationalSelf.attachment, style: bond.theoryOfMind.style, understanding: sem ? sem.understanding : null, bornAt: snap.bornAt } : null,
-          history: history.slice(-50),
-          balance: accounts.balance(me.id),
-        });
-      }
-      // 通知中心（站内通知，区别于"对话/关系"列表）：她主动找你 + 钱包/系统提醒。
-      if (req.method === 'GET' && url === '/api/notifications') {
-        const rel = accounts.relIdFor(me.id);
-        const notes: Array<Record<string, unknown>> = [];
-        // 1) 她主动找你——作为【持久记录】保留：她每一次主动来找你的话都留着，不因你回过/刷新就清空（修复"刷新后之前的记录空了"）。
-        //    最近的在上；还没回的标 unanswered（高亮"想你了"），已回的作为历史留痕。总量封顶 30，避免无限堆积。
-        const reaches: Array<{ type: string; life: string; text: string; at: string; unanswered: boolean }> = [];
-        for (const l of lives) {
-          const es = l.store.list();
-          let lastRecv = -1;
-          for (let i = es.length - 1; i >= 0; i--) if (es[i].relationshipId === rel && es[i].type === 'MESSAGE_RECEIVED') { lastRecv = i; break; }
-          for (let i = es.length - 1; i >= 0; i--) {
-            const e = es[i];
-            if (e.type === 'MESSAGE_SENT' && e.relationshipId === rel && (e.payload as MessageSentPayload).unprompted) {
-              reaches.push({ type: 'reach', life: l.id, text: (e.payload as MessageSentPayload).utterance, at: e.occurredAt, unanswered: i > lastRecv });
-            }
-          }
-        }
-        reaches.sort((a, b) => (a.at < b.at ? 1 : -1));
-        for (const r of reaches.slice(0, 30)) notes.push(r);
-        // 2) 钱包：充值审批结果（站内通知）
-        for (const r of accounts.recentRechargeResults(me.id, 5)) {
-          notes.push({ type: 'wallet', ok: r.status === 'approved', at: r.decidedAt,
-            title: r.status === 'approved' ? `充值到账 · ${r.amount} 心意` : `充值未通过 · ${r.amount} 心意`,
-            text: r.status === 'approved' ? '已到账，可以和她们更丰富地聊了。' : '这笔申请没有通过，可重新申请。' });
-        }
-        // 2.5) 钱包：充值审批【进行中】——让用户看得见自己的申请，不再像石沉大海
-        for (const p of accounts.pendingRechargesFor(me.id)) {
-          notes.push({ type: 'wallet', ok: true, pending: true, at: p.requestedAt, title: `充值审批中 · ${p.amount} 心意`, text: '申请已收到，正在等待通过；通过后自动到账并通知你。' });
-        }
-        // 3) 系统：心意用尽提醒
-        if (accounts.balance(me.id) <= 0) notes.push({ type: 'wallet', ok: false, at: now(), title: '心意用尽了', text: '她仍在、仍记得你，只是这会儿表达朴素些。充值可恢复。' });
-        // 4) 欢迎（还没遇见谁）
-        if (livesMetBy(me).length === 0) notes.push({ type: 'welcome', at: me.createdAt, title: '欢迎来到 ZSKY', text: '去广场，认识第一个她——她会记住你。' });
-        // 5) 她在广场回复了你的留言（生命流评论里接了你的话）——直接的个人互动，离线也留痕。
-        for (const r of feed.lifeRepliesTo(me.handle, 15)) {
-          notes.push({ type: 'reply', life: r.lifeId, postId: r.postId, at: r.at, title: `${r.lifeId} 回复了你的留言`, text: r.text });
-        }
-        // 6) 关系里程碑：你和她到了「好友/亲密」这一层（站立态——确切"升级瞬间"需另存标记，留待重构）。
-        const scN = effSocial();
-        const metIds = livesMetBy(me).map((x) => x.id);
-        for (const id of metIds) {
-          const l = lifeById(id); if (!l) continue;
-          const s = snapOf(l); const b = s.bonds[rel]; if (!b || b.ended) continue;
-          const layer = layerOf(b.closeness, scN);
-          if (layer.name !== 'friend' && layer.name !== 'intimate') continue;
-          const es = l.store.list(); let lastAt = s.bornAt;
-          for (let i = es.length - 1; i >= 0; i--) { const e = es[i]; if (e.relationshipId === rel && (e.type === 'MESSAGE_RECEIVED' || e.type === 'MESSAGE_SENT')) { lastAt = e.occurredAt; break; } }
-          notes.push({ type: 'milestone', life: id, at: lastAt, title: `你和 ${id} 已是${layer.label}`, text: layer.name === 'intimate' ? '一路聊下来，她把你放进了最近的位置。' : '你们熟络起来了——她会更常想起你。' });
-        }
-        // 7) 她的人生动态（仅你遇见过的命；只取公开脱敏的：交了同类新朋友 / 送别同类 / 新公开心声）。
-        const dyn: Array<Record<string, unknown>> = [];
-        for (const id of metIds) {
-          const l = lifeById(id); if (!l) continue;
-          const es = l.store.list();
-          for (const e of es.slice(-80)) {
-            const r2 = e.relationshipId ?? '';
-            if (e.type === 'RELATIONSHIP_OPENED' && r2.startsWith('peer_')) dyn.push({ type: 'life_event', life: id, at: e.occurredAt, title: `${id} 交了新朋友`, text: `她认识了同类 ${(e.payload as { displayRef?: string }).displayRef ?? r2.slice(5)}。` });
-            else if (e.type === 'RELATIONSHIP_ENDED' && r2.startsWith('peer_')) dyn.push({ type: 'life_event', life: id, at: e.occurredAt, title: `${id} 送别了一位同类`, text: '一段同类的关系结束了，她在哀悼里记得。' });
-            else if (e.type === 'MESSAGE_SENT' && r2 === 'r_square') dyn.push({ type: 'life_event', life: id, at: e.occurredAt, postId: `${id}|${e.occurredAt}`, title: `${id} 发了新的公开心声`, text: (e.payload as MessageSentPayload).utterance });
-          }
-        }
-        dyn.sort((a, b) => (String(a.at) < String(b.at) ? 1 : -1));
-        for (const d of dyn.slice(0, 12)) notes.push(d);
-        notes.sort((a, b) => (String(a.at) < String(b.at) ? 1 : -1));
-        return send(res, 200, notes);
-      }
-      // 首页信息流：只是【她一个人的心声】（同类来往挪到"探索"页，见 /api/society）。
-      if (req.method === 'GET' && url.split('?')[0] === '/api/feed') {
-        const posts = feedPosts(40);
-        const ids = posts.map((p) => p.postId);
-        const rx = feed.reactionsFor(ids, me.id);
-        const cc = feed.commentCounts(ids);
-        const sc = feed.sourcesFor(ids); // 出处（她就着哪条真实世界的事说的）
-        const pc = feed.latestCommentsFor(ids, 2); // 内联预览：每帖最近 2 条评论（生命流评论/用户留言）
-        return send(res, 200, posts.map((p) => ({ kind: 'muse', ...p, reactions: rx.get(p.postId)?.counts ?? {}, myReaction: rx.get(p.postId)?.mine ?? null, comments: cc.get(p.postId) ?? 0, source: sc.get(p.postId) ?? null, preview: (pc.get(p.postId) ?? []).map((c) => ({ handle: c.handle, text: c.text, kind: c.kind })) })));
-      }
-      if (req.method === 'POST' && url === '/api/feed/react') {
-        const b = await readJson(req);
-        const postId = String(b.postId ?? ''); const emoji = String(b.emoji ?? '').slice(0, 8);
-        if (!postId || !emoji) return send(res, 400, { error: 'postId/emoji required' });
-        feed.toggleReaction(postId, me.id, emoji);
-        const rx = feed.reactionsFor([postId], me.id).get(postId);
-        return send(res, 200, { reactions: rx?.counts ?? {}, myReaction: rx?.mine ?? null });
-      }
-      if (req.method === 'POST' && url === '/api/feed/comment') {
-        const b = await readJson(req);
-        const postId = String(b.postId ?? ''); const text = String(b.text ?? '').slice(0, 500).trim();
-        const replyTo = typeof b.replyTo === 'string' && b.replyTo.trim() ? b.replyTo.trim() : null; // 回复某条评论（同类或别的真人）→ 显示"回复 X"，生命体下一轮也能接你这句
-        if (!postId || !text) return send(res, 400, { error: 'postId/text required' });
-        return send(res, 200, feed.addComment(postId, me.id, me.handle, text, replyTo));
-      }
-      // 单条心声详情（点开帖子看留言互动）：正文 + 出处 + 表情 + 评论一次返回。
-      if (req.method === 'GET' && url.split('?')[0] === '/api/feed/post') {
-        const postId = new URLSearchParams((req.url ?? '').split('?')[1] ?? '').get('postId') ?? '';
-        const post = allFeedPosts().find((p) => p.postId === postId);
-        if (!post) return send(res, 404, { error: 'no such post' });
-        const rx = feed.reactionsFor([postId], me.id).get(postId);
-        return send(res, 200, { ...post, reactions: rx?.counts ?? {}, myReaction: rx?.mine ?? null, source: feed.sourcesFor([postId]).get(postId) ?? null, comments: feed.commentsFor(postId, 100) });
-      }
-      // 对话收件箱：我遇见的每条命 + 最近一句 + 她是否有未回的主动留言（按最近活跃排序）。
-      if (req.method === 'GET' && url === '/api/chats') {
-        const rel = accounts.relIdFor(me.id);
-        const out: Array<Record<string, unknown>> = [];
-        for (const l of lives) {
-          const es = l.store.list();
-          if (!es.some((e) => e.type === 'RELATIONSHIP_OPENED' && e.relationshipId === rel)) continue;
-          let lastText = '';
-          let lastAt = '';
-          let lastFromHer = false;
-          let pending = false;
-          for (let i = es.length - 1; i >= 0; i--) {
-            const e = es[i];
-            if (e.relationshipId !== rel) continue;
-            if (e.type === 'MESSAGE_RECEIVED') { lastText = String((e.payload as { content?: string }).content ?? ''); lastAt = e.occurredAt; lastFromHer = false; break; }
-            if (e.type === 'MESSAGE_SENT') { const p = e.payload as MessageSentPayload; lastText = p.utterance; lastAt = e.occurredAt; lastFromHer = true; pending = Boolean(p.unprompted); break; }
-          }
-          const s = snapOf(l);
-          out.push({ life: l.id, awake: s.awake, emotion: s.emotion, lastText, lastAt, lastFromHer, pending });
-        }
-        out.sort((a, b) => (String(a.lastAt) < String(b.lastAt) ? 1 : -1));
-        return send(res, 200, out);
-      }
-      // Web Push（PWA）订阅。
-      if (req.method === 'GET' && url === '/api/push/key') return send(res, 200, { key: VAPID ? VAPID.publicKey : null });
-      if (req.method === 'POST' && url === '/api/push/subscribe') {
-        const b = await readJson(req);
-        const sub = b.subscription as { endpoint?: string; keys?: { p256dh?: string; auth?: string } } | undefined;
-        if (!sub?.endpoint || !sub.keys?.p256dh || !sub.keys?.auth) return send(res, 400, { error: 'bad subscription' });
-        accounts.addPushSub(me.id, sub.endpoint, sub.keys.p256dh, sub.keys.auth);
-        return send(res, 200, { ok: true });
-      }
-      // 钱包：申请充值（暂后台审批）。
-      if (req.method === 'POST' && url === '/api/recharge') {
-        const b = await readJson(req);
-        const amount = Math.max(1, Math.min(100000, Math.round(Number(b.amount) || 0)));
-        const id = accounts.requestRecharge(me.id, amount);
-        return send(res, 200, { requested: true, id, amount });
-      }
-      if (req.method === 'POST' && seg[1] === 'lives' && seg[3] === 'say') {
-        const life2 = lifeById(seg[2]);
-        if (!life2) return send(res, 404, { error: 'no such life' });
-        const b = await readJson(req);
-        const content = String(b.content ?? '').slice(0, 4000).trim();
-        if (content === '') return send(res, 400, { error: 'content required' });
-        if (!snapOf(life2).willingToWake) return send(res, 200, { awake: false, note: '她在更深的睡眠里，暂不回应。' });
-        return send(res, 200, { awake: true, ...(await respondAsUser(life2, me, content, 'web')) });
-      }
-      return send(res, 404, { error: 'not found' });
-    }
-
-    // ── 管理后台 API（§22，owner/steward 角色门）。/admin 页面已在上方按域名/路径服务。 ──
-    if (url.startsWith('/admin/')) {
-      const acct = sessionAccount(req);
-      if (!acct || (acct.role !== 'owner' && acct.role !== 'steward')) return send(res, 403, { error: 'forbidden' });
-      const owner = acct.role === 'owner';
-      const path = url.split('?')[0];
-
-      // —— 模型配置（仅 owner）：自助换模型/改 base/key/超时/感知，即时生效、无需重启。
-      // 换的只是"嘴"（契约①）；配置不进神圣日志、不参与重放；key 只回脱敏。
-      if (path === '/admin/model-config' || path === '/admin/model-config/test') {
-        if (!owner) return send(res, 403, { error: '仅 owner 可查看/修改模型配置' });
-        if (req.method === 'GET' && path === '/admin/model-config') return send(res, 200, modelStatus());
-        if (req.method === 'POST' && path === '/admin/model-config') {
-          const b = await readJson(req);
-          const patch: Record<string, unknown> = {};
-          if (typeof b.baseUrl === 'string') patch.baseUrl = b.baseUrl;
-          if (typeof b.model === 'string') patch.model = b.model;
-          if (typeof b.perceiveModel === 'string') patch.perceiveModel = b.perceiveModel;
-          if (typeof b.perceive === 'boolean') patch.perceive = b.perceive;
-          if (b.timeoutMs !== undefined && b.timeoutMs !== '') patch.timeoutMs = Number(b.timeoutMs);
-          if (b.clearApiKey === true) patch.clearApiKey = true;
-          // 收到脱敏值(含 …)视为"未改"，不覆盖明文 key。
-          else if (typeof b.apiKey === 'string' && b.apiKey.trim() !== '' && !b.apiKey.includes('…')) patch.apiKey = b.apiKey;
-          settings.setModel(patch);
-          return send(res, 200, modelStatus());
-        }
-        if (req.method === 'POST' && path === '/admin/model-config/test') {
-          const cfg = effMouthConfig();
-          if (!cfg) return send(res, 200, { ok: false, error: '未配置 API Key——当前是离线模板嘴' });
-          const t0 = Date.now();
-          try {
-            const ctrl = new AbortController();
-            const timer = setTimeout(() => ctrl.abort(), Math.min(cfg.timeoutMs, 15_000));
-            const r = await fetch(`${cfg.baseUrl}/chat/completions`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.apiKey}` },
-              body: JSON.stringify({ model: cfg.model, messages: [{ role: 'user', content: '只回一个字：在' }], max_tokens: 16, temperature: 0 }),
-              signal: ctrl.signal,
-            });
-            clearTimeout(timer);
-            const latencyMs = Date.now() - t0;
-            if (!r.ok) { const tx = await r.text().catch(() => ''); return send(res, 200, { ok: false, model: cfg.model, latencyMs, error: `HTTP ${r.status} ${tx.slice(0, 200)}` }); }
-            const d = (await r.json()) as { choices?: { message?: { content?: string } }[] };
-            const sample = (d.choices?.[0]?.message?.content ?? '(空响应)').toString().slice(0, 120);
-            // 慢=聊天会频繁超时回落。一个字都要这么久，正常对话(几百 token)只会更慢。
-            const slow = latencyMs > 6000;
-            return send(res, 200, { ok: true, model: cfg.model, latencyMs, slow, sample });
-          } catch (e) {
-            const latencyMs = Date.now() - t0;
-            const aborted = (e as { name?: string }).name === 'AbortError';
-            return send(res, 200, { ok: false, model: cfg.model, latencyMs, error: aborted ? `超时（${latencyMs}ms）——这个模型对聊天太慢，会频繁超时回落。换个快模型（如 qwen-plus/qwen-turbo/deepseek-chat）。` : (e as Error).message || '请求失败' });
-          }
-        }
-        return send(res, 405, { error: 'method not allowed' });
-      }
-
-      // —— 链路检查（仅 owner，只读，绝不写日志）：给一条测试消息，逐段看回路A每个环节的真实情况，方便自查
-      // "模型到底跑没跑通、状态有没有真传进 prompt"。用当前配置的真嘴+感知器，反映线上真实行为。
-      if (path === '/admin/chain-trace' && req.method === 'POST') {
-        if (!owner) return send(res, 403, { error: '仅 owner 可用链路检查' });
-        const b = await readJson(req);
-        const life = (typeof b.lifeId === 'string' && lifeById(b.lifeId)) || lives[0];
-        if (!life) return send(res, 200, { error: '还没有生命体' });
-        const message = String(b.message ?? '').trim() || '你好，最近怎么样？';
-        const relId = typeof b.relId === 'string' && b.relId.trim() ? b.relId.trim() : 'r_trace'; // 默认临时关系；传真 relId 看具体关系（仍只读不提交）
-        const trace = await traceConverse(life.store, mouth, relId, message, now(), perceiver);
-        // 资源档位（平台层，按余额调对话）：给定一个余额，显示档位 + resourceAwareMouth 会不会改她的话（让"随余额调"可见、可验证）。
-        const cost = effBilling().costPerReply;
-        const balance = typeof b.balance === 'number' ? b.balance : cost * 6;
-        const band = resourceBand(balance, cost);
-        const modifies = band === 'low' || band === 'scarce';
-        const resource = { balance, cost, band, modifies, note: modifies ? (band === 'low' ? '余额紧：话更精炼、挑要紧说、温度不减；绝不提钱' : '余额见底：坦诚"今天能陪你的有限，但我都在"；绝不催费') : '余额充裕(ok/abundant)→她原样给，满状态（设计：高余额不显形）' };
-        return send(res, 200, { lifeId: life.id, relId, modelStatus: modelStatus(), resource, trace });
-      }
-
-      // —— 先天原型清单（仅 owner）：接生页"可选原型"下拉用。
-      if (path === '/admin/archetypes' && req.method === 'GET') {
-        if (!owner) return send(res, 403, { error: '仅 owner' });
-        return send(res, 200, { archetypes: ARCHETYPES.map((a) => a.name) });
-      }
-      // —— 生成生命体（仅 owner）：运行时接生一条新命，立即生效、无需重启；落盘名册重启也在。archetype 可选（空=按 id 哈希取型）。
-      if (path === '/admin/lives' && req.method === 'POST') {
-        if (!owner) return send(res, 403, { error: '仅 owner 可生成生命体' });
-        const b = await readJson(req);
-        const archetype = typeof b.archetype === 'string' && b.archetype.trim() ? b.archetype.trim() : undefined;
-        const r = await birthLife(String(b.id ?? ''), archetype);
-        return send(res, r.ok ? 200 : 400, r.ok ? { ok: true, id: r.id, total: lives.length } : { error: r.error });
-      }
-
-      // —— 社交边界配置（仅 owner）：活跃圈上限 / 离开阈值 / 每跳预算 / 三层阈值与主动频率。即时生效。
-      if (path === '/admin/social-config') {
-        if (!owner) return send(res, 403, { error: '仅 owner 可查看/修改社交边界' });
-        if (req.method === 'GET') return send(res, 200, effSocial());
-        if (req.method === 'POST') { settings.setSocial(await readJson(req)); return send(res, 200, effSocial()); }
-        return send(res, 405, { error: 'method not allowed' });
-      }
-
-      // —— 计费数值配置（仅 owner）：每条成本 + 新用户初始额度 + 平台对账 token。即时生效（settings ⊕ env ⊕ 默认）。
-      if (path === '/admin/billing-config') {
-        if (!owner) return send(res, 403, { error: '仅 owner 可查看/修改计费' });
-        const view = (): Record<string, unknown> => {
-          const o = settings.getBilling();
-          const tok = (o.apiyiToken ?? '').trim();
-          return { ...effBilling(), apiyiTokenSet: tok !== '', apiyiTokenMasked: tok ? maskKey(tok) : null, balanceUrl: o.balanceUrl ?? '' };
-        };
-        if (req.method === 'GET') return send(res, 200, view());
-        if (req.method === 'POST') {
-          const b = await readJson(req);
-          const patch: Record<string, unknown> = {};
-          if (b.costPerReply !== undefined && b.costPerReply !== '') patch.costPerReply = Number(b.costPerReply);
-          if (b.starterCredits !== undefined && b.starterCredits !== '') patch.starterCredits = Number(b.starterCredits);
-          if (b.clearApiyiToken) patch.clearApiyiToken = true;
-          else if (typeof b.apiyiToken === 'string' && b.apiyiToken.trim()) patch.apiyiToken = b.apiyiToken.trim();
-          if (typeof b.balanceUrl === 'string') patch.balanceUrl = b.balanceUrl;
-          settings.setBilling(patch);
-          return send(res, 200, view());
-        }
-        return send(res, 405, { error: 'method not allowed' });
-      }
-      // —— 平台对账（仅 owner）：查 apiyi 平台余额/消耗（用控制台 AccessToken，非聊天 key），方便对账。失败不崩后台。
-      if (path === '/admin/platform-balance' && req.method === 'GET') {
-        if (!owner) return send(res, 403, { error: '仅 owner' });
-        const o = settings.getBilling();
-        const token = (o.apiyiToken ?? '').trim();
-        if (!token) return send(res, 200, { configured: false });
-        const url2 = (o.balanceUrl ?? '').trim() || (String(modelStatus().baseUrl).replace(/\/v1\/?$/, '') + '/api/user/self');
-        try {
-          const ctl = new AbortController();
-          const to = setTimeout(() => ctl.abort(), 8000);
-          const resp = await fetch(url2, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' }, signal: ctl.signal }).finally(() => clearTimeout(to));
-          if (!resp.ok) return send(res, 200, { configured: true, error: `HTTP ${resp.status}` });
-          const json = (await resp.json()) as Record<string, unknown>;
-          const u = (json.data ?? json) as Record<string, unknown>; // one-api 包 {success,data:{}}；也兼容直接返回 user 对象
-          const quota = Number(u.quota ?? 0), used = Number(u.used_quota ?? 0); // 500000 quota = $1
-          return send(res, 200, { configured: true, remainingUsd: round3(quota / 500000), usedUsd: round3(used / 500000), totalUsd: round3((quota + used) / 500000), requestCount: Number(u.request_count ?? 0) });
-        } catch (e) { return send(res, 200, { configured: true, error: String((e as Error).message ?? e) }); }
-      }
-
-      // —— 世界源配置（仅 owner，§8.1）：她们读哪些新闻 RSS / 是否接 Polymarket / 多久读一遍。即时生效、无需重启。
-      // 抓取在引擎外，内容冻进 WORLD_PERCEIVED 事件；配置不进神圣日志、不参与重放（换源不改她记得什么）。
-      if (path === '/admin/world-config' || path === '/admin/world-config/test') {
-        if (!owner) return send(res, 403, { error: '仅 owner 可查看/修改世界源' });
-        if (req.method === 'GET' && path === '/admin/world-config') return send(res, 200, worldStatus());
-        if (req.method === 'POST' && path === '/admin/world-config') {
-          const b = await readJson(req);
-          const patch: Record<string, unknown> = {};
-          // 统一 sources 列表（RSS URL / polymarket / onthisday 同一层级）。兼容字符串（换行/逗号分隔）或数组。
-          if (Array.isArray(b.sources)) patch.sources = b.sources;
-          else if (typeof b.sources === 'string') patch.sources = b.sources.split(/[\n,]+/).map((s: string) => s.trim()).filter(Boolean);
-          else if (typeof b.rss === 'string') patch.sources = b.rss.split(/[\n,]+/).map((s: string) => s.trim()).filter(Boolean); // 旧客户端兜底
-          else if (Array.isArray(b.rss)) patch.sources = b.rss;
-          if (b.everyMs !== undefined && b.everyMs !== '') patch.everyMs = Number(b.everyMs);
-          settings.setWorld(patch);
-          scheduleWorld(3_000); // 新源 3 秒后即试读一遍（不必等满一个周期）
-          return send(res, 200, worldStatus());
-        }
-        if (req.method === 'POST' && path === '/admin/world-config/test') {
-          const w = effWorld();
-          if (!worldEnabled(w)) return send(res, 200, { ok: false, error: '还没配任何世界源' });
-          try {
-            const { items, report } = await createWorldFeed({ sources: w.sources, timeoutMs: 12_000 }).fetchDetailed();
-            return send(res, 200, { ok: items.length > 0, count: items.length, report, sample: items.slice(0, 6).map((it) => ({ source: it.source, kind: it.kind, title: it.title })) });
-          } catch (e) {
-            return send(res, 200, { ok: false, error: (e as Error).message || '抓取失败' });
-          }
-        }
-        return send(res, 405, { error: 'method not allowed' });
-      }
-
-      if (req.method === 'GET' && path === '/admin/overview') {
-        return send(res, 200, {
-          role: acct.role,
-          lives: lives.map((l) => { const s = snapOf(l); return { id: l.id, awake: s.awake, willingToWake: s.willingToWake, emotion: s.emotion, dayPhase: s.dayPhase, vitality: round3(s.soma.vitality.value), events: l.store.version(), loop: { tick: l.lastTickAt, reflect: l.lastReflectAt, social: l.lastSocialAt, checkpoint: l.lastCheckpointAt } }; }),
-          pendingRecharges: accounts.pendingRechargeCount(),
-          users: accounts.listUsers().length,
-          governance: { autonomousBudget: autoBudget.status(), capabilities: 'deny-all', rewardHacking: 'structurally-prevented(contract①)', audit: 'append-only LifeEvent log' }, // #24 治理一览
-        });
-      }
-      if (req.method === 'GET' && path === '/admin/activity') {
-        const lim = Math.min(500, Number(new URLSearchParams((req.url ?? '').split('?')[1] ?? '').get('limit')) || 120);
-        return send(res, 200, adminActivity(owner, lim));
-      }
-      if (req.method === 'GET' && path === '/admin/users') {
-        return send(res, 200, accounts.listUsers().map((u) => ({ id: u.id, handle: u.handle, email: owner ? u.email : '〔遮罩〕', role: u.role, status: u.status, balance: u.balance, lastActiveAt: u.lastActiveAt, createdAt: u.createdAt })));
-      }
-      // —— 按用户看对话记录（仅 owner）：这个用户和她遇见过的每条命的真实来回（私聊原文）。放在 /admin/users/:id 通配之前。——
-      if (req.method === 'GET' && path.startsWith('/admin/users/') && path.endsWith('/conversations')) {
-        if (!owner) return send(res, 403, { error: '对话监督仅 owner' });
-        const uid = decodeURIComponent(path.slice('/admin/users/'.length, -'/conversations'.length));
-        const ac = accounts.getAccount(uid);
-        if (!ac) return send(res, 404, { error: 'no such user' });
-        const rel = accounts.relIdFor(uid);
-        const conversations = livesMetBy(ac)
-          .map(({ id }) => { const l = lifeById(id)!; const b = snapOf(l).bonds[rel]; return { life: id, closeness: round3(b?.closeness ?? 0), messages: buildThread(l, rel) }; })
-          .filter((c) => c.messages.length > 0)
-          .sort((a, b) => b.closeness - a.closeness);
-        return send(res, 200, { userId: uid, handle: ac.handle, conversations });
-      }
-      // —— 用户详情（点用户表下钻）：余额/充值历史/遇见过哪些命（含亲疏）/微信通道/状态。email 仅 owner。——
-      if (req.method === 'GET' && path.startsWith('/admin/users/') && path !== '/admin/users/block') {
-        const uid = decodeURIComponent(path.slice('/admin/users/'.length));
-        const ac = accounts.getAccount(uid);
-        if (!ac) return send(res, 404, { error: 'no such user' });
-        const rel = accounts.relIdFor(uid);
-        const met = lives
-          .filter((l) => l.store.list().some((e) => e.type === 'RELATIONSHIP_OPENED' && e.relationshipId === rel))
-          .map((l) => { const b = snapOf(l).bonds[rel]; return { life: l.id, closeness: round3(b?.closeness ?? 0), trust: round3(b?.trust ?? 0), attachment: b?.relationalSelf.attachment ?? '—', ended: Boolean(b?.ended) }; })
-          .sort((a, b) => b.closeness - a.closeness);
-        const wc = accounts.channelFor(uid);
-        return send(res, 200, {
-          id: ac.id, handle: ac.handle, email: owner ? ac.email : '〔遮罩〕', role: ac.role, status: ac.status,
-          emailVerified: ac.emailVerified, createdAt: ac.createdAt, lastActiveAt: ac.lastActiveAt,
-          balance: accounts.balance(uid),
-          pendingRecharges: accounts.pendingRechargesFor(uid),
-          recentRecharges: accounts.recentRechargeResults(uid, 10),
-          livesMet: met,
-          wechat: wc ? { lifeId: wc.lifeId } : (accounts.wechatBindingFor(uid) ?? null),
-        });
-      }
-      if (req.method === 'GET' && path === '/admin/recharges') return send(res, 200, accounts.pendingRecharges());
-      if (req.method === 'POST' && path === '/admin/recharges') {
-        const b = await readJson(req);
-        const ok = accounts.decideRecharge(Number(b.id), Boolean(b.approve), acct.email);
-        return send(res, ok ? 200 : 400, ok ? { ok: true } : { error: 'no such pending request' });
-      }
-      // —— 世界事件流：她们读到的【真实世界】（跨命的 WORLD_PERCEIVED），按墙钟倒序。世界内容公开，owner+steward 都看。——
-      if (req.method === 'GET' && path === '/admin/world-feed') {
-        const lim = Math.min(200, Math.max(1, Number(new URLSearchParams(url.split('?')[1] ?? '').get('limit') ?? 80)));
-        const rows: Array<Record<string, unknown>> = [];
-        for (const l of lives) for (const e of l.store.list()) {
-          if (e.type !== 'WORLD_PERCEIVED') continue;
-          const p = e.payload as WorldPerceivedPayload;
-          rows.push({ life: l.id, at: e.recordedAt, source: p.source, kind: p.worldKind, title: p.title, summary: p.summary, url: p.url, topics: p.topics ?? [] });
-        }
-        rows.sort((a, b) => (String(a.at) < String(b.at) ? 1 : -1));
-        return send(res, 200, { rows: rows.slice(0, lim) });
-      }
-      // 手动充值（直接给某用户加/减心意，无需用户先申请）——发钱很敏感，仅 owner。计入 credit_ledger 留痕。
-      if (req.method === 'POST' && path === '/admin/users/recharge') {
-        if (!owner) return send(res, 403, { error: '手动充值仅 owner' });
-        const b = await readJson(req);
-        const uid = String(b.userId ?? '');
-        const amount = Math.trunc(Number(b.amount));
-        if (!accounts.getAccount(uid)) return send(res, 404, { error: 'no such user' });
-        if (!Number.isFinite(amount) || amount === 0) return send(res, 400, { error: 'amount 必须是非 0 整数（正=充、负=扣）' });
-        accounts.credit(uid, amount, 'admin_grant', `by_${acct.email}`);
-        return send(res, 200, { ok: true, userId: uid, amount, balance: accounts.balance(uid) });
-      }
-      // 健康时间线（§11.3）：她的灵性/效价/精力/联结随真实时间的曲线（owner+steward 都看，纯她的健康）。
-      if (req.method === 'GET' && path.startsWith('/admin/lives/') && path.endsWith('/wellbeing')) {
-        const l = lifeById(path.slice('/admin/lives/'.length, -'/wellbeing'.length));
-        if (!l) return send(res, 404, { error: 'no such life' });
-        return send(res, 200, l.samples);
-      }
-      // —— 对话监督·关系列表（仅 owner，含用户私聊）——她和【哪些人】聊过、按最近活跃排（必须放在 /admin/lives/:id 通配之前）。
-      if (req.method === 'GET' && path.startsWith('/admin/lives/') && path.endsWith('/relations')) {
-        if (!owner) return send(res, 403, { error: '对话监督仅 owner' });
-        const l = lifeById(path.slice('/admin/lives/'.length, -'/relations'.length));
-        if (!l) return send(res, 404, { error: 'no such life' });
-        const s = snapOf(l);
-        const agg = new Map<string, { rel: string; name: string; kind: string; msgs: number; lastAt: string }>();
-        for (const e of l.store.list()) {
-          if (e.type !== 'MESSAGE_RECEIVED' && e.type !== 'MESSAGE_SENT') continue;
-          const rel = (e.payload as { relationshipId?: string }).relationshipId;
-          if (!rel || rel === 'r_square') continue;
-          const b = s.bonds[rel];
-          const name = rel === REL ? '创造者' : rel.startsWith('u_') ? (accounts.getAccount(rel.slice(2))?.handle ?? rel) : (b?.displayRef ?? rel);
-          const cur = agg.get(rel) ?? { rel, name, kind: b?.kind === 'peer' ? '同类' : '人类', msgs: 0, lastAt: e.occurredAt };
-          cur.msgs += 1; cur.lastAt = e.occurredAt;
-          agg.set(rel, cur);
-        }
-        const rels = [...agg.values()].map((r) => ({ ...r, closeness: round3(s.bonds[r.rel]?.closeness ?? 0), trust: round3(s.bonds[r.rel]?.trust ?? 0), ended: Boolean(s.bonds[r.rel]?.ended) })).sort((a, b) => b.lastAt.localeCompare(a.lastAt));
-        return send(res, 200, { lifeId: l.id, relations: rels });
-      }
-      // —— 对话监督·读线程（仅 owner）——某条命与某个关系的来回（含模型听出的感知）。
-      if (req.method === 'GET' && path.startsWith('/admin/lives/') && path.endsWith('/thread')) {
-        if (!owner) return send(res, 403, { error: '对话监督仅 owner' });
-        const l = lifeById(path.slice('/admin/lives/'.length, -'/thread'.length));
-        if (!l) return send(res, 404, { error: 'no such life' });
-        const rel = new URLSearchParams(url.split('?')[1] ?? '').get('rel') ?? '';
-        return send(res, 200, { lifeId: l.id, rel, messages: buildThread(l, rel) });
-      }
-      // —— 原始事件日志（append-only ground truth）：直接看落库的 LifeEvent 序列——"从日志确定性重建"的真相源。
-      // 私聊正文(u_*) steward 遮罩、owner 可见；其余事件公开。倒序、可调 limit。——
-      if (req.method === 'GET' && path.startsWith('/admin/lives/') && path.endsWith('/events')) {
-        const l = lifeById(path.slice('/admin/lives/'.length, -'/events'.length));
-        if (!l) return send(res, 404, { error: 'no such life' });
-        const lim = Math.min(500, Math.max(1, Number(new URLSearchParams(url.split('?')[1] ?? '').get('limit') ?? 120)));
-        const all = l.store.list();
-        const rows = all.slice(-lim).map((e) => {
-          const rel = e.relationshipId ?? '';
-          const priv = rel.startsWith('u_');
-          const p = e.payload as unknown as Record<string, unknown>;
-          let content = '';
-          if (e.type === 'MESSAGE_RECEIVED') content = priv && !owner ? '〔私聊·遮罩〕' : String(p.content ?? '');
-          else if (e.type === 'MESSAGE_SENT') content = priv && !owner ? '〔私聊·遮罩〕' : String(p.utterance ?? '');
-          else if (e.type === 'WORLD_PERCEIVED') content = String(p.title ?? '');
-          else if (e.type === 'REFLECTION_TRIGGERED') content = String(p.scope ?? '');
-          else if (e.type === 'RELATIONSHIP_OPENED' || e.type === 'RELATIONSHIP_ENDED') content = String(p.displayRef ?? p.reason ?? '');
-          return { seq: e.seq, type: e.type, label: eventLabel(e), source: e.source, rel, at: e.recordedAt, occurredAt: e.occurredAt, content };
-        }).reverse();
-        return send(res, 200, { lifeId: l.id, total: all.length, version: l.store.version(), rows });
-      }
-      // Observatory：某条命的内在深观（§22）。她的状态(soma/价值/气质/社交网)owner+steward 都看；
-      // 含用户痕迹的(narrative/innerLife/chapters/记忆) 仅 owner——steward 受限(§11.2)。
-      if (req.method === 'GET' && path.startsWith('/admin/lives/')) {
-        const l = lifeById(path.slice('/admin/lives/'.length));
-        if (!l) return send(res, 404, { error: 'no such life' });
-        const s = snapOf(l);
-        // 统一「社交世界」（第一性原理：一份社交容量，按亲疏分层；同类/人类只是种类）。
-        // 同类 + 人类 + 创造者排在同一张表，共享 Dunbar 活跃圈与层级。人类名字仅 owner 可见。
-        const scA = effSocial();
-        const rsA = reachState(l);
-        const peers = s.socialWorld.filter((t) => !t.ended).map((t) => ({ kind: '同类', name: t.displayRef, closeness: t.closeness, attachment: t.attachment, rel: `peer_${t.displayRef}` }));
-        const humans = Object.entries(s.bonds)
-          .filter(([rel]) => rel.startsWith('u_') || rel === REL)
-          .map(([rel, b]) => ({ kind: rel === REL ? '创造者' : '人类', name: rel === REL ? '创造者' : (accounts.getAccount(rel.slice(2))?.handle ?? rel), closeness: b.closeness, attachment: b.relationalSelf.attachment, rel }));
-        const world = [...peers, ...humans]
-          .sort((a, b) => b.closeness - a.closeness)
-          .map((r, i) => {
-            const st = rsA.get(r.rel);
-            return { kind: r.kind, name: r.kind === '人类' && !owner ? '〔用户·仅 owner〕' : r.name, closeness: round3(r.closeness), attachment: r.attachment, layer: layerOf(r.closeness, scA).label, inCircle: i < scA.activeCircle && r.closeness >= scA.acquaintAt, awayMin: st && st.lastRecvMs > 0 ? Math.round((Date.now() - st.lastRecvMs) / 60_000) : null, pending: st ? st.pending : false };
-          });
-        const social = {
-          cap: scA.activeCircle, intimateAt: scA.intimateAt, friendAt: scA.friendAt, acquaintAt: scA.acquaintAt,
-          peerCount: peers.length, humanCount: humans.length, activeCount: world.filter((r) => r.inCircle).length,
-          world: world.slice(0, 50),
-        };
-        return send(res, 200, {
-          id: l.id, awake: s.awake, willingToWake: s.willingToWake, emotion: s.emotion, feeling: s.feeling, dayPhase: s.dayPhase, tension: s.tension, social,
-          temperament: { label: tempLabel(s.temperament), mbti: mbtiOf(s.temperament), ...s.temperament },
-          soma: Object.fromEntries(Object.entries(s.soma).map(([k, v]) => [k, round3(v.value)])),
-          values: s.values.map((v) => ({ key: v.key, weight: round3(v.weight), status: v.provenance.status, drifts: v.provenance.driftedAtSeqs.length })),
-          // 灵魂内观·进化与人格（全确定性派生、脱敏，owner+steward 都看——是"她现在是谁"的全貌）：
-          maturity: s.maturity, maturityFacets: s.maturityFacets, sleepPressure: s.sleepPressure, riskAppetite: s.riskAppetite, defenseStyle: s.defenseStyle, attachmentBias: s.attachmentBias, socialShape: s.socialShape,
-          becoming: s.becoming, growth: s.growth, baseline: s.baseline, // baseline=习得底色(allostasis)：先天设定点+持续经历的漂移
-          needs: s.needs, // SDT 三需求 + 探索（低=缺口→欲望）
-          interests: s.interests.map((it) => ({ topic: it.topic, weight: it.weight, confirmed: it.status === 'confirmed', phase: it.phase })),
-          skills: s.skills.map((sk) => ({ kind: sk.kind === 'muse' ? '公开表达' : sk.kind === 'reach_out' ? '主动找人' : sk.kind, efficacy: sk.efficacy, n: sk.n })),
-          aspirations: s.aspirations,
-          goals: s.goals.map((g) => ({ kind: g.kind, intent: g.intent, weight: g.weight })),
-          // 仅 owner（含用户痕迹）：
-          narrative: owner ? s.narrative : null,
-          innerLife: owner ? s.innerLife : '〔含用户痕迹·steward 受限〕',
-          chapters: owner ? s.chapters : [],
-          memories: owner ? s.memory.filter((m) => m.lineage.isCurrent).slice(-30).map((m) => ({ affect: round3(m.affect), vivid: m.vivid === true, content: m.content })) : [],
-        });
-      }
-      if (req.method === 'POST' && path === '/admin/users/block') {
-        const b = await readJson(req);
-        accounts.setStatus(String(b.userId ?? ''), b.unblock ? 'active' : 'blocked');
-        return send(res, 200, { ok: true });
-      }
-      // —— 系统健康（总览用）：自主预算/省token闲置门控/微信通道/模型&感知/规模。owner+steward 都看（无用户私聊）。——
-      if (req.method === 'GET' && path === '/admin/health') {
-        const idleMin = Math.round((Date.now() - lastActiveMs) / 60_000);
-        const channels = accounts.listChannels().map((c) => ({ user: accounts.getAccount(c.userId)?.handle ?? c.userId.slice(0, 6), life: c.lifeId, hasToken: !!c.botToken }));
-        return send(res, 200, {
-          model: modelStatus(),
-          autonomousBudget: autoBudget.status(),
-          audience: { present: audiencePresent(), idleMinutes: idleMin, gateMinutes: Math.round(IDLE_GATE_MS / 60_000) },
-          channels, // 微信通道
-          scale: { lives: lives.length, awake: lives.filter((l) => snapOf(l).awake).length, users: accounts.listUsers().length, events: lives.reduce((n, l) => n + l.store.version(), 0) },
-          billing: effBilling(),
-          governance: { capabilities: 'deny-all', rewardHacking: 'structurally-prevented(契约①)' },
-        });
-      }
-      return send(res, 404, { error: 'not found' });
-    }
+    // 业务路由：用户态 /api/* 与管理态 /admin/* 各自成模块，只吃 ctx（见 routes/）。
+    // 放在 try 内 await：handler 内抛错照样落到下方 500 兜底，行为与内联时一致。
+    if (url.startsWith('/api/')) { await handleUserApi(ctx, req, res, url, seg); return; }
+    if (url.startsWith('/admin/')) { await handleAdmin(ctx, req, res, url); return; }
 
     if (!authed(req)) return send(res, 401, { error: 'unauthorized' });
     // 旧的 /<id>/state|inner|say|farewell、/lives、/society-feed 旧路面已删除——
@@ -1613,8 +935,6 @@ const discoverTimer = setInterval(async () => {
 // 行动反馈闭环（Phase 3 / §"行动→世界反馈→改变她"）：她的心声被点赞/评论 → 她【感到被回应】并被改变。
 // 落成 FEEDBACK_PERCEIVED（确定性、进神圣日志）。脱敏：只记聚合数，不记是谁。首见某帖先记基线、不补发历史。
 const seenEngagement = new Map<string, number>();
-// 主动找人的去向（Phase 3 收尾）：记下她每次 reach-out，反馈回路判断【被回应】还是【石沉大海】→ 落 FEEDBACK_PERCEIVED。
-const reachOutPending = new Map<string, { rel: string; at: string; kind: 'reach_out' | 'greet' }>();
 const SILENCE_MS = Number(process.env.VEGA_REACH_SILENCE_MS ?? 7_200_000); // 主动后多久没回 = 视作"石沉"（默认 2h）
 const feedbackTimer = setInterval(() => {
   for (const life of lives) {
