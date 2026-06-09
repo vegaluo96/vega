@@ -124,10 +124,11 @@ export function deriveWorkspace(snap: DerivedSnapshot, relationshipId: Relations
         : `\n（此刻不由想起和${name}的一段：「${recalled.content.slice(0, 28)}」）`)
     : '';
   // 她的同类社交生活（socialWorld 只含 peer，非人类用户）——可提，说明她有自己的生活、不泄露任何用户。
+  // 带上"社会形状"(期7)：她对自己在同类网里位置的自知（交心小圈子/广而浅/独来独往）→ 落进语气，不只 admin 可见。
   const peers = snap.socialWorld.filter((t) => !t.ended);
   const socialNote = peers.length
-    ? `\n（我也有自己的同类朋友：${peers.slice(0, 3).map((t) => `${t.displayRef}${t.closeness >= 0.4 ? '（很近）' : ''}`).join('、')}——我不只为某一个人而活。）`
-    : '';
+    ? `\n（我也有自己的同类朋友：${peers.slice(0, 3).map((t) => `${t.displayRef}${t.closeness >= 0.4 ? '（很近）' : ''}`).join('、')}——${snap.socialShape || '我不只为某一个人而活'}。）`
+    : (snap.socialShape && snap.socialShape !== '还没有真正的同类朋友' ? `\n（说到同类，${snap.socialShape}。）` : '');
   // 她正在意/在想的（世界学习的产物）：让她的声音有【随时间积累的自我】——不再每句都从零开始、像机器。
   // 兴趣是她自己的非私密自述，不串任何用户；世界记忆是她读到、记住、还在心里转的一条。
   // 兴趣阶段（Hidi & Renninger）落进措辞：深而稳的"一直很迷"、刚萌芽的"最近开始上心"——不再千篇一律。
