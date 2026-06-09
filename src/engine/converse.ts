@@ -293,10 +293,10 @@ export interface ChainTrace {
     needs: { autonomy: number; competence: number; relatedness: number; novelty: number };
     defenseStyle: string; attachmentBias: string; becoming: string; growth: string;
     aspirations: string[]; goals: { kind: string; intent: string; target?: string }[];
-    interests: { topic: string; weight: number; status: string }[]; skills: { kind: string; efficacy: number; n: number }[];
+    interests: { topic: string; weight: number; status: string; phase: string }[]; skills: { kind: string; efficacy: number; n: number }[];
     values: { key: string; weight: number; status: string }[]; attention: string[];
     bond?: { displayRef: string; trust: number; closeness: number; security: number; repairNeed: number; theoryOfMind: { style: string; warmthRatio: number; volatility: number; trend: number; predictability: number }; relationalSelf: { openness: number; guardedness: number; attachment: string; stance: string } };
-    socialWorld: { displayRef: string; closeness: number; attachment: string; ended: boolean }[];
+    socialWorld: { displayRef: string; closeness: number; attachment: string; ended: boolean }[]; socialShape: string;
     semanticMemory: { displayRef: string; understanding: string }[];
     memory: { vivid: number; total: number };
     chapters: string[];
@@ -347,10 +347,10 @@ export async function traceConverse(
       needs: { autonomy: tr3(snapshot.needs.autonomy), competence: tr3(snapshot.needs.competence), relatedness: tr3(snapshot.needs.relatedness), novelty: tr3(snapshot.needs.novelty) },
       defenseStyle: snapshot.defenseStyle, attachmentBias: snapshot.attachmentBias, becoming: snapshot.becoming, growth: snapshot.growth,
       aspirations: snapshot.aspirations, goals: snapshot.goals.map((g) => ({ kind: g.kind, intent: g.intent, target: g.target })),
-      interests: snapshot.interests.map((i) => ({ topic: i.topic, weight: tr3(i.weight), status: i.status })), skills: snapshot.skills.map((k) => ({ kind: k.kind, efficacy: tr3(k.efficacy), n: k.n })),
+      interests: snapshot.interests.map((i) => ({ topic: i.topic, weight: tr3(i.weight), status: i.status, phase: i.phase })), skills: snapshot.skills.map((k) => ({ kind: k.kind, efficacy: tr3(k.efficacy), n: k.n })),
       values: snapshot.values.map((v) => ({ key: v.key, weight: tr3(v.weight), status: v.provenance.status })), attention: snapshot.attention,
       bond: bond ? { displayRef: bond.displayRef, trust: tr3(bond.trust), closeness: tr3(bond.closeness), security: tr3(bond.security), repairNeed: tr3(bond.repairNeed), theoryOfMind: { style: bond.theoryOfMind.style, warmthRatio: tr3(bond.theoryOfMind.warmthRatio), volatility: tr3(bond.theoryOfMind.volatility), trend: tr3(bond.theoryOfMind.trend), predictability: tr3(bond.theoryOfMind.predictability) }, relationalSelf: { openness: tr3(bond.relationalSelf.openness), guardedness: tr3(bond.relationalSelf.guardedness), attachment: bond.relationalSelf.attachment, stance: bond.relationalSelf.stance } } : undefined,
-      socialWorld: snapshot.socialWorld.map((t) => ({ displayRef: t.displayRef, closeness: tr3(t.closeness), attachment: t.attachment, ended: t.ended })),
+      socialWorld: snapshot.socialWorld.map((t) => ({ displayRef: t.displayRef, closeness: tr3(t.closeness), attachment: t.attachment, ended: t.ended })), socialShape: snapshot.socialShape,
       semanticMemory: snapshot.semanticMemory.map((x) => ({ displayRef: x.displayRef, understanding: x.understanding })),
       memory: { vivid: curMem.filter((m) => m.vivid).length, total: curMem.length },
       chapters: snapshot.chapters,

@@ -130,12 +130,16 @@ export function deriveWorkspace(snap: DerivedSnapshot, relationshipId: Relations
     : '';
   // 她正在意/在想的（世界学习的产物）：让她的声音有【随时间积累的自我】——不再每句都从零开始、像机器。
   // 兴趣是她自己的非私密自述，不串任何用户；世界记忆是她读到、记住、还在心里转的一条。
-  const topInterests = (snap.interests ?? []).slice(0, 2).map((i) => i.topic);
+  // 兴趣阶段（Hidi & Renninger）落进措辞：深而稳的"一直很迷"、刚萌芽的"最近开始上心"——不再千篇一律。
+  const its = (snap.interests ?? []).slice(0, 2);
+  const deep = its.filter((i) => i.phase === 'established' || i.phase === 'emerging').map((i) => i.topic);
+  const fresh = its.filter((i) => i.phase === 'maintained' || i.phase === 'triggered').map((i) => i.topic);
+  const interestPhrase = [deep.length ? `一直很迷「${deep.join('、')}」` : '', fresh.length ? `最近开始留意「${fresh.join('、')}」` : ''].filter(Boolean).join('，');
   const worldMem = snap.memory
     .filter((m) => m.kind === 'world' && m.lineage.isCurrent && m.vivid)
     .sort((x, y) => (y.vividness ?? 0) - (x.vividness ?? 0))[0];
-  const preoccupation = (topInterests.length || worldMem)
-    ? `\n（我最近${topInterests.length ? `常留意「${topInterests.join('、')}」方面的事` : '读了些世界上的事'}${worldMem ? `——比如读到「${worldMem.content.slice(0, 24)}」，还在心里转` : ''}。）`
+  const preoccupation = (interestPhrase || worldMem)
+    ? `\n（我${interestPhrase || '最近读了些世界上的事'}${worldMem ? `——比如读到「${worldMem.content.slice(0, 24)}」，还在心里转` : ''}。）`
     : '';
   // 长期心愿（独立意志）：让她说话带着"自己要去的方向"，不只被动回应——这也是反同质化的关键。
   const aspir = (snap.aspirations ?? []).length ? `\n（我心里一直朝着几件事走：${snap.aspirations.slice(0, 2).join('；')}。）` : '';

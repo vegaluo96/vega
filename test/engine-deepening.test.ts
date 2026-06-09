@@ -106,3 +106,23 @@ test('期5·多维成熟：不同反思长不同的面（recent→调节, relati
   const m = reconstruct((() => { const s = createInMemoryEventStore('vega'); s.append({ type: 'LIFE_GENESIS', source: 'system', occurredAt: iso(T0), payload: { innateSeed: { temperamentBias: {}, valueSeed: {}, somaSetpoints: { vitality: 0.7 }, somaTau: {}, vitalityFloor: 0.15 }, reconstructVersionAtBirth: 28, creator: { relationshipId: 'r_a', identityRef: 'A' } } } as EventDraft<'LIFE_GENESIS'>); return s; })().list());
   assert.equal(m.maturity, 0, '出生 maturity=0（facets 全 0）');
 });
+
+test('期6·兴趣四阶段（Hidi & Renninger）：从触发→维持→萌芽→确立，按 episodes×weight 推进', () => {
+  const s = createInMemoryEventStore('vega');
+  s.append({ type: 'LIFE_GENESIS', source: 'system', occurredAt: iso(T0), payload: { innateSeed: { temperamentBias: { curiosity: 0.9 }, valueSeed: {}, somaSetpoints: { vitality: 0.7 }, somaTau: {}, vitalityFloor: 0.15 }, reconstructVersionAtBirth: 28, creator: { relationshipId: 'r_a', identityRef: 'A' } } } as EventDraft<'LIFE_GENESIS'>);
+  s.append({ type: 'RELATIONSHIP_OPENED', source: 'system', relationshipId: 'r_a', occurredAt: iso(T0 + 1e3), payload: { relationshipId: 'r_a', kind: 'human', displayRef: 'A' } });
+  s.append({ type: 'CONNECTION_OPENED', source: 'host', relationshipId: 'r_a', occurredAt: iso(T0 + 2e3), payload: { relationshipId: 'r_a', host: { kind: 'h', ref: 'h' } } });
+  // 聊一次「音乐」→ 触发。
+  s.append({ type: 'MESSAGE_RECEIVED', source: 'external_user', relationshipId: 'r_a', occurredAt: iso(T0 + 1e4), payload: { relationshipId: 'r_a', content: '聊音乐', channel: 'chat', perception: { sentiment: 0.7, warmth: 0.8, threat: 0, topics: ['音乐'], modelId: 't' } } });
+  let p1 = reconstruct(s.list()).interests.find((x) => x.topic === '音乐');
+  assert.equal(p1?.phase, 'triggered', `聊 1 次 → 触发（${p1?.phase}）`);
+  // 反复聊 14 次 → 确立。
+  for (let i = 0; i < 14; i++) s.append({ type: 'MESSAGE_RECEIVED', source: 'external_user', relationshipId: 'r_a', occurredAt: iso(T0 + 2e4 + i * 3600_000), payload: { relationshipId: 'r_a', content: '又聊音乐', channel: 'chat', perception: { sentiment: 0.8, warmth: 0.9, threat: 0, topics: ['音乐'], modelId: 't' } } });
+  const p2 = reconstruct(s.list()).interests.find((x) => x.topic === '音乐');
+  assert.ok(p2 && (p2.phase === 'established' || p2.phase === 'emerging'), `反复聊很多次 → 个体兴趣（${p2?.phase}, w=${p2?.weight}, n=${p2?.episodes}）`);
+});
+
+test('期7·社会形状：无同类→"还没有真正的同类朋友"', () => {
+  const s = born({}, true);
+  assert.equal(reconstruct(s.list()).socialShape, '还没有真正的同类朋友', '没 peer → 独来独往');
+});

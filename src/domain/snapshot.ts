@@ -88,6 +88,8 @@ export interface Interest {
   weight: number; // [0,1] 亲和度（无新输入即缓慢衰减）
   episodes: number; // 读到过几条该主题
   status: 'volatile' | 'confirmed'; // 反复且够重 → 成为她稳定的一部分
+  // 兴趣发展四阶段（期6·Hidi & Renninger）：触发的情境兴趣 → 维持 → 萌芽的个体兴趣 → 确立的个体兴趣。
+  phase: 'triggered' | 'maintained' | 'emerging' | 'established';
 }
 
 // 遗忘即抽象：把一段关系里的大量情景经历，确定性地压缩成"理解"（语义记忆，纯派生）。
@@ -158,6 +160,7 @@ export interface DerivedSnapshot {
   semanticMemory: SemanticMemory[]; // 经历压缩成的"理解"（遗忘即抽象，纯派生）
   bonds: Record<RelationshipId, Bond>;
   socialWorld: SocialTie[]; // 她的同类社交网（亲疏分化、emergent 的朋友结构）
+  socialShape: string; // 期7·她在同类网里的"社会形状"（脱敏）：交心的小圈子 / 广而浅 / 圈子尚小 / 独来独往
   values: ValueEntry[];
   goals: Goal[]; // 她此刻"想要"什么（排序后）
   interests: Interest[]; // 世界观/兴趣：她在意什么（世界感知按主题确定性累积，纯派生）

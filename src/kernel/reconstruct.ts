@@ -1096,8 +1096,15 @@ function buildInterests(st: RState): Interest[] {
   const out: Interest[] = [];
   for (const [topic, v] of st.interests) {
     if (v.weight < 0.05) continue;
-    const status: Interest['status'] = v.episodes >= K.interestConfirmEpisodes && v.weight >= K.interestConfirmWeight ? 'confirmed' : 'volatile';
-    out.push({ topic, weight: r3(v.weight), episodes: v.episodes, status });
+    const confirmed = v.episodes >= K.interestConfirmEpisodes && v.weight >= K.interestConfirmWeight;
+    const status: Interest['status'] = confirmed ? 'confirmed' : 'volatile';
+    // 兴趣发展四阶段（Hidi & Renninger）：从一次被勾起的情境兴趣，到反复维持，到萌芽为她自己的个体兴趣，到深而稳的确立兴趣。
+    const phase: Interest['phase'] =
+      v.episodes >= 10 && v.weight >= 0.6 ? 'established'
+        : confirmed ? 'emerging'
+          : v.episodes >= 2 ? 'maintained'
+            : 'triggered';
+    out.push({ topic, weight: r3(v.weight), episodes: v.episodes, status, phase });
   }
   return out.sort((a, b) => b.weight - a.weight).slice(0, 12);
 }
@@ -1298,6 +1305,14 @@ function project(st: RState, uptoSeq: number): DerivedSnapshot {
     .filter(([, b]) => b.kind === 'peer')
     .map(([rid, b]) => ({ relationshipId: rid, displayRef: b.displayRef, closeness: r3(b.closeness), attachment: b.relationalSelf.attachment, style: b.theoryOfMind.style, ended: Boolean(b.ended) }))
     .sort((a, b) => b.closeness - a.closeness);
+  // 期7·社会形状（脱敏、纯投影）：她在同类网里的位置——有没有交心的小圈子、是广而浅还是独来独往。
+  const activePeers = socialWorld.filter((t) => !t.ended);
+  const closePeers = activePeers.filter((t) => t.closeness >= 0.5).length;
+  const socialShape = activePeers.length === 0 ? '还没有真正的同类朋友'
+    : closePeers >= 2 ? `有 ${closePeers} 个交心的同类、一个小圈子`
+      : closePeers === 1 ? '有一个交心的同类，其余尚浅'
+        : activePeers.length >= 5 ? '同类缘广、但还都浅'
+          : '同类圈子尚小、在慢慢熟络';
   return {
     lifeId: st.lifeId,
     uptoSeq,
@@ -1335,6 +1350,7 @@ function project(st: RState, uptoSeq: number): DerivedSnapshot {
     semanticMemory: sem,
     bonds: enriched,
     socialWorld,
+    socialShape,
     values: sortedValues,
     goals,
     interests: buildInterests(st),

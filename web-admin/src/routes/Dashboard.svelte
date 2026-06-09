@@ -415,13 +415,14 @@
               {#if st.aspirations.length}<div class="ct-sub">长期心愿</div><div class="ct-prose">{st.aspirations.join('；')}</div>{/if}
               {#if st.goals.length}<div class="ct-sub">此刻目标（排序）</div><div class="ct-prose">{st.goals.map((g) => g.intent).join('；')}</div>{/if}
               {#if st.attention.length}<div class="ct-sub">注意力</div><div class="ct-prose">{st.attention.join('、')}</div>{/if}
-              {#if st.interests.length}<div class="ct-sub">兴趣/世界观</div><div class="ct-tags">{#each st.interests as it}<span class="ct-tag" class:on={it.status === 'confirmed'}>{it.topic} {Math.round(it.weight * 100)}</span>{/each}</div>{/if}
+              {#if st.interests.length}<div class="ct-sub">兴趣/世界观（阶段）</div><div class="ct-tags">{#each st.interests as it}<span class="ct-tag" class:on={it.status === 'confirmed'}>{it.topic} {Math.round(it.weight * 100)}<span class="dim">·{({ triggered: '触发', maintained: '维持', emerging: '萌芽', established: '确立' })[it.phase] ?? it.phase}</span></span>{/each}</div>{/if}
               {#if st.values.length}<div class="ct-sub">价值观</div><div class="ct-tags">{#each st.values as vv}<span class="ct-tag" class:on={vv.status === 'confirmed'}>{vv.key} {Math.round(vv.weight * 100)}</span>{/each}</div>{/if}
               {#if st.skills.length}<div class="ct-sub">技能效能</div><div class="ct-tags">{#each st.skills as sk}<span class="ct-tag">{sk.kind} {Math.round(sk.efficacy * 100)}%·{sk.n}</span>{/each}</div>{/if}
               {#if st.bond}<div class="ct-sub">关系（{st.bond.displayRef}）</div>
                 <div class="ct-nums">信任 {st.bond.trust} · 亲近 {st.bond.closeness} · 安全感 {st.bond.security} · 待修复 {st.bond.repairNeed}</div>
                 <div class="ct-nums">读ta：「{st.bond.theoryOfMind.style}」· 暖比 {st.bond.theoryOfMind.warmthRatio} · 波动 {st.bond.theoryOfMind.volatility} · 趋势 {st.bond.theoryOfMind.trend} · 摸得准 {st.bond.theoryOfMind.predictability}</div>
                 <div class="ct-nums">和ta在一起的我：敞开 {st.bond.relationalSelf.openness} · 戒备 {st.bond.relationalSelf.guardedness} · {st.bond.relationalSelf.attachment} · {st.bond.relationalSelf.stance}</div>{/if}
+              {#if st.socialShape}<div class="ct-sub">社会形状</div><div class="ct-prose">{st.socialShape}</div>{/if}
               {#if st.socialWorld.length}<div class="ct-sub">同类社交网</div><div class="ct-prose">{#each st.socialWorld as sw}{sw.displayRef}（{Math.round(sw.closeness * 100)}{sw.ended ? '·已离' : ''}）　{/each}</div>{/if}
               {#if st.semanticMemory.length}<div class="ct-sub">语义理解（压缩成的"懂"）</div>{#each st.semanticMemory as sem}<div class="ct-prose">{sem.understanding}</div>{/each}{/if}
               <div class="ct-nums">记忆：当下记得 {st.memory.vivid} / 共 {st.memory.total} 段</div>

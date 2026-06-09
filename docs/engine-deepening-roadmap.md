@@ -48,6 +48,12 @@
 
 > 每期：锚定理论 + 改 + 测 + 守 V2/隔离/契约 + 视情升 RECONSTRUCT_VERSION（向后兼容）。不堆、不跳细节、不无承重。
 
+## 推进状态：期1–7 全部落地 ✅
+- 期1 命名情绪 OCC 分化（纯投影）· 期2 SDT 需求 + Schwartz 价值环（纯投影）· 期3 2D 依恋四型（纯投影）
+- 期4 Vaillant 防御层级（纯投影，接成熟度）· 期5 睡眠压S/多维成熟/睡眠巩固/叙事弧（RECONSTRUCT_VERSION 28）
+- 期6 兴趣四阶段（Hidi & Renninger，纯投影）· 期7 社会形状（纯投影）
+- skills 扩展（更多行动类别）需动 FEEDBACK 事件 schema，留作单独的"加事件类型"增量；其余按论文逐维补齐已完成。
+
 ## Sources
 - Schwartz, S. H. *An Overview of the Schwartz Theory of Basic Values*（10 值环 / 4 高阶）
 - Deci, E. & Ryan, R. *Self-Determination Theory*（自主/胜任/关系 三需求）
