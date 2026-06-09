@@ -951,13 +951,35 @@ function buildAspirations(st: RState): string[] {
   return out.slice(0, 4);
 }
 
-// 防御机制（由冻结气质+价值确定性派生，稳定如先天）：受伤/受威胁时她的固定反应模式。
-function defenseStyleOf(t: Temperament, values: ValueEntry[]): string {
+// 防御机制（installment·Vaillant 防御层级）：受伤/受威胁时的反应模式。
+// 关键判断（Vaillant）：防御【分层级】——成熟度决定用【哪一层】(成熟/神经质/不成熟)，气质/价值决定层内【哪一种】。
+// 这让"持续变聪明(maturity↑)"具体地改变她【怎么扛事】：越成熟越能升华/幽默，越青涩越退缩/反击。中性气质+低成熟→旧的 4 类（兼容）。
+function defenseStyleOf(t: Temperament, values: ValueEntry[], maturity = 0): string {
   const v = (k: string): number => values.find((x) => x.key === k)?.weight ?? 0;
-  if (t.playfulness >= 0.6) return '幽默岔开'; // 玩心高 → 用玩笑化解
-  if (v('self_protection') >= 0.45 || v('guardedness') >= 0.4 || (t.resilience >= 1.4 && t.warmth < 0.45)) return '变硬反击'; // 强自保/坚硬
-  if (t.warmth >= 0.6 && t.reserve < 0.5) return '讨好维系'; // 暖而外向 → 受伤仍想维系、讨好
-  return '退缩回避'; // 内向/其余 → 缩回安全壳
+  const guard = v('self_protection') >= 0.45 || v('guardedness') >= 0.4 || (t.resilience >= 1.4 && t.warmth < 0.45);
+  // 成熟层（高成熟 或 天生玩心很重）：化解、转化、稳得住。
+  if (maturity >= 0.6 || t.playfulness >= 0.62) {
+    if (t.playfulness >= 0.55) return '幽默化解'; // humor
+    if (t.conscientiousness >= 0.6 || t.drive >= 0.6) return '升华转化'; // sublimation：把情绪转成做点什么
+    return '克制承受'; // suppression：稳住、先扛着
+  }
+  // 神经质层（中等成熟）：抽离/讨好/压抑。
+  if (maturity >= 0.3) {
+    if (guard) return '理智化抽离'; // intellectualization
+    if (t.warmth >= 0.6 && t.reserve < 0.5) return '讨好维系'; // reaction-formation 取向
+    return t.reserve >= 0.55 ? '压抑回避' : '转移宣泄'; // repression / displacement
+  }
+  // 不成熟层（青涩/低成熟）：反击/讨好/退缩（旧的 3 类）。
+  if (guard) return '变硬反击'; // projection / passive-aggression
+  if (t.warmth >= 0.6 && t.reserve < 0.5) return '讨好维系';
+  return '退缩回避'; // withdrawal / denial
+}
+// 防御 → 应对【模式】（给目标生成用，与具体层级标签解耦）：缩回 / 立边界 / 维系 / 化开。
+function defenseModeOf(label: string): 'withdraw' | 'harden' | 'appease' | 'channel' {
+  if (label.includes('讨好')) return 'appease';
+  if (label.includes('退缩') || label.includes('压抑')) return 'withdraw';
+  if (label.includes('反击') || label.includes('理智') || label.includes('转移')) return 'harden';
+  return 'channel'; // 幽默/升华/克制 = 成熟 → 化开、转成表达/行动
 }
 // 先天依恋底色（由冻结气质派生）：偏置她如何读关系、多快敢亲近、失联多敏感。
 // 先天依恋底色（installment·2D 依恋，Brennan ECR / Bartholomew & Horowitz 四型）：
@@ -1206,11 +1228,12 @@ function computeGoals(st: RState, bonds: Record<string, Bond>): Goal[] {
   if (dear === 0 && st.soma.connection.value < 0.1) goals.push({ kind: 'connect', intent: '想和谁建立点真正有意义的连接', weight: 0.45 }); // 意义/连接缺口
   // 受威胁时（安全感低），防御机制决定她要什么：退缩→缩回、变硬→护住、讨好→仍想维系（幽默岔开走表达层）。
   if (st.soma.safety.value < 0.4) {
-    const ds = defenseStyleOf(t, st.values);
+    const mode = defenseModeOf(defenseStyleOf(t, st.values, st.maturity));
     const w = r3(0.5 - st.soma.safety.value);
-    if (ds === '退缩回避') goals.push({ kind: 'restore', intent: '想缩回安全的壳里、独自待一会儿', weight: w });
-    else if (ds === '变硬反击') goals.push({ kind: 'grow', intent: '想护住自己、立起边界', weight: w });
-    else if (ds === '讨好维系') { const tgt = Object.entries(bonds).find(([, b]) => !b.ended && b.closeness >= 0.3); if (tgt) goals.push({ kind: 'connect', target: tgt[0], intent: `怕失去，想确认和${tgt[1].displayRef}还好`, weight: w }); }
+    if (mode === 'withdraw') goals.push({ kind: 'restore', intent: '想缩回安全的壳里、独自待一会儿', weight: w });
+    else if (mode === 'harden') goals.push({ kind: 'grow', intent: '想护住自己、立起边界', weight: w });
+    else if (mode === 'appease') { const tgt = Object.entries(bonds).find(([, b]) => !b.ended && b.closeness >= 0.3); if (tgt) goals.push({ kind: 'connect', target: tgt[0], intent: `怕失去，想确认和${tgt[1].displayRef}还好`, weight: w }); }
+    else goals.push({ kind: 'grow', intent: '想把这点情绪化开、转成做点什么', weight: r3(w * 0.85) }); // channel：成熟防御=化解/升华
   }
   return goals.sort((a, b) => b.weight - a.weight).slice(0, 5);
 }
@@ -1255,7 +1278,7 @@ function project(st: RState, uptoSeq: number): DerivedSnapshot {
     maturity: r3(st.maturity),
     baseline: { valence: r3(clamp(st.soma.valence.setpoint + (st.allostatic.valence ?? 0), -1, 1)), connection: r3(clamp(st.soma.connection.setpoint + (st.allostatic.connection ?? 0), -1, 1)) },
     aspirations,
-    defenseStyle: defenseStyleOf(st.temperament, st.values),
+    defenseStyle: defenseStyleOf(st.temperament, st.values, st.maturity),
     attachmentBias: attachmentBiasOf(st.temperament),
     skills: skills.list,
     riskAppetite: riskAppetiteOf(st, skills.avg),
