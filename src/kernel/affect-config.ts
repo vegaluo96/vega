@@ -30,6 +30,11 @@ export const AFFECT = {
   // 先天设定点(冻结种子)永远是锚 → 气质底色不被抹掉；习得偏移让"人生改变她的底色"且可被新的持续经历再改变。
   allostaticTau: 14 * 24 * 3600, // 基线漂移时标 ~两周（极慢：只有持续数日~数周的境遇才移动底色，一时起落不算）
   allostaticBand: 0.25, // 习得偏移上界（±0.25：底色会变明亮/低沉，但不极端、不盖过先天）
+  // —— 内生变异（installment 5）——真人静息也不是恒定：有自发的"心绪天气"。
+  // 用【确定性】不可通约周期正弦叠加（相位由 id 种子化）→ 每条命有自己的节律(个体化)、永不重复、零 RNG、V2 可重放。
+  // 幅度小(±~0.05)：是背景天气，不盖过真实反应；只微微让 valence/arousal 在基线附近有机起伏，不是死水。
+  endogenousAmp: 0.05,
+  endogenousPeriodsHours: [7.3, 19.1, 53.7], // 不可通约 → 准周期、看起来有机、长期不重复
 } as const;
 
 export type AffectTauKey = keyof typeof AFFECT.tau;

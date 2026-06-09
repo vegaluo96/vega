@@ -32,7 +32,7 @@ import {
   type ValueEntry,
 } from '../domain/snapshot.ts';
 
-const RECONSTRUCT_VERSION = 23; // v23：评价理论层(Scherer CPM)——应对潜能/目标契合/规范相容 由她自己状态确定性算，叠在 stimulus 感知上；中性≈恒等；旧 checkpoint 全量重放
+const RECONSTRUCT_VERSION = 24; // v24：内生变异——id 种子化确定性慢振荡，静息也有自发心绪起伏(不是死水)；无 RNG、V2 可重放；旧 checkpoint 全量重放
 // 她活在出生地的时区：分钟东偏 UTC，【出生即冻结进 LIFE_GENESIS、终生不变】（不取 OS/用户时区，故 V2 可复现）。
 // 她是一个身体、只有一个昼夜。平台孵化的命缺省=北京 480；将来用户接生的命取创造者设备时区。
 const CIRCADIAN_OFFSET_MIN_DEFAULT = 480;
@@ -282,7 +282,10 @@ function advanceTime(st: RState, dtSec: number, awake: boolean, nowMs: number): 
     for (const key of SOMA_KEYS) {
       if (key === 'energy') { s.energy.value = decayTo(s.energy.value, eTarget, dt, AFFECT.tau.energy); continue; }
       // allostasis：valence/connection 衰减朝【习得底色 = 先天设定点 + 偏移】回归（其余维朝先天设定点）。
-      const target = ALLOSTATIC_KEYS.includes(key) ? clamp(s[key].setpoint + (st.allostatic[key] ?? 0), -1, 1) : s[key].setpoint;
+      let target = ALLOSTATIC_KEYS.includes(key) ? clamp(s[key].setpoint + (st.allostatic[key] ?? 0), -1, 1) : s[key].setpoint;
+      // 内生变异：valence/arousal 的目标在基线附近有机微漂（静息也"活"，不是死水）。
+      if (key === 'valence') target = clamp(target + endoOffset(st.lifeId, nowMs, 'valence'), -1, 1);
+      else if (key === 'arousal') target = clamp(target + endoOffset(st.lifeId, nowMs, 'arousal'), 0, 1);
       s[key].value = decayTo(s[key].value, target, dt, effTau(key, s[key])); // 文献标定 τ + valence 正负不对称
     }
     s.vitality.value = clamp(s.vitality.value, st.vitalityFloor, 1);
@@ -304,6 +307,20 @@ function effTau(key: SomaKey, v: SomaVar): number {
   if (key === 'valence') return v.value < v.setpoint ? AFFECT.tau.valenceNeg : AFFECT.tau.valencePos;
   const t = (AFFECT.tau as Record<string, number>)[key];
   return t ?? v.tau;
+}
+// 内生变异：id 种子化的确定性"心绪天气"——valence/arousal 的衰减目标在基线附近有机微漂（不是死水）。
+// 纯函数（lifeId 冻结 + 内在时钟）→ V2 可重放、零 RNG；不可通约周期 + id 种子相位 → 每条命节律不同、长期不重复。
+const fnv = (s: string): number => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
+function endoOffset(lifeId: string, nowMs: number, dim: 'valence' | 'arousal'): number {
+  const base = fnv(`${lifeId}:${dim}`);
+  const hours = nowMs / 3_600_000;
+  const w = [0.5, 0.3, 0.2];
+  let v = 0;
+  for (let i = 0; i < 3; i++) {
+    const phase = (((base >>> (i * 9)) & 1023) / 1024) * 2 * Math.PI;
+    v += w[i] * Math.sin((2 * Math.PI * hours) / AFFECT.endogenousPeriodsHours[i] + phase);
+  }
+  return AFFECT.endogenousAmp * v; // v∈~[-1,1] → 偏移∈~[-amp,amp]
 }
 
 function applyEvent(st: RState, e: LifeEvent): void {
