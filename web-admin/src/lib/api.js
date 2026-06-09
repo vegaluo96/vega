@@ -34,6 +34,9 @@ export const api = {
   testWorld: () => req('POST', '/admin/world-config/test'),
   createLife: (id) => req('POST', '/admin/lives', { id }),
   chainTrace: (body) => req('POST', '/admin/chain-trace', body),
+  health: () => req('GET', '/admin/health'),
+  relations: (id) => req('GET', `/admin/lives/${id}/relations`),
+  thread: (id, rel) => req('GET', `/admin/lives/${id}/thread?rel=${encodeURIComponent(rel)}`),
 };
 export const setSession = (t) => session.set(t || '');
 export const clearSession = () => session.set('');

@@ -13,7 +13,7 @@
   let lastLoaded = 0;
 
   const TABS = [['overview', '总览'], ['activity', '活动流'], ['recharges', '充值'], ['users', '用户']];
-  const TAB_LABEL = { overview: '总览', activity: '活动流', recharges: '充值审批', users: '用户', life: '生命详情', birth: '接生生命体', model: '模型配置', social: '社交边界', world: '世界源', chain: '链路检查' };
+  const TAB_LABEL = { overview: '总览', activity: '活动流', recharges: '充值审批', users: '用户', life: '生命详情', birth: '接生生命体', model: '模型配置', social: '社交边界', world: '世界源', chain: '链路检查', convo: '对话监督' };
 
   // 模型配置（仅 owner）表单状态
   let mform = { baseUrl: '', model: '', apiKey: '', timeoutMs: 20000, perceive: false, perceiveModel: '' };
@@ -32,10 +32,32 @@
     catch (e) { ctErr = e.message; } finally { ctRunning = false; }
   }
 
+  // 系统健康（总览卡片，仅 owner 拉）：模型/感知、自主预算、省 token 闲置门控、微信通道、规模、计费、治理。
+  let health = null;
+  // 对话监督（仅 owner）：读她和各用户/同类的【真实】来回——不是模拟，是落库的私聊原文。
+  let convoLife = '', convoRels = [], convoRel = '', convoRelName = '', convoThread = [], convoMsg = '';
+  async function loadConvoRels() {
+    convoMsg = ''; convoThread = []; convoRel = ''; convoRelName = '';
+    if (!convoLife.trim()) { convoMsg = '填个生命体 ID'; return; }
+    try {
+      convoRels = (await api.relations(convoLife.trim())).relations ?? [];
+      if (!convoRels.length) convoMsg = '这条命还没和谁聊过';
+    } catch (e) { convoMsg = '✗ ' + e.message; convoRels = []; }
+  }
+  async function openThread(r) {
+    convoRel = r.rel; convoRelName = r.name; convoThread = []; convoMsg = '';
+    try { convoThread = (await api.thread(convoLife.trim(), r.rel)).messages ?? []; }
+    catch (e) { convoMsg = '✗ ' + e.message; }
+  }
+
   async function load() {
     error = '';
     try {
-      if (tab === 'overview') { const d = await api.overview(); role = d.role; data = d; }
+      if (tab === 'overview') {
+        const d = await api.overview(); role = d.role; data = d;
+        // 系统健康卡片：拿不到（非 owner / 失败）也不挡总览主表。
+        try { health = await api.health(); } catch { health = null; }
+      }
       else if (tab === 'activity') data = { rows: await api.activity() };
       else if (tab === 'recharges') data = { rows: await api.recharges() };
       else if (tab === 'users') data = { rows: await api.users() };
@@ -169,6 +191,7 @@
       {#if role === 'owner'}<button class="navi" class:on={tab === 'model'} on:click={() => go('model')}>模型</button>{/if}
       {#if role === 'owner'}<button class="navi" class:on={tab === 'social'} on:click={() => go('social')}>社交</button>{/if}
       {#if role === 'owner'}<button class="navi" class:on={tab === 'world'} on:click={() => go('world')}>世界</button>{/if}
+      {#if role === 'owner'}<button class="navi" class:on={tab === 'convo'} on:click={() => go('convo')}>对话</button>{/if}
       {#if role === 'owner'}<button class="navi" class:on={tab === 'chain'} on:click={() => go('chain')}>链路</button>{/if}
     </nav>
     <button class="navi logout" on:click={clearSession}>登出</button>
@@ -213,6 +236,61 @@
               </tbody>
             </table>
           </div>
+        </AdminSection>
+
+        {#if health}
+          <AdminSection title="系统健康" subtitle="嘴/耳 · 自主预算 · 省 token 门控 · 通道 · 规模">
+            <span slot="action" class="tag {health.model.active ? 'ok' : 'sensitive'}">{health.model.active ? '模型在线 · ' + health.model.model : '离线模板嘴'}</span>
+            <div class="panel pad hgrid">
+              <div class="hcell"><span class="hk">嘴（模型）</span><span class="hv">{health.model.active ? health.model.model : '离线模板嘴'}</span><span class="hsub">{health.model.active ? '在线 · 超时 ' + health.model.timeoutMs + 'ms' : '模型挂了也照样活'}</span></div>
+              <div class="hcell"><span class="hk">耳（感知）</span><span class="hv">{health.model.perceive ? '开 · 模型当耳朵' : '关 · 退回词表'}</span><span class="hsub">{health.model.perceive ? health.model.perceiveModel : '对微妙语气理解粗'}</span></div>
+              <div class="hcell"><span class="hk">自主预算</span><span class="hv">{health.autonomousBudget.used} / {health.autonomousBudget.cap}</span><span class="hsub">每 {Math.round(health.autonomousBudget.windowMs / 60000)} 分钟窗口 · 反失控</span></div>
+              <div class="hcell"><span class="hk">省 token 门控</span><span class="hv">{health.audience.present ? '有听众 · 自主对外开' : '闲置静默'}</span><span class="hsub">{health.audience.present ? '最近 ' + health.audience.idleMinutes + ' 分内有人说话' : '已闲 ' + health.audience.idleMinutes + ' 分（>' + health.audience.gateMinutes + ' 分只内省、不烧 token）'}</span></div>
+              <div class="hcell"><span class="hk">微信通道</span><span class="hv">{health.channels.length} 个</span><span class="hsub">{health.channels.length ? health.channels.map((c) => c.life + '←' + c.user).slice(0, 4).join(' · ') : '暂无绑定'}</span></div>
+              <div class="hcell"><span class="hk">规模</span><span class="hv">{health.scale.awake}/{health.scale.lives} 醒 · {health.scale.users} 用户</span><span class="hsub">累计 {health.scale.events} 事件（append-only）</span></div>
+              <div class="hcell"><span class="hk">计费</span><span class="hv">{health.billing.costPerReply} 心意 / 条</span><span class="hsub">扁平计费 · 模型挂了走 fallback</span></div>
+              <div class="hcell"><span class="hk">治理</span><span class="hv">能力 deny-all</span><span class="hsub">奖励黑客被契约①结构性阻断</span></div>
+            </div>
+          </AdminSection>
+        {/if}
+      {/if}
+
+      {#if tab === 'convo'}
+        <AdminSection title="对话监督" subtitle="读她和【某个人/同类】的真实来回——落库的私聊原文，不是模拟。仅 owner，只读。">
+          <span slot="action" class="tag sensitive">含用户私聊 · 仅 owner</span>
+          <div class="panel pad mform">
+            <div class="frow">
+              <label class="fld"><span class="flab">生命体 ID</span><input class="ainput" bind:value={convoLife} placeholder="如 sirius" on:keydown={(e) => e.key === 'Enter' && loadConvoRels()} /></label>
+              <div class="fld" style="flex:none;justify-content:flex-end"><button class="abtn" on:click={loadConvoRels}>看她和谁聊过</button></div>
+            </div>
+            {#if convoMsg}<p class="msg" class:bad={convoMsg.startsWith('✗')}>{convoMsg}</p>{/if}
+          </div>
+
+          {#if convoRels.length}
+            <div class="convo-wrap">
+              <div class="panel rel-list">
+                {#each convoRels as r}
+                  <button class="rel-item" class:on={convoRel === r.rel} on:click={() => openThread(r)}>
+                    <span class="ckind k{r.kind === '同类' ? 'p' : 'h'}">{r.kind}</span>
+                    <b class="rel-name">{r.name}</b>
+                    <span class="rel-meta dim">{r.msgs} 条 · 亲近 {Math.round(r.closeness * 100)}{r.ended ? ' · 已离' : ''}</span>
+                    <span class="rel-ago faint">{ago(Date.parse(r.lastAt))}</span>
+                  </button>
+                {/each}
+              </div>
+              <div class="panel pad thread">
+                {#if convoRel}
+                  <div class="thread-head">与「{convoRelName}」的来回 · 最近 {convoThread.length} 条</div>
+                  {#each convoThread as msg}
+                    <div class="bubble-row {msg.who}">
+                      <div class="bubble {msg.who}"><span class="btime faint">{bj(msg.at)}</span>{msg.text}</div>
+                    </div>
+                  {/each}
+                  {#if convoThread.length === 0}<p class="dim empty">这段关系还没有可读的来回。</p>{/if}
+                {:else}<p class="dim empty">← 点左边任一关系，读他们的来回。</p>{/if}
+              </div>
+            </div>
+          {/if}
         </AdminSection>
       {/if}
 
@@ -472,8 +550,11 @@
             {#if v.defenseStyle}<span class="chip">受伤时{v.defenseStyle}</span>{/if}
             <span class="chip">心智成熟 {Math.round((v.maturity ?? 0) * 100)}%</span>
             <span class="chip">敢冒险 {Math.round((v.riskAppetite ?? 0.5) * 100)}%</span>
+            {#if v.sleepPressure != null}<span class="chip">困意 {Math.round(v.sleepPressure * 100)}%</span>{/if}
             {#if v.baseline}<span class="chip">底色 {v.baseline.valence > 0.06 ? '偏明亮' : v.baseline.valence < -0.06 ? '偏低沉' : '中性'}{v.baseline.connection < -0.06 ? '·偏孤' : ''}</span>{/if}
           </div>
+          {#if v.maturityFacets}<div class="dim small">成熟三面：情绪调节 {Math.round(v.maturityFacets.regulation * 100)}% · 换位视角 {Math.round(v.maturityFacets.perspective * 100)}% · 经历整合 {Math.round(v.maturityFacets.integration * 100)}%</div>{/if}
+          {#if v.socialShape}<div class="becoming" style="margin-top:6px">社会形状：{v.socialShape}</div>{/if}
           <div class="soma">
             {#each Object.entries(v.soma) as [k, x]}<span class="somacell"><span class="sk">{k}</span><span class="sv mono">{x}</span></span>{/each}
           </div>
@@ -483,7 +564,7 @@
           <div class="panel pad observe">
             {#if v.growth}<p class="obs-line"><b>此生至今</b>{v.growth}</p>{/if}
             {#if v.needs}<div class="needs">{#each Object.entries(v.needs) as [k, x]}<span class="need"><span class="nk">{({ autonomy: '自主', competence: '胜任', relatedness: '关系', novelty: '探索' })[k] ?? k}</span><span class="track"><span class="fill" style="width:{Math.round(x * 100)}%"></span></span></span>{/each}</div>{/if}
-            {#if v.interests && v.interests.length}<div class="obs-row"><span class="ol">着迷</span><span class="tags">{#each v.interests as it}<span class="tag2" class:on={it.confirmed}>{it.topic} {Math.round(it.weight * 100)}</span>{/each}</span></div>{/if}
+            {#if v.interests && v.interests.length}<div class="obs-row"><span class="ol">着迷</span><span class="tags">{#each v.interests as it}<span class="tag2" class:on={it.confirmed}>{it.topic} {Math.round(it.weight * 100)}<span class="dim">·{({ triggered: '触发', maintained: '维持', emerging: '萌芽', established: '确立' })[it.phase] ?? it.phase ?? ''}</span></span>{/each}</span></div>{/if}
             {#if v.skills && v.skills.length}<div class="obs-row"><span class="ol">学到</span><span class="tags">{#each v.skills as sk}<span class="tag2">{sk.kind} {Math.round(sk.efficacy * 100)}%<span class="dim">·{sk.n}</span></span>{/each}</span></div>{/if}
             {#if v.aspirations && v.aspirations.length}<div class="obs-row"><span class="ol">心愿</span><span class="aspir">{v.aspirations.join('；')}</span></div>{/if}
             {#if v.goals && v.goals.length}<div class="obs-row"><span class="ol">此刻想</span><span class="aspir">{v.goals.slice(0, 4).map((g) => g.intent).join('；')}</span></div>{/if}
@@ -690,6 +771,32 @@
   .hint code { background: var(--panel-2); border: 1px solid var(--border-subtle); border-radius: 4px; padding: 1px 5px; font-size: 11.5px; }
   .wta { resize: vertical; font-family: var(--mono, ui-monospace, monospace); line-height: 1.5; min-height: 96px; padding: 9px 12px; font-size: 12.5px; }
 
+  /* —— 系统健康卡片（总览）—— */
+  .hgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .hcell { display: flex; flex-direction: column; gap: 3px; background: var(--panel-2); border: 1px solid var(--border-subtle); border-radius: var(--r-sm); padding: 10px 12px; }
+  .hk { font-size: 11px; color: var(--faint-c); }
+  .hv { font-size: 14px; font-weight: 700; color: var(--text); }
+  .hsub { font-size: 11px; color: var(--muted); line-height: 1.45; }
+
+  /* —— 对话监督：左关系列表 + 右气泡线程 —— */
+  .convo-wrap { display: grid; grid-template-columns: 248px 1fr; gap: 12px; margin-top: 12px; }
+  .rel-list { display: flex; flex-direction: column; max-height: 560px; overflow: auto; }
+  .rel-item { display: grid; grid-template-columns: 40px 1fr auto; grid-template-rows: auto auto; gap: 2px 8px; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--border-subtle); padding: 9px 12px; cursor: pointer; }
+  .rel-item:hover { background: var(--panel-2); }
+  .rel-item.on { background: var(--accent-weak); box-shadow: inset 2px 0 0 var(--accent); }
+  .rel-item .ckind { grid-row: 1 / 3; align-self: center; }
+  .rel-name { font-size: 13px; }
+  .rel-meta { font-size: 11px; }
+  .rel-ago { grid-column: 3; grid-row: 1; font-size: 11px; }
+  .thread { display: flex; flex-direction: column; gap: 8px; max-height: 560px; overflow: auto; }
+  .thread-head { font-size: 12px; color: var(--faint-c); font-weight: 600; padding-bottom: 6px; border-bottom: 1px solid var(--border-subtle); position: sticky; top: -16px; background: var(--panel); }
+  .bubble-row { display: flex; }
+  .bubble-row.her { justify-content: flex-end; }
+  .bubble { max-width: 78%; padding: 8px 12px; border-radius: 12px; font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+  .bubble.user { background: var(--panel-2); border: 1px solid var(--border-subtle); border-bottom-left-radius: 3px; }
+  .bubble.her { background: var(--accent-weak); border: 1px solid var(--accent-line); border-bottom-right-radius: 3px; }
+  .btime { display: block; font-size: 10px; margin-bottom: 3px; }
+
   /* —— 平板/手机降级：侧栏转顶部，表格可横向滚动 —— */
   @media (max-width: 760px) {
     .admin { flex-direction: column; }
@@ -699,6 +806,9 @@
     nav { flex-direction: row; }
     .logout { margin-top: 0; margin-left: auto; }
     .metrics { grid-template-columns: 1fr 1fr; }
+    .hgrid { grid-template-columns: 1fr 1fr; }
+    .convo-wrap { grid-template-columns: 1fr; }
+    .rel-list { max-height: 220px; }
     .body { padding: 16px; }
     .panel { overflow-x: auto; }
   }

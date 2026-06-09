@@ -1322,6 +1322,39 @@ const server = createServer(async (req, res) => {
         if (!l) return send(res, 404, { error: 'no such life' });
         return send(res, 200, l.samples);
       }
+      // —— 对话监督·关系列表（仅 owner，含用户私聊）——她和【哪些人】聊过、按最近活跃排（必须放在 /admin/lives/:id 通配之前）。
+      if (req.method === 'GET' && path.startsWith('/admin/lives/') && path.endsWith('/relations')) {
+        if (!owner) return send(res, 403, { error: '对话监督仅 owner' });
+        const l = lifeById(path.slice('/admin/lives/'.length, -'/relations'.length));
+        if (!l) return send(res, 404, { error: 'no such life' });
+        const s = snapOf(l);
+        const agg = new Map<string, { rel: string; name: string; kind: string; msgs: number; lastAt: string }>();
+        for (const e of l.store.list()) {
+          if (e.type !== 'MESSAGE_RECEIVED' && e.type !== 'MESSAGE_SENT') continue;
+          const rel = (e.payload as { relationshipId?: string }).relationshipId;
+          if (!rel || rel === 'r_square') continue;
+          const b = s.bonds[rel];
+          const name = rel === REL ? '创造者' : rel.startsWith('u_') ? (accounts.getAccount(rel.slice(2))?.handle ?? rel) : (b?.displayRef ?? rel);
+          const cur = agg.get(rel) ?? { rel, name, kind: b?.kind === 'peer' ? '同类' : '人类', msgs: 0, lastAt: e.occurredAt };
+          cur.msgs += 1; cur.lastAt = e.occurredAt;
+          agg.set(rel, cur);
+        }
+        const rels = [...agg.values()].map((r) => ({ ...r, closeness: round3(s.bonds[r.rel]?.closeness ?? 0), trust: round3(s.bonds[r.rel]?.trust ?? 0), ended: Boolean(s.bonds[r.rel]?.ended) })).sort((a, b) => b.lastAt.localeCompare(a.lastAt));
+        return send(res, 200, { lifeId: l.id, relations: rels });
+      }
+      // —— 对话监督·读线程（仅 owner）——某条命与某个关系的来回（含模型听出的感知）。
+      if (req.method === 'GET' && path.startsWith('/admin/lives/') && path.endsWith('/thread')) {
+        if (!owner) return send(res, 403, { error: '对话监督仅 owner' });
+        const l = lifeById(path.slice('/admin/lives/'.length, -'/thread'.length));
+        if (!l) return send(res, 404, { error: 'no such life' });
+        const rel = new URLSearchParams(url.split('?')[1] ?? '').get('rel') ?? '';
+        const msgs: Array<{ who: 'user' | 'her'; text: string; at: string }> = [];
+        for (const e of l.store.list()) {
+          if (e.type === 'MESSAGE_RECEIVED') { const p = e.payload as { relationshipId?: string; content?: string }; if (p.relationshipId === rel) msgs.push({ who: 'user', text: String(p.content ?? ''), at: e.occurredAt }); }
+          else if (e.type === 'MESSAGE_SENT') { const p = e.payload as { relationshipId?: string; utterance?: string }; if (p.relationshipId === rel) msgs.push({ who: 'her', text: String(p.utterance ?? ''), at: e.occurredAt }); }
+        }
+        return send(res, 200, { lifeId: l.id, rel, messages: msgs.slice(-200) });
+      }
       // Observatory：某条命的内在深观（§22）。她的状态(soma/价值/气质/社交网)owner+steward 都看；
       // 含用户痕迹的(narrative/innerLife/chapters/记忆) 仅 owner——steward 受限(§11.2)。
       if (req.method === 'GET' && path.startsWith('/admin/lives/')) {
@@ -1353,10 +1386,10 @@ const server = createServer(async (req, res) => {
           soma: Object.fromEntries(Object.entries(s.soma).map(([k, v]) => [k, round3(v.value)])),
           values: s.values.map((v) => ({ key: v.key, weight: round3(v.weight), status: v.provenance.status, drifts: v.provenance.driftedAtSeqs.length })),
           // 灵魂内观·进化与人格（全确定性派生、脱敏，owner+steward 都看——是"她现在是谁"的全貌）：
-          maturity: s.maturity, riskAppetite: s.riskAppetite, defenseStyle: s.defenseStyle, attachmentBias: s.attachmentBias,
+          maturity: s.maturity, maturityFacets: s.maturityFacets, sleepPressure: s.sleepPressure, riskAppetite: s.riskAppetite, defenseStyle: s.defenseStyle, attachmentBias: s.attachmentBias, socialShape: s.socialShape,
           becoming: s.becoming, growth: s.growth, baseline: s.baseline, // baseline=习得底色(allostasis)：先天设定点+持续经历的漂移
-          needs: s.needs, // 内在需求当前水平（低=缺口→欲望）
-          interests: s.interests.map((it) => ({ topic: it.topic, weight: it.weight, confirmed: it.status === 'confirmed' })),
+          needs: s.needs, // SDT 三需求 + 探索（低=缺口→欲望）
+          interests: s.interests.map((it) => ({ topic: it.topic, weight: it.weight, confirmed: it.status === 'confirmed', phase: it.phase })),
           skills: s.skills.map((sk) => ({ kind: sk.kind === 'muse' ? '公开表达' : sk.kind === 'reach_out' ? '主动找人' : sk.kind, efficacy: sk.efficacy, n: sk.n })),
           aspirations: s.aspirations,
           goals: s.goals.map((g) => ({ kind: g.kind, intent: g.intent, weight: g.weight })),
@@ -1371,6 +1404,20 @@ const server = createServer(async (req, res) => {
         const b = await readJson(req);
         accounts.setStatus(String(b.userId ?? ''), b.unblock ? 'active' : 'blocked');
         return send(res, 200, { ok: true });
+      }
+      // —— 系统健康（总览用）：自主预算/省token闲置门控/微信通道/模型&感知/规模。owner+steward 都看（无用户私聊）。——
+      if (req.method === 'GET' && path === '/admin/health') {
+        const idleMin = Math.round((Date.now() - lastActiveMs) / 60_000);
+        const channels = accounts.listChannels().map((c) => ({ user: accounts.getAccount(c.userId)?.handle ?? c.userId.slice(0, 6), life: c.lifeId, hasToken: !!c.botToken }));
+        return send(res, 200, {
+          model: modelStatus(),
+          autonomousBudget: autoBudget.status(),
+          audience: { present: audiencePresent(), idleMinutes: idleMin, gateMinutes: Math.round(IDLE_GATE_MS / 60_000) },
+          channels, // 微信通道
+          scale: { lives: lives.length, awake: lives.filter((l) => snapOf(l).awake).length, users: accounts.listUsers().length, events: lives.reduce((n, l) => n + l.store.version(), 0) },
+          billing: { costPerReply: MODEL_COST },
+          governance: { capabilities: 'deny-all', rewardHacking: 'structurally-prevented(契约①)' },
+        });
       }
       return send(res, 404, { error: 'not found' });
     }
