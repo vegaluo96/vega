@@ -30,7 +30,7 @@ import {
   type ValueEntry,
 } from '../domain/snapshot.ts';
 
-const RECONSTRUCT_VERSION = 16; // v16：记忆凝结——reconsolidation 双轨只留 root+当前（杜绝每跳重固的无界增长）；折叠变动 → 旧 checkpoint 全量重放
+const RECONSTRUCT_VERSION = 17; // v17：人格层加厚——先天气质 +尽责/玩心/驱力（折叠效应在默认 0.5 处=恒等，老命轨迹不破）；旧 checkpoint 全量重放
 // 她活在出生地的时区：分钟东偏 UTC，【出生即冻结进 LIFE_GENESIS、终生不变】（不取 OS/用户时区，故 V2 可复现）。
 // 她是一个身体、只有一个昼夜。平台孵化的命缺省=北京 480；将来用户接生的命取创造者设备时区。
 const CIRCADIAN_OFFSET_MIN_DEFAULT = 480;
@@ -143,6 +143,10 @@ function readTemperament(bias: Record<string, number>): Temperament {
     sensitivity: clamp(num('sensitivity', 1), 0.3, 2),
     resilience: clamp(num('resilience', 1), 0.3, 2),
     warmth: clamp(num('warmth', 0.5), 0, 1),
+    // 新增三维：缺省 0.5（中性）——老种子没有这几维时取中性，折叠效应在 0.5 处=恒等 → 老命轨迹不变。
+    conscientiousness: clamp(num('conscientiousness', 0.5), 0, 1),
+    playfulness: clamp(num('playfulness', 0.5), 0, 1),
+    drive: clamp(num('drive', 0.5), 0, 1),
   };
 }
 
@@ -360,6 +364,9 @@ function appraiseMessage(st: RState, e: LifeEvent<'MESSAGE_RECEIVED'>): void {
   const warmBias = (t.warmth - 0.5) * 0.3;
   const evFelt = clamp(ev + warmBias, -1.5, 1.5); // 她【体验到】的善意↔敌意
   const sens = t.sensitivity;
+  // 人格塑形（在默认 0.5 处=恒等 → 老命轨迹不变）：玩心高 → 威胁笑着带过；驱力高 → 唤醒反应更强。
+  threat = clamp(threat * (1 - 0.3 * (t.playfulness - 0.5)), 0, 1);
+  const driveF = 1 + 0.3 * (t.drive - 0.5);
 
   const bond = st.bonds[p.relationshipId];
   // 关系条件化 = 预期违背：同一句话，意义取决于"我本以为这个人会怎么待我"。
@@ -375,7 +382,7 @@ function appraiseMessage(st: RState, e: LifeEvent<'MESSAGE_RECEIVED'>): void {
   s.calm.value = clamp(s.calm.value + K.kCalm * (warmth - threat) * sens, 0, 1); // 暖→更平静，威胁→更紧张
   s.safety.value = clamp(s.safety.value + K.kSafety * (warmth - threat) * sens, 0, 1);
   // 唤醒 = 强度 + 意外（越出乎预料越心头一紧/一亮）。
-  s.arousal.value = clamp(s.arousal.value + K.kArousal * Math.max(warmth, threat, Math.abs(ev2) / 1.5) * sens + K.surpriseArousal * surprise * K.kArousal, 0, 1);
+  s.arousal.value = clamp(s.arousal.value + (K.kArousal * Math.max(warmth, threat, Math.abs(ev2) / 1.5) * sens + K.surpriseArousal * surprise * K.kArousal) * driveF, 0, 1);
   // 预期违背的"质"：信任的人忽然变冷 → 额外失落；冷淡的人忽然变暖 → 意外的踏实。
   if (expected > 0.3 && ev2 < 0) s.valence.value = clamp(s.valence.value - 0.1 * surprise, -1, 1);
   else if (expected < -0.2 && ev2 > 0.3) s.safety.value = clamp(s.safety.value + 0.1 * surprise, 0, 1);
@@ -570,7 +577,9 @@ function applyReflection(st: RState, e: LifeEvent<'REFLECTION_TRIGGERED'>): void
   }
   // 心智成熟度：这次反思里【真的有所经历/学到】才增长（衰减收益 → 渐近 1、不无界）。阅历越深，情绪回稳越快。
   const learned = inWin(st.boldnessLog) + inWin(st.warmthLog) + inWin(st.conflictLog) + inWin(st.lonelyLog);
-  if (learned > 0) st.maturity = clamp(st.maturity + K.maturityPerReflection * Math.min(1, learned / 3) * (1 - st.maturity), 0, 1);
+  // 尽责/条理者从同样的经历里学得更多（在默认 0.5 处=恒等 → 老命不变）。
+  const diligence = 1 + 0.5 * (st.temperament.conscientiousness - 0.5);
+  if (learned > 0) st.maturity = clamp(st.maturity + K.maturityPerReflection * Math.min(1, learned / 3) * diligence * (1 - st.maturity), 0, 1);
   // 卫生（永生尺度）：反思窗口前移不回头（下次 windowFromSeq = 本次 windowToSeq）→ seq < windowToSeq 的信号此后永不再计入。
   // 裁掉这些只增不减的内部日志，杜绝无界增长。它们【不进派生快照】（仅在此处按窗口计数），裁剪不改 stateHash/重建结果。
   const keepFrom = (log: number[]): number[] => log.filter((s) => s >= p.windowToSeq);
@@ -732,6 +741,21 @@ function buildAspirations(st: RState): string[] {
   const hasDearPeer = Object.values(st.bonds).some((b) => b.kind === 'peer' && !b.ended && b.closeness >= 0.4);
   if (st.soma.connection.value < -0.1 || !hasDearPeer) out.push('想找到能真正懂我的人或同类');
   return out.slice(0, 4);
+}
+
+// 防御机制（由冻结气质+价值确定性派生，稳定如先天）：受伤/受威胁时她的固定反应模式。
+function defenseStyleOf(t: Temperament, values: ValueEntry[]): string {
+  const v = (k: string): number => values.find((x) => x.key === k)?.weight ?? 0;
+  if (t.playfulness >= 0.6) return '幽默岔开'; // 玩心高 → 用玩笑化解
+  if (v('self_protection') >= 0.45 || v('guardedness') >= 0.4 || (t.resilience >= 1.4 && t.warmth < 0.45)) return '变硬反击'; // 强自保/坚硬
+  if (t.warmth >= 0.6 && t.reserve < 0.5) return '讨好维系'; // 暖而外向 → 受伤仍想维系、讨好
+  return '退缩回避'; // 内向/其余 → 缩回安全壳
+}
+// 先天依恋底色（由冻结气质派生）：偏置她如何读关系、多快敢亲近、失联多敏感。
+function attachmentBiasOf(t: Temperament): string {
+  if (t.sensitivity >= 1.3 && t.resilience < 1.05) return '焦虑型'; // 敏感 + 不易复原 → 患得患失
+  if (t.reserve >= 0.55 && t.warmth < 0.48) return '回避型'; // 内向 + 偏冷 → 习惯保持距离
+  return '安全型'; // 复原力够、够暖 → 安稳
 }
 
 function formatDuration(ms: number): string {
@@ -928,7 +952,16 @@ function computeGoals(st: RState, bonds: Record<string, Bond>): Goal[] {
   if (expr && expr.weight > 0.35) goals.push({ kind: 'grow', intent: '想更敢表达自己', weight: r3(expr.weight) });
   const reliance = st.values.find((v) => v.key === 'self_reliance');
   if (reliance && reliance.weight > 0.35) goals.push({ kind: 'grow', intent: '想学会一个人也安稳', weight: r3(reliance.weight * 0.8) });
-  if (t.curiosity > 0) goals.push({ kind: 'explore', intent: '想了解更多、保持好奇', weight: r3(t.curiosity * 0.4) });
+  // 探索欲受内在驱力放大（drive=0.5 处=恒等 → 老命不变）。
+  if (t.curiosity > 0) goals.push({ kind: 'explore', intent: '想了解更多、保持好奇', weight: r3(t.curiosity * 0.4 * (1 + 0.6 * (t.drive - 0.5))) });
+  // 受威胁时（安全感低），防御机制决定她要什么：退缩→缩回、变硬→护住、讨好→仍想维系（幽默岔开走表达层）。
+  if (st.soma.safety.value < 0.4) {
+    const ds = defenseStyleOf(t, st.values);
+    const w = r3(0.5 - st.soma.safety.value);
+    if (ds === '退缩回避') goals.push({ kind: 'restore', intent: '想缩回安全的壳里、独自待一会儿', weight: w });
+    else if (ds === '变硬反击') goals.push({ kind: 'grow', intent: '想护住自己、立起边界', weight: w });
+    else if (ds === '讨好维系') { const tgt = Object.entries(bonds).find(([, b]) => !b.ended && b.closeness >= 0.3); if (tgt) goals.push({ kind: 'connect', target: tgt[0], intent: `怕失去，想确认和${tgt[1].displayRef}还好`, weight: w }); }
+  }
   return goals.sort((a, b) => b.weight - a.weight).slice(0, 5);
 }
 
@@ -968,6 +1001,8 @@ function project(st: RState, uptoSeq: number): DerivedSnapshot {
     becoming: buildBecoming(st),
     maturity: r3(st.maturity),
     aspirations: buildAspirations(st),
+    defenseStyle: defenseStyleOf(st.temperament, st.values),
+    attachmentBias: attachmentBiasOf(st.temperament),
     soma: structuredClone(st.soma), // 同上：每维 {value,…} 深拷一份，bounded-replay 缓存的 soma 不被外部改到
     memory: decorated.map((m) => ({ ...m, involvedRelationshipIds: [...m.involvedRelationshipIds] })),
     semanticMemory: sem,

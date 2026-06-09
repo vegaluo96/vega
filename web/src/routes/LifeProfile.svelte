@@ -44,6 +44,7 @@
 
     <section class="mod">
       <h2 class="section-title">先天气质</h2>
+      {#if p.mbti}<div class="chips"><span class="chip strong">{p.mbti}</span>{#if p.attachmentBias}<span class="chip">{p.attachmentBias}依恋</span>{/if}{#if p.defenseStyle}<span class="chip">受伤时{p.defenseStyle}</span>{/if}</div>{/if}
       <p class="temper">{p.temperament}</p>
     </section>
 
@@ -141,6 +142,9 @@
   .faint { color: var(--muted); font-size: var(--fs-sm); margin: 10px 0 0; }
 
   .temper { color: var(--text); line-height: 1.7; font-size: var(--fs-body); margin: 0; }
+  .chips { display: flex; flex-wrap: wrap; gap: var(--s2); margin-bottom: 10px; }
+  .chip { font-size: var(--fs-sm); padding: 3px 10px; border-radius: var(--r-pill); color: var(--muted); border: 1px solid var(--border); }
+  .chip.strong { color: var(--text); font-weight: 700; letter-spacing: 0.06em; border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); }
   .mt { margin-top: 12px; }
   .aspir { margin: 0; padding-left: 1.1em; }
   .aspir li { color: var(--text); line-height: 1.7; font-size: var(--fs-body); }

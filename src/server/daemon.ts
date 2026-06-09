@@ -574,8 +574,21 @@ function tempLabel(t: DerivedSnapshot['temperament']): string {
     t.sensitivity >= 1.3 ? '情绪敏感' : t.sensitivity <= 0.7 ? '情绪沉稳' : '情绪中性',
     t.resilience >= 1.3 ? '复原快' : t.resilience <= 0.7 ? '恢复慢' : '复原中性',
     t.warmth >= 0.6 ? '天生暖' : t.warmth <= 0.4 ? '偏冷静' : '温度中性',
+    t.conscientiousness >= 0.65 ? '自律有条理' : t.conscientiousness <= 0.35 ? '随性' : '尽责中性',
+    t.playfulness >= 0.65 ? '爱玩爱笑' : t.playfulness <= 0.35 ? '一本正经' : '玩心中性',
+    t.drive >= 0.7 ? '炽烈执着' : t.drive <= 0.3 ? '慵懒随性' : '驱力中性',
   ];
   return tags.join(' · ');
+}
+// MBTI 风格的【展示标签】——由连续气质维度确定性投影出来的"熟悉的把手"。
+// 引擎真相仍是连续维度（避免 16 格同质化）；这只是给用户一个一眼能认的代号。
+function mbtiOf(t: DerivedSnapshot['temperament']): string {
+  return (
+    (t.reserve < 0.5 ? 'E' : 'I') +            // 外向/内向 ← reserve
+    (t.curiosity >= 0.5 ? 'N' : 'S') +         // 直觉/实感 ← 好奇/开放
+    (t.warmth >= 0.5 ? 'F' : 'T') +            // 情感/思考 ← 暖意
+    (t.conscientiousness >= 0.5 ? 'J' : 'P')   // 判断/感知 ← 尽责
+  );
 }
 function view(life: Life, s: DerivedSnapshot): Record<string, unknown> {
   const b = s.bonds[REL];
@@ -979,6 +992,8 @@ const server = createServer(async (req, res) => {
           interests: s.interests.slice(0, 8).map((it) => ({ topic: it.topic, weight: it.weight, confirmed: it.status === 'confirmed' })),
           growth: s.growth, becoming: s.becoming, // 阅历 + 正在成为的我（脱敏，不含任何用户）——让"持续进化的独立自我"看得见、不同质化
           maturity: s.maturity, aspirations: s.aspirations, // 心智成熟度 + 长期心愿（脱敏）——持续变聪明 + 独立意志看得见
+          defenseStyle: s.defenseStyle, attachmentBias: s.attachmentBias, // 防御机制 + 依恋底色（脱敏）——人格更立体
+          mbti: mbtiOf(s.temperament), // MBTI 风格展示标签（由连续维度投影，仅作熟悉把手）
           musings: musings.slice(-20).reverse(),
         });
       }

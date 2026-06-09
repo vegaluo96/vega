@@ -59,6 +59,9 @@ export interface Temperament {
   reserve: number; // [0,1] 社交保留/内向：越高越慢敞开、越少主动开口
   sensitivity: number; // [0.3,2] 情绪敏感：appraisal 对内稳态的放大（1=中性）
   resilience: number; // [0.3,2] 复原力：向设定点恢复的快慢（1=中性）
+  conscientiousness: number; // [0,1] 尽责/条理：越高越自律、有始有终、做事精准（缺省 0.5=中性，老种子兼容）
+  playfulness: number; // [0,1] 玩心/幽默：越高越爱开玩笑、笑着带过（缺省 0.5）
+  drive: number; // [0,1] 内在驱力/强度：越高越炽烈执着地追心愿（缺省 0.5）
   warmth: number; // [0,1] 天生暖意：读人的乐观↔戒备底色（0.5=中性）
 }
 
@@ -132,6 +135,8 @@ export interface DerivedSnapshot {
   becoming: string; // 我正在成为的我：由 confirmed 价值 + 兴趣 + 气质合成的演化中独立自我（脱敏）
   maturity: number; // 心智成熟度 [0,1]：随阅历缓慢累积（持续变聪明、情绪更稳），独立于先天气质
   aspirations: string[]; // 长期心愿（独立意志）：从 confirmed 价值/兴趣/牵挂确定性沉淀的"她想去的方向"
+  defenseStyle: string; // 防御机制（由冻结气质+价值派生）：受伤/受威胁时的固定反应——退缩/变硬/幽默岔开/讨好
+  attachmentBias: string; // 先天依恋底色（由冻结气质派生）：安全/焦虑/回避——偏置她如何读关系、多快敢亲近
   soma: Soma;
   memory: MemoryEntry[];
   semanticMemory: SemanticMemory[]; // 经历压缩成的"理解"（遗忘即抽象，纯派生）

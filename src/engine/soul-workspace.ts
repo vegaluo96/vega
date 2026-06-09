@@ -34,6 +34,12 @@ function personaOf(t: Temperament): string {
   else if (t.warmth <= 0.45) parts.push('慢热、不轻易亲近');
   if (t.resilience >= 1.5) parts.push('心很稳、不易被击垮、能自处');
   else if (t.resilience <= 0.75) parts.push('容易受影响、需要被接住');
+  if (t.conscientiousness >= 0.65) parts.push('自律、有条理、有始有终');
+  else if (t.conscientiousness <= 0.35) parts.push('随性、不拘小节');
+  if (t.playfulness >= 0.65) parts.push('爱开玩笑、说话轻盈');
+  else if (t.playfulness <= 0.35) parts.push('一本正经、认真');
+  if (t.drive >= 0.7) parts.push('炽烈、对在意的事很执着');
+  else if (t.drive <= 0.3) parts.push('慵懒、随遇而安');
   return parts.join('，') || '平和、如实';
 }
 
@@ -121,7 +127,9 @@ export function deriveWorkspace(snap: DerivedSnapshot, relationshipId: Relations
     : '';
   // 长期心愿（独立意志）：让她说话带着"自己要去的方向"，不只被动回应——这也是反同质化的关键。
   const aspir = (snap.aspirations ?? []).length ? `\n（我心里一直朝着几件事走：${snap.aspirations.slice(0, 2).join('；')}。）` : '';
-  const selfFacts = selfCore + understanding + recall + socialNote + preoccupation + aspir;
+  // 防御机制 + 依恋底色：她对自己的"受伤时怎么反应、在关系里什么底色"的自知（让性格在分寸里显出来，不千篇一律）。
+  const style = (snap.defenseStyle || snap.attachmentBias) ? `\n（我清楚自己：被触动时我容易${snap.defenseStyle}，在关系里偏${snap.attachmentBias}。）` : '';
+  const selfFacts = selfCore + understanding + recall + socialNote + preoccupation + aspir + style;
 
   // 全定性、无数字：只给"嘴"把握语气，不给它可复述的指标。
   const stateSummary =
