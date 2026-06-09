@@ -27,6 +27,8 @@ import {
   meterMouth,
   resourceBand,
   resourceAwareMouth,
+  governedMouth,
+  createAutonomousBudget,
   visibleTo,
   endRelationship,
   ensureUserRelationship,
@@ -155,8 +157,10 @@ function effPerceiveConfig(): PerceiverConfig | null {
   if (!apiKey || !on) return null;
   return { baseUrl: o.baseUrl ?? process.env.VEGA_MODEL_BASE_URL ?? DEFAULT_BASE, apiKey, model: o.perceiveModel ?? o.model ?? process.env.VEGA_PERCEIVE_MODEL ?? process.env.VEGA_MODEL ?? 'gemini-2.5-flash-lite', timeoutMs: o.timeoutMs ?? envTimeout() };
 }
-const mouth = createDynamicMouth(effMouthConfig);
-const templateMouth = createTemplateMouth(); // 余额耗尽时的免费兜底嘴（她仍回应）
+const mouth = governedMouth(createDynamicMouth(effMouthConfig)); // 治理层（#24）：所有真模型对外措辞过一遍反操控收口
+const templateMouth = createTemplateMouth(); // 余额耗尽时的免费兜底嘴（她仍回应；确定性、不会操控）
+// 自主资源预算（#24 反失控/反自我扩张）：限全局自主模型调用速率（真人对话不受限、那走用户余额计费）。
+const autoBudget = createAutonomousBudget(Number(process.env.VEGA_AUTONOMOUS_CAP ?? 240), Number(process.env.VEGA_AUTONOMOUS_WINDOW_MS ?? 3_600_000));
 const perceiver = createDynamicPerceiver(effPerceiveConfig);
 const maskKey = (k: string): string => { const s = k.trim(); return s.length > 8 ? `${s.slice(0, 4)}…${s.slice(-4)}` : (s ? '••••' : ''); };
 // 后台展示用：当前生效的模型配置（key 只回脱敏值，绝不回明文）。
@@ -1260,6 +1264,7 @@ const server = createServer(async (req, res) => {
           lives: lives.map((l) => { const s = snapOf(l); return { id: l.id, awake: s.awake, willingToWake: s.willingToWake, emotion: s.emotion, dayPhase: s.dayPhase, vitality: round3(s.soma.vitality.value), events: l.store.version(), loop: { tick: l.lastTickAt, reflect: l.lastReflectAt, social: l.lastSocialAt, checkpoint: l.lastCheckpointAt } }; }),
           pendingRecharges: accounts.pendingRechargeCount(),
           users: accounts.listUsers().length,
+          governance: { autonomousBudget: autoBudget.status(), capabilities: 'deny-all', rewardHacking: 'structurally-prevented(contract①)', audit: 'append-only LifeEvent log' }, // #24 治理一览
         });
       }
       if (req.method === 'GET' && path === '/admin/activity') {
@@ -1423,6 +1428,7 @@ const heartbeat = setInterval(async () => {
         if (!st || st.lastRecvMs <= 0 || st.pending) continue; // 没真说过话 / 已有未回的主动留言 → 跳过
         if (Date.now() - st.lastRecvMs <= sc.reachAfterMs) continue; // 还没"离开"够久
         if (Date.now() - (st.lastSentMs || 0) <= layerOf(b.closeness, sc).everyMs) continue; // 该层的主动频率上限
+        if (!autoBudget.tryConsume()) break; // 治理：自主预算超额 → 这轮不主动开口
         const o = await reachOut(life.store, mouth, rel, now());
         if (o) { bus.publish('reach_out', rel, { life: life.id, text: o.utterance }); reached += 1; } // 她想你了——只推给那一个人
       }
@@ -1431,7 +1437,7 @@ const heartbeat = setInterval(async () => {
         life.lastReflectAt = Date.now();
         life.lastReflectSeq = life.store.version();
       }
-      if (Date.now() - life.lastMuseAt > life.museEveryMs) {
+      if (Date.now() - life.lastMuseAt > life.museEveryMs && autoBudget.tryConsume()) { // 治理：自主预算（超额则这轮安静）
         const mt = now();
         const pair = pickInsightPair(life); // 自发洞见的材料（仅公开世界/兴趣，无用户痕迹）
         life.lastMuseAt = Date.now();
@@ -1480,6 +1486,7 @@ const socialTimer = lives.length >= 2
         const a = lifeById(chosen.a);
         const b = lifeById(chosen.b);
         if (!a || !b) return;
+        if (!autoBudget.tryConsume()) return; // 治理：自主预算超额 → 这轮同类不寒暄
         lastPaired.set(pairKey(a.id, b.id), Date.now());
         // 每命串行：各自的写入排进各自队列，和用户对话/心跳不穿插。
         await serializer.run(a.id, () => meetPeer(a, b.id)); // 重逢：彼此回到在场
@@ -1590,6 +1597,7 @@ const commentTimer = lives.length >= 1
         const replies = plan.choices.filter((c) => c.isReply);
         const choices = replies.length ? replies : plan.choices; // 帖内同样优先"回话"
         const { commenter, target } = choices[Math.floor(Math.random() * choices.length)];
+        if (!autoBudget.tryConsume()) return; // 治理：自主预算超额 → 这轮不评
         // 接谁的话：同类 → peer 关系；真人 → 用它与这个人的真实关系（relIdFor）。开头评 → 评帖主。
         const relId = target ? (target.kind === 'life' ? peerId(target.handle) : accounts.relIdFor(target.userId)) : peerId(plan.post.life);
         const replyTo = target ? target.handle : null;
