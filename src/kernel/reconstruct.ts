@@ -960,10 +960,22 @@ function defenseStyleOf(t: Temperament, values: ValueEntry[]): string {
   return '退缩回避'; // 内向/其余 → 缩回安全壳
 }
 // 先天依恋底色（由冻结气质派生）：偏置她如何读关系、多快敢亲近、失联多敏感。
+// 先天依恋底色（installment·2D 依恋，Brennan ECR / Bartholomew & Horowitz 四型）：
+// 从【冻结气质】确定性投出两条连续维——焦虑(怕被弃, model-of-self)×回避(怕亲密, model-of-other)——再落到四象限。
+// 纯投影、不动种子。中性气质→两维≈0.5→安全型（老命兼容）。
+function attachmentDims(t: Temperament): { anxiety: number; avoidance: number } {
+  return {
+    anxiety: clamp(0.5 + 0.35 * (t.sensitivity - 1) - 0.25 * (t.resilience - 1), 0, 1), // 敏感↑/复原力↓ → 患得患失
+    avoidance: clamp(0.5 + 0.45 * (t.reserve - 0.5) - 0.4 * (t.warmth - 0.5), 0, 1), // 内向↑/暖意↓ → 回避亲密
+  };
+}
 function attachmentBiasOf(t: Temperament): string {
-  if (t.sensitivity >= 1.3 && t.resilience < 1.05) return '焦虑型'; // 敏感 + 不易复原 → 患得患失
-  if (t.reserve >= 0.55 && t.warmth < 0.48) return '回避型'; // 内向 + 偏冷 → 习惯保持距离
-  return '安全型'; // 复原力够、够暖 → 安稳
+  const { anxiety, avoidance } = attachmentDims(t);
+  const hiA = anxiety >= 0.55, hiV = avoidance >= 0.55;
+  if (!hiA && !hiV) return '安全型'; // 低焦虑+低回避
+  if (hiA && !hiV) return '焦虑型'; // 高焦虑+低回避（专注/患得患失）
+  if (!hiA && hiV) return '疏离回避型'; // 低焦虑+高回避（冷处理、独立）
+  return '恐惧回避型'; // 高焦虑+高回避（又怕被弃又怕靠近）
 }
 
 function formatDuration(ms: number): string {

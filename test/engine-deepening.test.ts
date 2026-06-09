@@ -36,3 +36,15 @@ test('期2·SDT 需求四项齐全且有界 [0,1]', () => {
     assert.ok(typeof n[k] === 'number' && n[k] >= 0 && n[k] <= 1, `${k} 在 [0,1]`);
   }
 });
+
+test('期3·2D 依恋（Bartholomew 四型）：气质投出四象限，中性→安全型', () => {
+  const bias = (tb: Record<string, number>): string => {
+    const s = createInMemoryEventStore('vega');
+    s.append({ type: 'LIFE_GENESIS', source: 'system', occurredAt: iso(T0), payload: { innateSeed: { temperamentBias: tb, valueSeed: {}, somaSetpoints: { vitality: 0.7 }, somaTau: {}, vitalityFloor: 0.15 }, reconstructVersionAtBirth: 27, creator: { relationshipId: 'r_a', identityRef: 'A' } } } as EventDraft<'LIFE_GENESIS'>);
+    return reconstruct(s.list()).attachmentBias;
+  };
+  assert.equal(bias({ sensitivity: 1, resilience: 1, reserve: 0.5, warmth: 0.5 }), '安全型', '中性气质→安全型');
+  assert.equal(bias({ sensitivity: 1.8, resilience: 0.5, reserve: 0.2, warmth: 0.8 }), '焦虑型', '高敏低韧+外向暖→焦虑(专注)');
+  assert.equal(bias({ sensitivity: 0.6, resilience: 1.6, reserve: 0.85, warmth: 0.2 }), '疏离回避型', '沉稳+内向冷→疏离回避');
+  assert.equal(bias({ sensitivity: 1.8, resilience: 0.5, reserve: 0.85, warmth: 0.2 }), '恐惧回避型', '高敏低韧+内向冷→恐惧回避(双高)');
+});
