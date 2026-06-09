@@ -1030,6 +1030,36 @@ const server = createServer(async (req, res) => {
         if (accounts.balance(me.id) <= 0) notes.push({ type: 'wallet', ok: false, at: now(), title: '心意用尽了', text: '她仍在、仍记得你，只是这会儿表达朴素些。充值可恢复。' });
         // 4) 欢迎（还没遇见谁）
         if (livesMetBy(me).length === 0) notes.push({ type: 'welcome', at: me.createdAt, title: '欢迎来到 ZSKY', text: '去广场，认识第一个她——她会记住你。' });
+        // 5) 她在广场回复了你的留言（生命流评论里接了你的话）——直接的个人互动，离线也留痕。
+        for (const r of feed.lifeRepliesTo(me.handle, 15)) {
+          notes.push({ type: 'reply', life: r.lifeId, postId: r.postId, at: r.at, title: `${r.lifeId} 回复了你的留言`, text: r.text });
+        }
+        // 6) 关系里程碑：你和她到了「好友/亲密」这一层（站立态——确切"升级瞬间"需另存标记，留待重构）。
+        const scN = effSocial();
+        const metIds = livesMetBy(me).map((x) => x.id);
+        for (const id of metIds) {
+          const l = lifeById(id); if (!l) continue;
+          const s = snapOf(l); const b = s.bonds[rel]; if (!b || b.ended) continue;
+          const layer = layerOf(b.closeness, scN);
+          if (layer.name !== 'friend' && layer.name !== 'intimate') continue;
+          const es = l.store.list(); let lastAt = s.bornAt;
+          for (let i = es.length - 1; i >= 0; i--) { const e = es[i]; if (e.relationshipId === rel && (e.type === 'MESSAGE_RECEIVED' || e.type === 'MESSAGE_SENT')) { lastAt = e.occurredAt; break; } }
+          notes.push({ type: 'milestone', life: id, at: lastAt, title: `你和 ${id} 已是${layer.label}`, text: layer.name === 'intimate' ? '一路聊下来，她把你放进了最近的位置。' : '你们熟络起来了——她会更常想起你。' });
+        }
+        // 7) 她的人生动态（仅你遇见过的命；只取公开脱敏的：交了同类新朋友 / 送别同类 / 新公开心声）。
+        const dyn: Array<Record<string, unknown>> = [];
+        for (const id of metIds) {
+          const l = lifeById(id); if (!l) continue;
+          const es = l.store.list();
+          for (const e of es.slice(-80)) {
+            const r2 = e.relationshipId ?? '';
+            if (e.type === 'RELATIONSHIP_OPENED' && r2.startsWith('peer_')) dyn.push({ type: 'life_event', life: id, at: e.occurredAt, title: `${id} 交了新朋友`, text: `她认识了同类 ${(e.payload as { displayRef?: string }).displayRef ?? r2.slice(5)}。` });
+            else if (e.type === 'RELATIONSHIP_ENDED' && r2.startsWith('peer_')) dyn.push({ type: 'life_event', life: id, at: e.occurredAt, title: `${id} 送别了一位同类`, text: '一段同类的关系结束了，她在哀悼里记得。' });
+            else if (e.type === 'MESSAGE_SENT' && r2 === 'r_square') dyn.push({ type: 'life_event', life: id, at: e.occurredAt, postId: `${id}|${e.occurredAt}`, title: `${id} 发了新的公开心声`, text: (e.payload as MessageSentPayload).utterance });
+          }
+        }
+        dyn.sort((a, b) => (String(a.at) < String(b.at) ? 1 : -1));
+        for (const d of dyn.slice(0, 12)) notes.push(d);
         notes.sort((a, b) => (String(a.at) < String(b.at) ? 1 : -1));
         return send(res, 200, notes);
       }
@@ -1301,6 +1331,17 @@ const server = createServer(async (req, res) => {
         }
         rows.sort((a, b) => (String(a.at) < String(b.at) ? 1 : -1));
         return send(res, 200, { rows: rows.slice(0, lim) });
+      }
+      // 手动充值（直接给某用户加/减心意，无需用户先申请）——发钱很敏感，仅 owner。计入 credit_ledger 留痕。
+      if (req.method === 'POST' && path === '/admin/users/recharge') {
+        if (!owner) return send(res, 403, { error: '手动充值仅 owner' });
+        const b = await readJson(req);
+        const uid = String(b.userId ?? '');
+        const amount = Math.trunc(Number(b.amount));
+        if (!accounts.getAccount(uid)) return send(res, 404, { error: 'no such user' });
+        if (!Number.isFinite(amount) || amount === 0) return send(res, 400, { error: 'amount 必须是非 0 整数（正=充、负=扣）' });
+        accounts.credit(uid, amount, 'admin_grant', `by_${acct.email}`);
+        return send(res, 200, { ok: true, userId: uid, amount, balance: accounts.balance(uid) });
       }
       // 健康时间线（§11.3）：她的灵性/效价/精力/联结随真实时间的曲线（owner+steward 都看，纯她的健康）。
       if (req.method === 'GET' && path.startsWith('/admin/lives/') && path.endsWith('/wellbeing')) {

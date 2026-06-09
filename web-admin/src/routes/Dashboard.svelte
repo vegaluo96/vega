@@ -53,8 +53,21 @@
   // 用户详情（点用户表下钻）：余额/充值历史/遇见过哪些命/微信通道。
   let userDetail = null, userErr = '';
   async function openUser(id) {
-    userDetail = null; userErr = '';
+    userDetail = null; userErr = ''; rechargeAmt = 60; rechargeMsg = '';
     try { userDetail = await api.user(id); } catch (e) { userErr = e.message; }
+  }
+  // 手动充值（仅 owner）：直接给该用户加/减心意，无需用户先申请。正=充、负=扣。
+  let rechargeAmt = 60, rechargeMsg = '', recharging = false;
+  async function doRecharge(id) {
+    const amt = Math.trunc(Number(rechargeAmt));
+    if (!amt) { rechargeMsg = '填个非 0 整数'; return; }
+    if (!confirm(`确定给 ${id} ${amt > 0 ? '充值' : '扣除'} ${Math.abs(amt)} 心意？`)) return;
+    recharging = true; rechargeMsg = '';
+    try {
+      const r = await api.rechargeUser(id, amt);
+      rechargeMsg = `✓ 已${amt > 0 ? '充' : '扣'} ${Math.abs(amt)} · 当前余额 ${r.balance}`;
+      await openUser(id); rechargeMsg = `✓ 当前余额 ${r.balance}`;
+    } catch (e) { rechargeMsg = '✗ ' + e.message; } finally { recharging = false; }
   }
   // 原始事件日志（生命详情里按需展开）：append-only ground truth，"从日志确定性重建"的真相源。
   let lifeEvents = null, eventsOpen = false, eventsLoading = false;
@@ -415,6 +428,14 @@
                   {#each ud.recentRecharges as r}<span class="rg-chip {r.status}">{r.amount} {r.status === 'approved' ? '已批' : '已拒'} · {bj(r.decidedAt)}</span>{/each}
                 </span></div>
               {:else}<p class="dim" style="margin:0">还没有充值记录。</p>{/if}
+              {#if role === 'owner'}
+                <div class="obs-row"><span class="ol">手动充值</span><span class="rg-form">
+                  <input class="ainput rg-inp" type="number" step="1" bind:value={rechargeAmt} placeholder="心意数（负=扣）" />
+                  <button class="abtn abtn-sm" on:click={() => doRecharge(ud.id)} disabled={recharging}>{recharging ? '处理中…' : '直接到账'}</button>
+                  {#if rechargeMsg}<span class="msg" class:bad={rechargeMsg.startsWith('✗')}>{rechargeMsg}</span>{/if}
+                </span></div>
+                <p class="hint" style="margin:4px 0 0">无需用户先申请——直接加/减他的心意（正=充、负=扣），计入 credit_ledger 留痕。仅 owner。</p>
+              {/if}
               <div class="mrow">
                 {#if ud.status === 'blocked'}<button class="abtn abtn-ghost abtn-sm" on:click={() => blockUser(ud.id, true)}>解封</button>
                 {:else}<button class="abtn abtn-danger abtn-sm" on:click={() => blockUser(ud.id, false)}>封禁</button>{/if}
@@ -912,6 +933,9 @@
   .rg-chip.pend { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 40%, transparent); }
   .rg-chip.approved { color: var(--success); border-color: color-mix(in srgb, var(--success) 40%, transparent); }
   .rg-chip.rejected { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
+  .rg-form { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .rg-inp { width: 140px; }
+  .rg-form .msg { margin: 0; }
 
   /* —— 世界事件流 —— */
   .wf { display: grid; grid-template-columns: 124px 78px 110px 1fr; gap: 12px; padding: 9px 14px; border-bottom: 1px solid var(--border-subtle); font-size: 12.5px; align-items: center; }

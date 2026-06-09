@@ -46,6 +46,24 @@
         <svelte:fragment slot="title">{n.life}</svelte:fragment>
         <svelte:fragment slot="subtitle">{n.text}</svelte:fragment>
       </ListRow>
+    {:else if n.type === 'reply'}
+      <ListRow onClick={() => navigate('post', { id: n.postId })} meta={relTime(n.at)} badge="回复你" wrap>
+        <LifeAvatar slot="lead" id={n.life} awake={true} size={48} />
+        <svelte:fragment slot="title">{n.title}</svelte:fragment>
+        <svelte:fragment slot="subtitle">{n.text}</svelte:fragment>
+      </ListRow>
+    {:else if n.type === 'milestone'}
+      <ListRow onClick={() => navigate('chat', { id: n.life })} meta={relTime(n.at)}>
+        <LifeAvatar slot="lead" id={n.life} awake={true} size={48} />
+        <svelte:fragment slot="title">{n.title}</svelte:fragment>
+        <svelte:fragment slot="subtitle">{n.text}</svelte:fragment>
+      </ListRow>
+    {:else if n.type === 'life_event'}
+      <ListRow onClick={() => n.postId ? navigate('post', { id: n.postId }) : navigate('profile', { id: n.life })} meta={relTime(n.at)} wrap>
+        <LifeAvatar slot="lead" id={n.life} awake={true} size={48} />
+        <svelte:fragment slot="title">{n.title}</svelte:fragment>
+        <svelte:fragment slot="subtitle">{n.text}</svelte:fragment>
+      </ListRow>
     {:else if n.type === 'welcome'}
       <ListRow onClick={() => navigate('plaza')} meta={relTime(n.at)}>
         <span slot="lead" class="sysav"><Icon name="spark" size={22} /></span>

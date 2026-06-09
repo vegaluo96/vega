@@ -15,6 +15,7 @@ export interface FeedStore {
   addComment(postId: string, userId: string, handle: string, text: string, replyTo?: string | null): FeedComment;
   addLifeComment(postId: string, lifeId: string, text: string, replyTo?: string | null): FeedComment; // 生命流评论（同类/真人互评）
   commentsFor(postId: string, limit: number): FeedComment[];
+  lifeRepliesTo(handle: string, limit: number): Array<{ postId: string; lifeId: string; text: string; at: string }>; // 生命体回复了某个真人留言（通知中心用）
   commentCounts(postIds: string[]): Map<string, number>;
   latestCommentsFor(postIds: string[], perPost: number): Map<string, FeedComment[]>; // 每帖最近 N 条（首页内联预览）
   setSource(postId: string, src: PostSource): void;
@@ -31,6 +32,7 @@ export function createFeedStore(path: string): FeedStore {
   `);
   try { db.exec("ALTER TABLE post_comments ADD COLUMN kind TEXT NOT NULL DEFAULT 'user'"); } catch { /* 列已存在 */ }
   try { db.exec('ALTER TABLE post_comments ADD COLUMN reply_to TEXT'); } catch { /* 列已存在 */ }
+  db.exec('CREATE INDEX IF NOT EXISTS idx_comments_replyto ON post_comments(reply_to)'); // 通知中心：快速找"生命体回复了我"的留言
   const now = (): string => new Date().toISOString();
   const rt = (x: unknown): string | null => (typeof x === 'string' && x.trim() ? x.trim().slice(0, 64) : null);
   const ph = (n: number): string => Array.from({ length: n }, () => '?').join(',');
@@ -67,6 +69,10 @@ export function createFeedStore(path: string): FeedStore {
     commentsFor(postId, limit) {
       const rows = db.prepare('SELECT id,user_id,handle,text,at,kind,reply_to FROM post_comments WHERE post_id=? ORDER BY id DESC LIMIT ?').all(postId, limit) as Array<{ id: number; user_id: string; handle: string; text: string; at: string; kind: string; reply_to: string | null }>;
       return rows.map((r) => ({ id: Number(r.id), userId: r.user_id, handle: r.handle, text: r.text, at: r.at, kind: kindOf(r.kind), replyTo: r.reply_to ?? null })).reverse();
+    },
+    lifeRepliesTo(handle, limit) {
+      const rows = db.prepare("SELECT post_id,handle,text,at FROM post_comments WHERE kind='life' AND reply_to=? ORDER BY id DESC LIMIT ?").all(handle, limit) as Array<{ post_id: string; handle: string; text: string; at: string }>;
+      return rows.map((r) => ({ postId: r.post_id, lifeId: r.handle, text: r.text, at: r.at }));
     },
     commentCounts(postIds) {
       const out = new Map<string, number>();
