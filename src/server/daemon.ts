@@ -32,6 +32,7 @@ import {
   greet,
   makeTick,
   muse,
+  reflectInsight,
   pickSocialPair,
   projectState,
   reachOut,
@@ -547,6 +548,21 @@ function pickRecentWorld(life: Life): { title: string; summary: string; source: 
   const pool = aligned.length ? aligned : ws; // 有契合兴趣的就从中挑；否则全体里挑（保持新鲜/不困在回音壁）
   const w = pool[Math.floor(Math.random() * pool.length)];
   return { title: w.title, summary: w.summary, source: w.source, url: w.url };
+}
+
+// 自发洞见的材料：从她【记住的世界记忆 + 在意的兴趣】里挑两件【公开、无用户痕迹】的事让她去连。
+// 绝不用情景记忆（那含用户私聊原话）——只用世界标题/兴趣主题，公开层、不泄露任何人。
+function pickInsightPair(life: Life): { a: string; b: string } | null {
+  const s = snapOf(life);
+  const pool: string[] = [];
+  for (const m of s.memory) if (m.kind === 'world' && m.lineage.isCurrent && m.vivid) pool.push(m.content);
+  for (const it of s.interests.slice(0, 4)) pool.push(`「${it.topic}」`);
+  const uniq = [...new Set(pool)];
+  if (uniq.length < 2) return null;
+  const i = Math.floor(Math.random() * uniq.length);
+  let j = Math.floor(Math.random() * uniq.length);
+  if (j === i) j = (j + 1) % uniq.length;
+  return { a: uniq[i], b: uniq[j] };
 }
 
 const round3 = (n: number): number => Number(n.toFixed(3));
@@ -1394,14 +1410,21 @@ const heartbeat = setInterval(async () => {
       }
       if (Date.now() - life.lastMuseAt > life.museEveryMs) {
         const mt = now();
-        const w = pickRecentWorld(life); // 随机一条她最近读到的世界事件 → 就着它发帖；没有则发自己的念头
-        const o = await muse(life.store, mouth, mt, w); // 公开心声：不针对任何人、不含私密
+        const pair = pickInsightPair(life); // 自发洞见的材料（仅公开世界/兴趣，无用户痕迹）
         life.lastMuseAt = Date.now();
         life.museEveryMs = nextMuseGap(); // 下一条心声重新抽间隔 → 节奏持续变化，不形成固定周期
-        if (o) {
-          const src = w ? { title: w.title, source: w.source, url: w.url } : null;
-          if (src) feed.setSource(`${life.id}|${mt}`, src); // 帖子出处（展示用，平台层，不进神圣日志）
-          bus.publish('musing', 'public', { life: life.id, text: o.utterance, at: mt, source: src }); // at = 帖子 occurredAt，给 postId 对齐
+        if (pair && Math.random() < 0.3) {
+          // 三成几率：不发新头条，而是把她在意/读到的两件事连起来——"独自想通了点什么"。
+          const o = await reflectInsight(life.store, mouth, mt, pair.a, pair.b);
+          if (o) bus.publish('musing', 'public', { life: life.id, text: o.utterance, at: mt, source: null });
+        } else {
+          const w = pickRecentWorld(life); // 随机一条她最近读到的世界事件 → 就着它发帖；没有则发自己的念头
+          const o = await muse(life.store, mouth, mt, w); // 公开心声：不针对任何人、不含私密
+          if (o) {
+            const src = w ? { title: w.title, source: w.source, url: w.url } : null;
+            if (src) feed.setSource(`${life.id}|${mt}`, src); // 帖子出处（展示用，平台层，不进神圣日志）
+            bus.publish('musing', 'public', { life: life.id, text: o.utterance, at: mt, source: src }); // at = 帖子 occurredAt，给 postId 对齐
+          }
         }
       }
       if (Date.now() - life.lastCheckpointAt > CHECKPOINT_MS) saveCheckpoint(life); // 定期落盘检查点（快重启）

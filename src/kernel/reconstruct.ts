@@ -30,7 +30,7 @@ import {
   type ValueEntry,
 } from '../domain/snapshot.ts';
 
-const RECONSTRUCT_VERSION = 15; // v15：心智成熟度 maturity（随反思缓慢累积、轻微加快情绪复原；气质仍终生不变）→ 折叠变动，旧 checkpoint 自动全量重放
+const RECONSTRUCT_VERSION = 16; // v16：记忆凝结——reconsolidation 双轨只留 root+当前（杜绝每跳重固的无界增长）；折叠变动 → 旧 checkpoint 全量重放
 // 她活在出生地的时区：分钟东偏 UTC，【出生即冻结进 LIFE_GENESIS、终生不变】（不取 OS/用户时区，故 V2 可复现）。
 // 她是一个身体、只有一个昼夜。平台孵化的命缺省=北京 480；将来用户接生的命取创造者设备时区。
 const CIRCADIAN_OFFSET_MIN_DEFAULT = 480;
@@ -524,10 +524,15 @@ function applyTick(st: RState, e: LifeEvent<'AUTONOMOUS_TICK'>): void {
       affect: newAffect,
       involvedRelationshipIds: [...src.involvedRelationshipIds],
       salience: src.salience,
+      topic: src.topic, // 世界记忆 reconsolidate 后仍保留主题（之前漏带）
       at: e.occurredAt, // 巩固=重新经历：刷新鲜活度（被想起的记忆不易淡去）
       lineage: { rootId: src.lineage.rootId, reconsolidatedFromId: src.id, version: src.lineage.version + 1, isCurrent: true },
       provenance: { originSeq: src.provenance.originSeq, createdAtSeq: e.seq, confidence: src.provenance.confidence, status: src.provenance.status },
     });
+    // 记忆凝结（redteam §10 双轨的规模优化，"按规模触发"）：每条 lineage 只留【原条目(root) + 当前】，
+    // 裁掉中间被取代的版本 → 杜绝"每跳 reconsolidate 同一条"的无界增长；"因你而变"(原 vs 今)仍可证、原条目原封保留。
+    const rootId = src.lineage.rootId;
+    st.memory = st.memory.filter((m) => m.lineage.rootId !== rootId || m.lineage.isCurrent || m.id === rootId);
   }
 }
 

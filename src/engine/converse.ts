@@ -267,3 +267,25 @@ export async function muse(store: DurableEventStore, mouth: Mouth, occurredAt: s
   ]);
   return { utterance, modelId: mouth.id, verdict };
 }
+
+// 自发洞见（DMN 离线学习/想象，研究 #8/#4）：把她【读到/在意】的两件事确定性挑出，让模型说出"忽然想通的联系"。
+// 只用【公开世界材料】（世界记忆标题 / 兴趣主题），绝不碰含用户的情景记忆 → 不泄露任何人。模型只产措辞（契约①）。
+export async function reflectInsight(store: DurableEventStore, mouth: Mouth, occurredAt: string, a: string, b: string): Promise<OutreachResult | null> {
+  const expected = store.version();
+  const snapshot = reconstruct(store.list());
+  const ws = deriveWorkspace(snapshot, PUBLIC_SQUARE);
+  const musing: Workspace = {
+    ...ws,
+    intent: `你最近一直在想这两件事：「${a}」和「${b}」。把你忽然想到的、它们之间的联系或共通，简短真诚地说出来——像一个人独自想通了点什么，一两句、带你自己的感受，别空泛、别复述。`,
+    fallback: '',
+  };
+  const input = { ...musing, lastUserMessage: '（无人发起，你独自把两件事连了起来）', recentContext: [] as { role: 'user' | 'vega'; text: string }[] };
+  let raw = '';
+  try { raw = await mouth.speak(input); } catch { raw = ''; }
+  const { verdict, utterance } = critique(raw, musing);
+  if (verdict === 'fallback') return null; // 只用真模型：没出声就不发
+  store.appendTurn(expected, [
+    { type: 'MESSAGE_SENT', source: 'autonomous_loop', relationshipId: PUBLIC_SQUARE, occurredAt, payload: { relationshipId: PUBLIC_SQUARE, utterance, modelId: mouth.id, criticVerdict: verdict, affectsDerivedState: false, unprompted: true } },
+  ]);
+  return { utterance, modelId: mouth.id, verdict };
+}
