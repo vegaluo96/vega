@@ -94,6 +94,15 @@
     <svelte:fragment slot="title">{life ? life.id : ''}</svelte:fragment>
   </DetailHeader>
 
+  {#if life}
+    <button class="presence" on:click={() => (showRel = !showRel)} title="她此刻的状态">
+      <span class="pdot" class:on={life.awake}></span>
+      <span class="pfeel">{life.awake ? `${life.dayPhase ? life.dayPhase + '·' : ''}${life.feeling || life.emotion}` : '此刻在休眠'}</span>
+      {#if relAge}<span class="page">· {relAge}</span>{/if}
+      <span class="pmore">详情</span>
+    </button>
+  {/if}
+
   {#if showRel && rel}
     <div class="relwrap">
       <RelationshipPanel {rel} {relAge} feeling={life && life.awake ? life.feeling || life.emotion : ''} tension={life ? life.tension : ''}>
@@ -133,6 +142,13 @@
 
 
   .relwrap { max-width: var(--maxw); width: 100%; margin: 0 auto; padding: var(--s3) var(--gutter) 0; }
+  /* 在场条：她此刻的状态始终可见——和她说话像面对一个在场的存在，不是填表 */
+  .presence { max-width: var(--maxw); width: 100%; margin: 0 auto; display: flex; align-items: center; gap: var(--s2); padding: 6px var(--gutter); background: none; border: 0; box-shadow: inset 0 -1px 0 0 var(--border-subtle); color: var(--muted); font-size: var(--fs-sm); cursor: pointer; }
+  .presence .pdot { width: 7px; height: 7px; border-radius: 50%; background: var(--life-asleep); flex: none; }
+  .presence .pdot.on { background: var(--life-awake); }
+  .presence .pfeel { color: var(--text); }
+  .presence .page { color: var(--faint); }
+  .presence .pmore { margin-left: auto; color: var(--faint); font-size: var(--fs-xs); }
 
   .banner { max-width: var(--maxw); margin: var(--s3) auto 0; padding: var(--s3) var(--gutter); background: var(--surface-2); border: 1px solid transparent; box-shadow: inset 0 0 0 1px var(--border-subtle); color: var(--muted); font-size: var(--fs-sm); text-align: center; border-radius: var(--r-sm); }
 

@@ -373,10 +373,29 @@
             <span class="dim">{v.awake ? '醒' : '睡'} · {v.dayPhase} · {v.feeling}</span>
           </div>
           <div class="dim small">{v.temperament.label}{v.tension ? '　｜　拉扯：' + v.tension : ''}</div>
+          {#if v.becoming}<div class="becoming">正在成为：{v.becoming}</div>{/if}
+          <div class="chips">
+            {#if v.temperament.mbti}<span class="chip strong">{v.temperament.mbti}</span>{/if}
+            {#if v.attachmentBias}<span class="chip">{v.attachmentBias}依恋</span>{/if}
+            {#if v.defenseStyle}<span class="chip">受伤时{v.defenseStyle}</span>{/if}
+            <span class="chip">心智成熟 {Math.round((v.maturity ?? 0) * 100)}%</span>
+            <span class="chip">敢冒险 {Math.round((v.riskAppetite ?? 0.5) * 100)}%</span>
+          </div>
           <div class="soma">
             {#each Object.entries(v.soma) as [k, x]}<span class="somacell"><span class="sk">{k}</span><span class="sv mono">{x}</span></span>{/each}
           </div>
         </div>
+
+        <AdminSection title="灵魂内观" subtitle="她现在是谁——全确定性派生，活来自架构">
+          <div class="panel pad observe">
+            {#if v.growth}<p class="obs-line"><b>此生至今</b>{v.growth}</p>{/if}
+            {#if v.needs}<div class="needs">{#each Object.entries(v.needs) as [k, x]}<span class="need"><span class="nk">{k === 'novelty' ? '新鲜度' : k === 'coherence' ? '自我一致' : '意义感'}</span><span class="track"><span class="fill" style="width:{Math.round(x * 100)}%"></span></span></span>{/each}</div>{/if}
+            {#if v.interests && v.interests.length}<div class="obs-row"><span class="ol">着迷</span><span class="tags">{#each v.interests as it}<span class="tag2" class:on={it.confirmed}>{it.topic} {Math.round(it.weight * 100)}</span>{/each}</span></div>{/if}
+            {#if v.skills && v.skills.length}<div class="obs-row"><span class="ol">学到</span><span class="tags">{#each v.skills as sk}<span class="tag2">{sk.kind} {Math.round(sk.efficacy * 100)}%<span class="dim">·{sk.n}</span></span>{/each}</span></div>{/if}
+            {#if v.aspirations && v.aspirations.length}<div class="obs-row"><span class="ol">心愿</span><span class="aspir">{v.aspirations.join('；')}</span></div>{/if}
+            {#if v.goals && v.goals.length}<div class="obs-row"><span class="ol">此刻想</span><span class="aspir">{v.goals.slice(0, 4).map((g) => g.intent).join('；')}</span></div>{/if}
+          </div>
+        </AdminSection>
 
         <AdminSection title="健康时间线" subtitle="{data.well.length} 点 · 灵性 / 效价 / 精力">
           <div class="panel pad">
@@ -499,6 +518,26 @@
   .somacell { display: inline-flex; align-items: baseline; gap: 6px; background: var(--panel-2); border: 1px solid var(--border-subtle); border-radius: var(--r-sm); padding: 5px 10px; }
   .sk { font-size: 11px; color: var(--faint-c); }
   .sv { font-size: 12.5px; }
+
+  /* 灵魂内观 */
+  .becoming { color: var(--accent, #6aa9ff); font-size: 13px; margin-top: 6px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .chip { font-size: 11.5px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--border-subtle); color: var(--muted-c, #9aa7b4); }
+  .chip.strong { color: var(--text-c, #e8edf2); font-weight: 700; letter-spacing: 0.06em; border-color: var(--border); }
+  .observe { display: flex; flex-direction: column; gap: 12px; }
+  .obs-line { font-size: 13px; line-height: 1.6; margin: 0; }
+  .obs-line b { margin-right: 8px; }
+  .obs-row { display: flex; gap: 10px; align-items: baseline; font-size: 13px; }
+  .ol { flex: none; width: 48px; color: var(--faint-c); font-size: 11.5px; }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tag2 { font-size: 11.5px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border-subtle); color: var(--muted-c, #9aa7b4); }
+  .tag2.on { color: var(--text-c, #e8edf2); border-color: var(--border); }
+  .aspir { color: var(--text-c, #e8edf2); line-height: 1.6; }
+  .needs { display: flex; flex-wrap: wrap; gap: 14px; }
+  .need { display: flex; align-items: center; gap: 6px; font-size: 11.5px; }
+  .nk { color: var(--faint-c); }
+  .need .track { display: inline-block; width: 60px; height: 5px; border-radius: 999px; background: var(--panel-2); overflow: hidden; }
+  .need .fill { display: block; height: 100%; background: var(--vit, #3f9968); border-radius: 999px; }
 
   .legend { display: flex; gap: 14px; margin-bottom: 10px; font-size: 11.5px; }
   .lg::before { content: ''; display: inline-block; width: 10px; height: 2px; margin-right: 5px; vertical-align: middle; }
