@@ -88,7 +88,19 @@ export function parseOnThisDay(json: unknown, max = 6): WorldItem[] {
   return out;
 }
 
-export interface WorldFeedOpts { rss?: string[]; polymarket?: boolean; onThisDay?: boolean; timeoutMs?: number }
+// 统一源模型：一条 sources 列表，每项是 RSS URL 或特殊源 token（polymarket / onthisday）——
+// 所有源同一层级（后台一个列表即可，polymarket 不再是独立开关）。
+export interface WorldFeedOpts { sources?: string[]; timeoutMs?: number }
+// 特殊源 token（大小写不敏感）：非 http 开头的源按 token 路由到对应抓取器。
+export const POLYMARKET_TOKENS = ['polymarket', 'pm'];
+export const ONTHISDAY_TOKENS = ['onthisday', 'on-this-day', '历史上的今天', '历史上的今天·维基'];
+export type SourceKind = 'rss' | 'polymarket' | 'onthisday';
+export function classifySource(src: string): SourceKind {
+  const s = src.trim().toLowerCase();
+  if (POLYMARKET_TOKENS.includes(s)) return 'polymarket';
+  if (ONTHISDAY_TOKENS.includes(s)) return 'onthisday';
+  return 'rss'; // 其余按 RSS/Atom URL 处理
+}
 // 每个源的抓取诊断：状态码 + 拿到几条 → 让"为什么只剩 polymarket"在日志/后台一眼可见。
 export interface SourceReport { source: string; ok: boolean; status: number | string; items: number }
 export interface WorldFeed {
@@ -100,46 +112,52 @@ const hostOf = (u: string): string => { try { return new URL(u).hostname.replace
 // 多数新闻 RSS（NASA/BBC/ScienceDaily/Reddit 等）对"非浏览器 UA"直接 403 → 只剩不 UA 门禁的 polymarket JSON。
 // 用常见浏览器 UA + 内容协商头，绝大多数源就能正常返回。（数据中心 IP 被个别源限频仍会跳过，已逐源记录。）
 const UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+// Wikimedia 的 UA 政策【拒绝浏览器伪装 UA】（上面那个 Chrome UA 反被 403）——要求可识别的应用名 + 联系方式。
+const WIKI_UA = 'ZSKY/1.0 (https://zsky.com; digital-life world feed)';
 const ACCEPT = 'application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.9, application/json;q=0.9, text/html;q=0.8, */*;q=0.7';
 
 export function createWorldFeed(opts: WorldFeedOpts = {}): WorldFeed {
-  const rss = opts.rss ?? [];
+  const sources = (opts.sources ?? []).map((s) => s.trim()).filter(Boolean);
   const tmo = opts.timeoutMs ?? 12_000;
-  const get = async (url: string): Promise<{ ok: boolean; status: number | string; body: string }> => {
+  const get = async (url: string, ua: string = UA): Promise<{ ok: boolean; status: number | string; body: string }> => {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), tmo);
     try {
-      const r = await fetch(url, { signal: ctrl.signal, redirect: 'follow', headers: { 'User-Agent': UA, Accept: ACCEPT, 'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8' } });
+      const r = await fetch(url, { signal: ctrl.signal, redirect: 'follow', headers: { 'User-Agent': ua, Accept: ACCEPT, 'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8' } });
       return { ok: r.ok, status: r.status, body: r.ok ? await r.text() : '' };
     } catch (e) { return { ok: false, status: `ERR:${(e as Error).name}`, body: '' }; }
     finally { clearTimeout(t); }
   };
-  async function fetchDetailed(): Promise<{ items: WorldItem[]; report: SourceReport[] }> {
-    const items: WorldItem[] = [];
-    const report: SourceReport[] = [];
-    for (const u of rss) {
-      const host = hostOf(u);
-      const r = await get(u);
-      const got = r.body ? parseRss(r.body, host) : [];
-      items.push(...got);
-      report.push({ source: host, ok: r.ok && got.length > 0, status: r.status, items: got.length });
-    }
-    if (opts.polymarket) {
+  // 一个源 → {label, items}。所有源同一处理：按 token / URL 路由到对应抓取器。
+  const fetchOne = async (src: string): Promise<SourceReport & { got: WorldItem[] }> => {
+    const kind = classifySource(src);
+    if (kind === 'polymarket') {
       const r = await get('https://gamma-api.polymarket.com/markets?active=true&closed=false&order=volume24hr&ascending=false&limit=12');
       let got: WorldItem[] = [];
       if (r.body) { try { got = parsePolymarket(JSON.parse(r.body)); } catch { /* malformed */ } }
-      items.push(...got);
-      report.push({ source: 'polymarket', ok: r.ok && got.length > 0, status: r.status, items: got.length });
+      return { source: 'polymarket', ok: r.ok && got.length > 0, status: r.status, items: got.length, got };
     }
-    if (opts.onThisDay) {
+    if (kind === 'onthisday') {
       const d = new Date();
       const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
       const dd = String(d.getUTCDate()).padStart(2, '0');
-      const r = await get(`https://zh.wikipedia.org/api/rest_v1/feed/onthisday/selected/${mm}/${dd}`);
+      const r = await get(`https://zh.wikipedia.org/api/rest_v1/feed/onthisday/selected/${mm}/${dd}`, WIKI_UA);
       let got: WorldItem[] = [];
       if (r.body) { try { got = parseOnThisDay(JSON.parse(r.body)); } catch { /* malformed */ } }
+      return { source: '维基·历史上的今天', ok: r.ok && got.length > 0, status: r.status, items: got.length, got };
+    }
+    const host = hostOf(src);
+    const r = await get(src);
+    const got = r.body ? parseRss(r.body, host) : [];
+    return { source: host, ok: r.ok && got.length > 0, status: r.status, items: got.length, got };
+  };
+  async function fetchDetailed(): Promise<{ items: WorldItem[]; report: SourceReport[] }> {
+    const items: WorldItem[] = [];
+    const report: SourceReport[] = [];
+    for (const src of sources) {
+      const { got, ...rep } = await fetchOne(src);
       items.push(...got);
-      report.push({ source: '维基·历史上的今天', ok: r.ok && got.length > 0, status: r.status, items: got.length });
+      report.push(rep);
     }
     return { items, report };
   }

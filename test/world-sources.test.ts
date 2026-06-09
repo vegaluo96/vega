@@ -1,7 +1,15 @@
 // 世界源解析器：RSS/Atom、Polymarket、维基"历史上的今天"——纯解析、可单测、不连网。
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseRss, parsePolymarket, parseOnThisDay, tagTopics } from '../src/index.ts';
+import { parseRss, parsePolymarket, parseOnThisDay, tagTopics, classifySource } from '../src/index.ts';
+
+test('classifySource：统一源列表——token 路由到特殊源，其余按 RSS', () => {
+  assert.equal(classifySource('polymarket'), 'polymarket');
+  assert.equal(classifySource('PolyMarket'), 'polymarket'); // 大小写不敏感
+  assert.equal(classifySource('onthisday'), 'onthisday');
+  assert.equal(classifySource('历史上的今天'), 'onthisday');
+  assert.equal(classifySource('https://feeds.bbci.co.uk/news/world/rss.xml'), 'rss');
+});
 
 test('tagTopics：确定性主题标签——命中关键词归类、无命中走 fallback、最多 3 个', () => {
   assert.deepEqual(tagTopics('NASA finds water on Mars'), ['天文航天']);

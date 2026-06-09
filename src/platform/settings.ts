@@ -27,9 +27,12 @@ export interface SocialConfig {
 }
 
 // 外部世界源（§8.1）：可在后台改的"读哪些世界"。抓取在引擎外、内容冻进事件——配置本身不进神圣日志。
+// 统一模型：sources 一个列表，每项是 RSS URL 或特殊源 token（polymarket / onthisday）——所有源同一层级。
+// rss/polymarket 为旧字段，仅作向后兼容读取（迁移到 sources）。
 export interface WorldConfig {
-  rss?: string[];        // 新闻 RSS 列表
-  polymarket?: boolean;  // 接 Polymarket 预测市场
+  sources?: string[];    // 统一源列表（RSS URL / 'polymarket' / 'onthisday'）
+  rss?: string[];        // [遗留] 新闻 RSS 列表
+  polymarket?: boolean;  // [遗留] 接 Polymarket 预测市场
   everyMs?: number;      // 多久读一遍世界
 }
 
@@ -88,6 +91,12 @@ export function createSettingsStore(path: string): SettingsStore {
     getWorld: () => state.world,
     setWorld: (patch) => {
       const next: WorldConfig = { ...state.world };
+      // 新：统一 sources 列表（写入即视为迁移完成，清掉遗留 rss/polymarket，避免两套并存歧义）。
+      if (Array.isArray(patch.sources)) {
+        next.sources = patch.sources.map((s) => String(s).trim()).filter(Boolean);
+        delete next.rss; delete next.polymarket;
+      }
+      // 向后兼容：仍接受旧字段（老客户端/脚本），但新后台只发 sources。
       if (Array.isArray(patch.rss)) next.rss = patch.rss.map((s) => String(s).trim()).filter(Boolean);
       if (typeof patch.polymarket === 'boolean') next.polymarket = patch.polymarket;
       const ms = num(patch.everyMs);

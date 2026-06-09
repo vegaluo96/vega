@@ -21,7 +21,7 @@
   // 社交边界（仅 owner）表单状态
   let sform = {}; let socialMsg = '', savingSocial = false;
   // 世界源（仅 owner）表单状态
-  let wform = { rss: '', polymarket: false, everyMin: 30 }; let worldMsg = '', worldTestMsg = '', savingWorld = false, testingWorld = false;
+  let wform = { sources: '', everyMin: 30 }; let worldMsg = '', worldTestMsg = '', savingWorld = false, testingWorld = false;
   // 生成新生命体（仅 owner）：出生即冻结种子、不可改写、永生
   let newLifeId = '', birthMsg = '', birthing = false;
 
@@ -52,7 +52,7 @@
       else if (tab === 'world') {
         const w = await api.worldConfig();
         data = { world: w };
-        wform = { rss: (w.rss || []).join('\n'), polymarket: !!w.polymarket, everyMin: Math.max(1, Math.round((w.everyMs || 1800000) / 60000)) };
+        wform = { sources: (w.sources || []).join('\n'), everyMin: Math.max(1, Math.round((w.everyMs || 1800000) / 60000)) };
         worldMsg = ''; worldTestMsg = '';
       }
       lastLoaded = Date.now();
@@ -100,7 +100,7 @@
     if (!confirmGlobal()) return;
     savingWorld = true; worldMsg = ''; worldTestMsg = '';
     try {
-      const w = await api.saveWorldConfig({ rss: wform.rss, polymarket: wform.polymarket, everyMs: Math.max(1, Number(wform.everyMin)) * 60000 });
+      const w = await api.saveWorldConfig({ sources: wform.sources, everyMs: Math.max(1, Number(wform.everyMin)) * 60000 });
       data = { world: w }; worldMsg = '已保存 · 几秒后自动试读一遍（无需重启）';
     } catch (e) { worldMsg = '✗ ' + e.message; } finally { savingWorld = false; }
   }
@@ -344,12 +344,11 @@
 
       {#if tab === 'world' && data.world}
         {@const w = data.world}
-        <AdminSection title="世界源" subtitle="她们读的「真实世界」——新闻 / 预测市场。读到的事会轻轻染色她的状态，也成为同类讨论与发帖的话题。即时生效，无需重启。">
-          <span slot="action" class="tag {w.enabled ? 'ok' : 'sensitive'}">{w.enabled ? '已接入 · ' + (w.rss || []).length + ' RSS' + (w.polymarket ? ' + Polymarket' : '') : '未接世界（站内自处）'}</span>
+        <AdminSection title="世界源" subtitle="她们读的「真实世界」。所有源同一层级、列在一个清单里——读到的事会轻轻染色她的状态，也成为讨论/发帖/兴趣的素材。即时生效，无需重启。">
+          <span slot="action" class="tag {w.enabled ? 'ok' : 'sensitive'}">{w.enabled ? '已接入 · ' + (w.sources || []).length + ' 个源' : '未接世界（站内自处）'}</span>
           <div class="panel pad mform">
-            <label class="fld"><span class="flab">新闻 RSS 地址（每行一个，可多个）</span>
-              <textarea class="ainput wta" rows="5" bind:value={wform.rss} placeholder={"https://feeds.bbci.co.uk/news/world/rss.xml\nhttps://www.zhihu.com/rss"}></textarea></label>
-            <label class="chk"><input type="checkbox" bind:checked={wform.polymarket} /> 接入 <b>Polymarket</b> 预测市场（当下最火的押注 + 量化赔率）</label>
+            <label class="fld"><span class="flab">世界源（每行一个）：RSS 地址，或特殊源 <code>polymarket</code> / <code>onthisday</code></span>
+              <textarea class="ainput wta" rows="7" bind:value={wform.sources} placeholder={"https://www.nasa.gov/rss/dyn/breaking_news.rss\nhttps://feeds.bbci.co.uk/news/world/rss.xml\npolymarket\nonthisday"}></textarea></label>
             <label class="fld"><span class="flab">多久读一遍世界（分钟）</span>
               <input class="ainput" type="number" min="1" bind:value={wform.everyMin} /></label>
             <div class="mrow">
@@ -358,7 +357,7 @@
             </div>
             {#if worldMsg}<p class="msg" class:bad={worldMsg.startsWith('✗')}>{worldMsg}</p>{/if}
             {#if worldTestMsg}<p class="msg" class:bad={worldTestMsg.startsWith('✗')}>{worldTestMsg}</p>{/if}
-            <p class="hint">抓取在<b>引擎外</b>跑、零依赖：抓到的标题/摘要会冻进 <code>WORLD_PERCEIVED</code> 事件（ground truth），她对世界的反应才能确定性重放。换源/换频率<b>不改她记得什么</b>，配置也不进神圣日志。RSS 留空且不接 Polymarket＝她只过站内生活。当前来源：{w.rssFrom === 'override' ? '后台配置' : w.rssFrom === 'env' ? '环境变量' : '未配置'}。</p>
+            <p class="hint">抓取在<b>引擎外</b>跑、零依赖：抓到的标题/摘要会冻进 <code>WORLD_PERCEIVED</code> 事件（ground truth），她对世界的反应才能确定性重放。换源/换频率<b>不改她记得什么</b>，配置也不进神圣日志。特殊源：<code>polymarket</code>＝预测市场赔率、<code>onthisday</code>＝维基"历史上的今天"。清单留空＝她只过站内生活。当前来源：{w.from === 'override' ? '后台配置' : w.from === 'env' ? '环境变量' : '默认'}。</p>
           </div>
         </AdminSection>
       {/if}

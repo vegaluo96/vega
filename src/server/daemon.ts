@@ -99,8 +99,8 @@ const WORLD_RSS = (process.env.VEGA_WORLD_RSS ?? '').split(',').map((s) => s.tri
 const WORLD_POLYMARKET = process.env.VEGA_WORLD_POLYMARKET === '1';
 const WORLD_ONTHISDAY = process.env.VEGA_WORLD_ONTHISDAY !== '0'; // 默认开：维基"历史上的今天"（免注册、无限频、契合"讲时间的存在"）
 const WORLD_MS = Number(process.env.VEGA_WORLD_EVERY_MS ?? 1_800_000); // 多久"读一遍世界"（默认 30min）
-// 默认世界源（香港无墙、全免注册；偏人文/科学/天文/冷知识，比干巴巴的预测市场更易让她有真情绪）。
-// 后台或 env 配了 rss 即覆盖；这只是"没配时"的兜底默认，让她出厂就有丰富的世界可读。
+// 默认世界源（香港无墙、全免注册；偏人文/科学/天文/冷知识 + 预测市场 + 历史上的今天）。
+// 统一一个列表：RSS URL 与特殊源 token（polymarket / onthisday）同一层级——后台一个列表即可。
 const DEFAULT_RSS = [
   'https://www.nasa.gov/rss/dyn/breaking_news.rss',     // 航天/宇宙（契合星名生命体）
   'https://www.sciencedaily.com/rss/top/science.xml',   // 科学发现
@@ -109,21 +109,26 @@ const DEFAULT_RSS = [
   'https://feeds.bbci.co.uk/news/world/rss.xml',        // 世界新闻
   'https://36kr.com/feed',                              // 中文科技（对国内用户更相关）
 ];
-interface EffWorld { rss: string[]; polymarket: boolean; onThisDay: boolean; everyMs: number }
+const DEFAULT_SOURCES = [...DEFAULT_RSS, 'polymarket', 'onthisday']; // 出厂默认：新闻 + 预测市场 + 历史上的今天
+// env 兜底也拼成统一列表（VEGA_WORLD_RSS ∪ polymarket ∪ onthisday）。
+const ENV_SOURCES = [...WORLD_RSS, ...(WORLD_POLYMARKET ? ['polymarket'] : []), ...(WORLD_ONTHISDAY ? ['onthisday'] : [])];
+interface EffWorld { sources: string[]; everyMs: number }
 function effWorld(): EffWorld {
   const o = settings.getWorld();
-  return {
-    rss: (o.rss && o.rss.length) ? o.rss : (WORLD_RSS.length ? WORLD_RSS : DEFAULT_RSS), // 后台 > env > 精选默认
-    polymarket: o.polymarket !== undefined ? o.polymarket : WORLD_POLYMARKET,
-    onThisDay: WORLD_ONTHISDAY,
-    everyMs: o.everyMs ?? WORLD_MS,
-  };
+  // 后台 sources > 后台遗留 rss/polymarket（迁移）> env > 精选默认。
+  let sources: string[];
+  if (o.sources && o.sources.length) sources = o.sources;
+  else if ((o.rss && o.rss.length) || o.polymarket !== undefined) {
+    sources = [...(o.rss ?? []), ...(o.polymarket ? ['polymarket'] : []), ...(WORLD_ONTHISDAY ? ['onthisday'] : [])];
+  } else sources = ENV_SOURCES.length ? ENV_SOURCES : DEFAULT_SOURCES;
+  return { sources, everyMs: o.everyMs ?? WORLD_MS };
 }
-const worldEnabled = (w: EffWorld = effWorld()): boolean => w.rss.length > 0 || w.polymarket || w.onThisDay;
+const worldEnabled = (w: EffWorld = effWorld()): boolean => w.sources.length > 0;
 function worldStatus(): Record<string, unknown> {
   const w = effWorld();
   const o = settings.getWorld();
-  return { ...w, enabled: worldEnabled(w), rssFrom: (o.rss?.length ? 'override' : (WORLD_RSS.length ? 'env' : 'default')) };
+  const from = (o.sources?.length || o.rss?.length || o.polymarket !== undefined) ? 'override' : (ENV_SOURCES.length ? 'env' : 'default');
+  return { ...w, enabled: worldEnabled(w), from };
 }
 // 微信 iLink（ZSKY 自己当机器人，无需 OpenClaw）：网页扫码登录 + 后台收发消息。base 可用 VEGA_ILINK_BASE 覆盖。
 const ilink = createIlink({ base: process.env.VEGA_ILINK_BASE });
@@ -1185,9 +1190,11 @@ const server = createServer(async (req, res) => {
         if (req.method === 'POST' && path === '/admin/world-config') {
           const b = await readJson(req);
           const patch: Record<string, unknown> = {};
-          if (Array.isArray(b.rss)) patch.rss = b.rss;
-          else if (typeof b.rss === 'string') patch.rss = b.rss.split(/[\n,]+/).map((s: string) => s.trim()).filter(Boolean);
-          if (typeof b.polymarket === 'boolean') patch.polymarket = b.polymarket;
+          // 统一 sources 列表（RSS URL / polymarket / onthisday 同一层级）。兼容字符串（换行/逗号分隔）或数组。
+          if (Array.isArray(b.sources)) patch.sources = b.sources;
+          else if (typeof b.sources === 'string') patch.sources = b.sources.split(/[\n,]+/).map((s: string) => s.trim()).filter(Boolean);
+          else if (typeof b.rss === 'string') patch.sources = b.rss.split(/[\n,]+/).map((s: string) => s.trim()).filter(Boolean); // 旧客户端兜底
+          else if (Array.isArray(b.rss)) patch.sources = b.rss;
           if (b.everyMs !== undefined && b.everyMs !== '') patch.everyMs = Number(b.everyMs);
           settings.setWorld(patch);
           scheduleWorld(3_000); // 新源 3 秒后即试读一遍（不必等满一个周期）
@@ -1195,9 +1202,9 @@ const server = createServer(async (req, res) => {
         }
         if (req.method === 'POST' && path === '/admin/world-config/test') {
           const w = effWorld();
-          if (!worldEnabled(w)) return send(res, 200, { ok: false, error: '还没配任何世界源（RSS 或 Polymarket）' });
+          if (!worldEnabled(w)) return send(res, 200, { ok: false, error: '还没配任何世界源' });
           try {
-            const { items, report } = await createWorldFeed({ rss: w.rss, polymarket: w.polymarket, onThisDay: w.onThisDay, timeoutMs: 12_000 }).fetchDetailed();
+            const { items, report } = await createWorldFeed({ sources: w.sources, timeoutMs: 12_000 }).fetchDetailed();
             return send(res, 200, { ok: items.length > 0, count: items.length, report, sample: items.slice(0, 6).map((it) => ({ source: it.source, kind: it.kind, title: it.title })) });
           } catch (e) {
             return send(res, 200, { ok: false, error: (e as Error).message || '抓取失败' });
@@ -1546,7 +1553,7 @@ async function readWorldOnce(): Promise<void> {
   }
 }
 async function readWorldInner(w: EffWorld): Promise<void> {
-  const { items, report } = await createWorldFeed({ rss: w.rss, polymarket: w.polymarket, onThisDay: w.onThisDay }).fetchDetailed();
+  const { items, report } = await createWorldFeed({ sources: w.sources }).fetchDetailed();
   // 逐源诊断：哪些源 403/超时/0 条一目了然（之前"只剩 polymarket"就是 RSS 被 403 而无人知）。
   console.log(`[world] 读世界：${report.map((r) => `${r.source}=${r.items}${r.ok ? '' : `(${r.status})`}`).join(' ')} → 合计 ${items.length} 条`);
   if (items.length === 0) return;
