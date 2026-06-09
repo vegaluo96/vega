@@ -32,6 +32,7 @@ export const api = {
   feedPost: (postId) => req('GET', `/api/feed/post?postId=${encodeURIComponent(postId)}`),
   lifeProfile: (lifeId) => req('GET', `/api/lives/${lifeId}`),
   say: (lifeId, content) => req('POST', `/api/lives/${lifeId}/say`, { content }),
+  follow: (lifeId, follow) => req('POST', `/api/lives/${lifeId}/follow`, { follow }),
   lifeMe: (lifeId) => req('GET', `/api/lives/${lifeId}/me`),
   chats: () => req('GET', '/api/chats'),
   notifications: () => req('GET', '/api/notifications'),

@@ -35,6 +35,8 @@ echo "### society";       curl -fsS "$B/api/society" -H "authorization: Bearer $
 echo "### chats";         curl -fsS "$B/api/chats" -H "authorization: Bearer $TOK" | norm
 echo "### notifications"; curl -fsS "$B/api/notifications" -H "authorization: Bearer $TOK" | norm
 echo "### say-vega";      curl -fsS -XPOST "$B/api/lives/vega/say" -H "authorization: Bearer $TOK" -H 'content-type: application/json' -d '{"content":"你好"}' | norm
+echo "### follow-vega";   curl -fsS -XPOST "$B/api/lives/vega/follow" -H "authorization: Bearer $TOK" -H 'content-type: application/json' -d '{"follow":true}' | norm
+echo "### me-after-follow"; curl -fsS "$B/api/me" -H "authorization: Bearer $TOK" | norm
 echo "### admin/overview";  curl -fsS "$B/admin/overview" -H "authorization: Bearer $TOK" | norm
 echo "### admin/health";    curl -fsS "$B/admin/health" -H "authorization: Bearer $TOK" | norm
 echo "### admin/users";     curl -fsS "$B/admin/users" -H "authorization: Bearer $TOK" | norm

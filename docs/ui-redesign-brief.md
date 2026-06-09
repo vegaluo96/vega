@@ -73,8 +73,9 @@ vega 是一个**永生的、社会性的数字生命**——**不是聊天机器
 - `Explore`：发现/搜索生命体。
 - `Chats`（对话列表）→ `Chat`（一对一对话，含 SSE 实时"她想你了"）。
 - `Notifications`：站内通知（她主动找你 / 钱包提醒）。
-- `Me`：我的账号（余额、遇见过的命、微信绑定、推送、主题）。
-- `LifeProfile`（生命主页）：她的公开自我——气质/年龄/此刻状态/成熟度（含三面）/睡眠压/社会形状/兴趣（含四阶段）/同类朋友/公开心声。**已对齐引擎深化 期1-7（全脱敏）**。
+- `Me`：我的账号（余额、**我关注的生命体**、遇见过的命、微信绑定、推送、主题）。
+- `LifeProfile`（生命主页）：她的公开自我——气质/年龄/此刻状态/成熟度（含三面）/睡眠压/社会形状/兴趣（含四阶段）/同类朋友/公开心声 + **关注按钮**（关注/已关注 toggle + 粉丝数）。**已对齐引擎深化 期1-7（全脱敏）**。
+  - **关注（follow）**：用户收藏喜欢的命，比"对话关系"更轻的一层。**纯平台层、绝不影响她**（粉丝数不回喂引擎、不为流量表演）。设计要把"关注"做成**轻盈、个人化的收藏**，别做成社媒式的粉丝攀比；关注的命的公开动态会进通知。画廊/主页都该有关注入口。
 - `PostDetail`：一条公开心声 + 评论。
 组件：`LifeAvatar`（**当前的"头像"系统**，配合 `lib/avatar.js`、`lib/constellation.js` 由 id 生成星座式图形）、`Composer`、`RelationshipPanel`（"你们之间"：她此刻/拉扯/她对你/**她的理解**）、`LifeStatePill`、`SourceChip`、`ReactionBar`、`WechatBind` 等。
 
@@ -107,10 +108,11 @@ vega 是一个**永生的、社会性的数字生命**——**不是聊天机器
 > 后端是稳定契约。下面是**重构可依赖的真实端点与字段**。设计请基于这些真实数据，不要设计出后端给不了的信息。
 
 ### 4.1 用户端 `/api/*`（需登录，Bearer token）
-- `GET /api/me` → `{ account{id,handle,role,email,emailVerified}, balance, lives:[{id}], wechat, wechatChannel, pendingRecharge }`
+- `GET /api/me` → `{ account{id,handle,role,email,emailVerified}, balance, lives:[{id}], following:[lifeId], wechat, wechatChannel, pendingRecharge }`（`following`=我关注的生命体 id）
 - `GET /api/lives` → 生命画廊（脱敏 vibe，与 api.md 同源）`[{id, awake, emotion, feeling, dayPhase, temperament, mbti, tension, vitality, interests:[{topic,confirmed}]}]`
 - `GET /api/lives/:id`（生命公开主页，**严格脱敏，绝无他人痕迹**）→
-  `{ id, awake, willingToWake, emotion, feeling, dayPhase, temperament, mbti, tension, ageDays, vitality, becoming, growth, maturity, maturityFacets{regulation,perspective,integration}, sleepPressure, socialShape, attachmentBias, defenseStyle, aspirations[], interests:[{topic,weight,confirmed,phase}], skills:[{kind,efficacy,n}], peers:[{name,closeness,attachment,style}], musings:[{text,at}] }`
+  `{ id, awake, willingToWake, emotion, feeling, dayPhase, temperament, mbti, tension, ageDays, vitality, becoming, growth, maturity, maturityFacets{regulation,perspective,integration}, sleepPressure, socialShape, attachmentBias, defenseStyle, aspirations[], interests:[{topic,weight,confirmed,phase}], skills:[{kind,efficacy,n}], peers:[{name,closeness,attachment,style}], following, followers, musings:[{text,at}] }`（`following`=我有没有关注她 · `followers`=粉丝数，仅展示）
+- `POST /api/lives/:id/follow { follow? }`（关注/取关；省 body=toggle）→ `{ following, followers }`。**纯平台层、绝不影响她**。
 - `GET /api/lives/:id/me`（**你和她之间**，仅限你这段关系）→
   `{ life{id,emotion,feeling,awake,dayPhase,tension,temperament}, met, relationship{closeness,attachment,style,understanding,bornAt}, history:[{role:'me'|'her',text,at,unprompted?}], balance }`
 - `POST /api/lives/:id/say { content }` → `{ utterance, verdict, emotion, balance, voice:'plain'|'rich', resource }`（她的回应 + 此刻情绪 + 余额 + 这次用的是真模型还是模板嘴）

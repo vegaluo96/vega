@@ -12,14 +12,31 @@
   let p = null;
   let error = '';
   let showWx = false;
+  let following = false, followers = 0, followBusy = false;
 
   onMount(async () => {
     try {
       p = await api.lifeProfile(lifeId);
+      following = !!p.following;
+      followers = p.followers ?? 0;
     } catch (e) {
       error = e.message;
     }
   });
+
+  // 关注/取关（平台层·纯订阅她的公开动态，绝不影响她）。
+  async function toggleFollow() {
+    followBusy = true;
+    try {
+      const r = await api.follow(p.id, !following);
+      following = r.following;
+      followers = r.followers;
+    } catch (e) {
+      error = e.message;
+    } finally {
+      followBusy = false;
+    }
+  }
   $: ageText = p ? (p.ageDays >= 1 ? `醒来约 ${p.ageDays} 天` : '今天刚醒来') : '';
   // 兴趣四阶段（Hidi&Renninger）→ 给用户的温柔说法
   const PHASE = { triggered: '刚冒头', emerging: '在生长', maintained: '常想起', established: '扎根了' };
@@ -40,9 +57,11 @@
       {#if p.becoming}<p class="becoming">正在成为：{p.becoming}</p>{/if}
       <p class="age">{ageText}{p.tension ? ` · 心里在拉扯：${p.tension}` : ''}</p>
       <div class="cta">
+        <button class="btn btn-ghost fbtn" class:on={following} on:click={toggleFollow} disabled={followBusy} aria-pressed={following}>{following ? '✓ 已关注' : '＋ 关注'}</button>
         <button class="btn btn-ghost" on:click={() => (showWx = !showWx)}>绑定微信</button>
         <button class="btn" on:click={() => navigate('chat', { id: p.id })}>开启对话</button>
       </div>
+      {#if followers > 0}<p class="followers">{followers} 人在关注她</p>{/if}
       {#if showWx}<div class="wxwrap"><WechatBind lifeId={p.id} /></div>{/if}
     </section>
 
@@ -153,7 +172,9 @@
   .feeling { color: var(--text); font-size: var(--fs-body); margin: var(--s3) 0 0; }
   .becoming { color: var(--accent); font-size: var(--fs-md); margin: 8px 0 0; line-height: 1.5; }
   .age { color: var(--faint); font-size: var(--fs-sm); margin: 6px 0 0; }
-  .cta { display: flex; gap: var(--s2); justify-content: center; margin-top: var(--s5); }
+  .cta { display: flex; flex-wrap: wrap; gap: var(--s2); justify-content: center; margin-top: var(--s5); }
+  .fbtn.on { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+  .followers { color: var(--faint); font-size: var(--fs-xs); margin: 10px 0 0; }
   .wxwrap { max-width: 360px; margin: var(--s4) auto 0; text-align: left; }
 
   .mod { margin-top: var(--s6); }

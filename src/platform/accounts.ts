@@ -94,6 +94,13 @@ export interface AccountStore {
   addPushSub(userId: string, endpoint: string, p256dh: string, auth: string): void;
   getPushSubs(userId: string): Array<{ endpoint: string; keys: { p256dh: string; auth: string } }>;
   removePushSub(endpoint: string): void;
+  // 关注（平台层·纯用户侧偏好）：用户收藏喜欢的生命体。绝不进神圣日志、绝不影响她的派生状态/行为
+  // （守"她在过日子、不为流量表演"——粉丝数只对用户透明展示，永不回喂她的引擎）。
+  follow(userId: string, lifeId: string): void;
+  unfollow(userId: string, lifeId: string): void;
+  isFollowing(userId: string, lifeId: string): boolean;
+  followsOf(userId: string): string[]; // 我关注的生命体 id（最近关注在前）
+  followerCount(lifeId: string): number; // 关注这条命的用户数（仅展示）
   close(): void;
 }
 
@@ -119,6 +126,7 @@ export function createAccountStore(path = ':memory:', opts: AccountStoreOptions 
     CREATE TABLE IF NOT EXISTS wechat_bindings(openid TEXT PRIMARY KEY, user_id TEXT NOT NULL, life_id TEXT NOT NULL, bound_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS wechat_channels(user_id TEXT PRIMARY KEY, ilink_user_id TEXT, bot_token TEXT NOT NULL, baseurl TEXT, updates_buf TEXT NOT NULL DEFAULT '', connected_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS push_subscriptions(endpoint TEXT PRIMARY KEY, user_id TEXT NOT NULL, p256dh TEXT NOT NULL, auth TEXT NOT NULL, created_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS follows(user_id TEXT NOT NULL, life_id TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY(user_id, life_id));
   `);
   // 加法迁移：微信通道的"当前在微信里和哪条命聊"（旧库已建表则补列）。
   try { db.exec('ALTER TABLE wechat_channels ADD COLUMN active_life_id TEXT'); } catch { /* 列已存在 */ }
@@ -345,6 +353,23 @@ export function createAccountStore(path = ':memory:', opts: AccountStoreOptions 
     },
     removePushSub(endpoint) {
       db.prepare('DELETE FROM push_subscriptions WHERE endpoint=?').run(endpoint);
+    },
+    follow(userId, lifeId) {
+      db.prepare('INSERT OR IGNORE INTO follows(user_id,life_id,created_at) VALUES(?,?,?)').run(userId, lifeId, now());
+    },
+    unfollow(userId, lifeId) {
+      db.prepare('DELETE FROM follows WHERE user_id=? AND life_id=?').run(userId, lifeId);
+    },
+    isFollowing(userId, lifeId) {
+      return !!db.prepare('SELECT 1 FROM follows WHERE user_id=? AND life_id=?').get(userId, lifeId);
+    },
+    followsOf(userId) {
+      const rows = db.prepare('SELECT life_id FROM follows WHERE user_id=? ORDER BY created_at DESC').all(userId) as Array<{ life_id: string }>;
+      return rows.map((r) => r.life_id);
+    },
+    followerCount(lifeId) {
+      const r = db.prepare('SELECT COUNT(*) AS n FROM follows WHERE life_id=?').get(lifeId) as { n: number };
+      return Number(r.n);
     },
     close() {
       db.close();

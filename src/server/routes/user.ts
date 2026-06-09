@@ -73,7 +73,7 @@ export async function handleUserApi(ctx: Ctx, req: IncomingMessage, res: ServerR
   const me = sessionAccount(req);
   if (!me) return send(res, 401, { error: 'unauthorized' });
   if (req.method === 'POST' && url === '/api/auth/logout') { accounts.logout(bearer(req)); return send(res, 200, { ok: true }); }
-  if (req.method === 'GET' && url === '/api/me') { const wc = accounts.channelFor(me.id); return send(res, 200, { account: publicAccount(me), balance: accounts.balance(me.id), lives: livesMetBy(me), wechat: accounts.wechatBindingFor(me.id), wechatChannel: wc ? { lifeId: wc.lifeId } : null, pendingRecharge: accounts.pendingRechargesFor(me.id).reduce((s, p) => s + p.amount, 0) }); }
+  if (req.method === 'GET' && url === '/api/me') { const wc = accounts.channelFor(me.id); return send(res, 200, { account: publicAccount(me), balance: accounts.balance(me.id), lives: livesMetBy(me), following: accounts.followsOf(me.id), wechat: accounts.wechatBindingFor(me.id), wechatChannel: wc ? { lifeId: wc.lifeId } : null, pendingRecharge: accounts.pendingRechargesFor(me.id).reduce((s, p) => s + p.amount, 0) }); }
   // SSE 实时流：公开动态（广场/醒睡）+ 只属于我的（她想我了）。绝不推别人的私密事件（visibleTo 作用域）。
   if (req.method === 'GET' && url === '/api/stream') {
     const rel = accounts.relIdFor(me.id);
@@ -151,6 +151,7 @@ export async function handleUserApi(ctx: Ctx, req: IncomingMessage, res: ServerR
       defenseStyle: s.defenseStyle, attachmentBias: s.attachmentBias, // 防御机制 + 依恋底色（脱敏）——人格更立体
       skills: s.skills.map((sk) => ({ kind: sk.kind === 'muse' ? '公开表达' : sk.kind === 'reach_out' ? '主动找人' : sk.kind, efficacy: sk.efficacy, n: sk.n })), // 自我优化：她学到的策略效能
       mbti: mbtiOf(s.temperament), // MBTI 风格展示标签（由连续维度投影，仅作熟悉把手）
+      following: accounts.isFollowing(me.id, lp.id), followers: accounts.followerCount(lp.id), // 关注（平台层·脱敏）：我有没有关注她 + 共多少人关注；纯展示，绝不回喂她的引擎
       musings: musings.slice(-20).reverse(),
     });
   }
@@ -226,9 +227,11 @@ export async function handleUserApi(ctx: Ctx, req: IncomingMessage, res: ServerR
       for (let i = es.length - 1; i >= 0; i--) { const e = es[i]; if (e.relationshipId === rel && (e.type === 'MESSAGE_RECEIVED' || e.type === 'MESSAGE_SENT')) { lastAt = e.occurredAt; break; } }
       notes.push({ type: 'milestone', life: id, at: lastAt, title: `你和 ${id} 已是${layer.label}`, text: layer.name === 'intimate' ? '一路聊下来，她把你放进了最近的位置。' : '你们熟络起来了——她会更常想起你。' });
     }
-    // 7) 她的人生动态（仅你遇见过的命；只取公开脱敏的：交了同类新朋友 / 送别同类 / 新公开心声）。
+    // 7) 她的人生动态（你遇见过的 + 你关注的命；只取公开脱敏的：交了同类新朋友 / 送别同类 / 新公开心声）。
+    // 关注让你也收到"喜欢但还没聊过的她"的公开动态——纯订阅她的【公开】内容，不伪造"她想找你"。
     const dyn: Array<Record<string, unknown>> = [];
-    for (const id of metIds) {
+    const watchIds = [...new Set([...metIds, ...accounts.followsOf(me.id)])];
+    for (const id of watchIds) {
       const l = lifeById(id); if (!l) continue;
       const es = l.store.list();
       for (const e of es.slice(-80)) {
@@ -314,6 +317,15 @@ export async function handleUserApi(ctx: Ctx, req: IncomingMessage, res: ServerR
     const amount = Math.max(1, Math.min(100000, Math.round(Number(b.amount) || 0)));
     const id = accounts.requestRecharge(me.id, amount);
     return send(res, 200, { requested: true, id, amount });
+  }
+  // 关注/取关喜欢的生命体（平台层·toggle 或显式 {follow}）。绝不进神圣日志、绝不动她的状态。
+  if (req.method === 'POST' && seg[1] === 'lives' && seg[3] === 'follow') {
+    const lf = lifeById(seg[2]);
+    if (!lf) return send(res, 404, { error: 'no such life' });
+    const b = await readJson(req);
+    const want = typeof b.follow === 'boolean' ? b.follow : !accounts.isFollowing(me.id, lf.id); // 显式 follow 或翻转
+    if (want) accounts.follow(me.id, lf.id); else accounts.unfollow(me.id, lf.id);
+    return send(res, 200, { following: want, followers: accounts.followerCount(lf.id) });
   }
   if (req.method === 'POST' && seg[1] === 'lives' && seg[3] === 'say') {
     const life2 = lifeById(seg[2]);
