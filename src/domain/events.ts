@@ -62,10 +62,23 @@ export interface RelationshipEndedPayload {
 }
 // 模型感知特征（§10 开放岔口，已签署）：模型把消息解析成结构化情感，【冻进事件】。
 // 重放只读这份冻结值、不再调模型 → V2 仍确定性；状态仍由确定性推理算（模型不写状态）。
+//
+// 【契约①的红线，务必守住】这里只放【刺激固有维度】——消息【本身】客观可读的属性（Scherer 的 Stimulus Evaluation Checks）。
+// 模型当"耳朵"听出这些；【绝不】让它评估"这对她意味着什么"（goal-relevance / coping-potential / norm-compatibility
+// 那三类【关系性评价】必须由折叠用【她自己的状态】确定性算——见 reconstruct.appraiseMessage）。
+// 新增维度全部 optional：旧事件/未配感知时缺失 → 折叠按中性默认处理（与旧轨迹逐位一致、向后兼容）。
 export interface Perception {
-  sentiment: number; // -1..1 整体善意↔敌意（预测误差方向）
-  warmth: number; // 0..1 温暖/亲近
-  threat: number; // 0..1 威胁/伤害
+  // —— 原 3 维 ——
+  sentiment: number; // -1..1 整体善意↔敌意（intrinsic pleasantness）
+  warmth: number; // 0..1 温暖/亲近（释放的亲和/关切）
+  threat: number; // 0..1 威胁/敌意/伤害/否定
+  // —— 新增刺激固有维度（更接近"真实环境下的感知"）——
+  intensity?: number; // 0..1 情感强度/语气有多用力（"我爱死你了！！"≫"嗯还行"）——Scherer intrinsic intensity
+  novelty?: number; // 0..1 话题/内容的新奇·突然（没碰过的事 vs 老生常谈）——Scherer novelty SEC
+  certainty?: number; // 0..1 表达清晰度（高=明确；低=模棱/含糊/费解 → 不安/困惑）
+  blame?: number; // -1..1 归因方向（causal attribution）：-1 对方在自责/道歉("我错了") ↔ +1 把责任推到她身上("都怪你")
+  urgency?: number; // 0..1 紧迫/求助/需要立刻回应（demand character）
+  playful?: number; // 0..1 玩笑/调侃成分（高 → 别把逗当攻击）
   modelId: string; // 哪个模型感知的（审计）
 }
 export interface MessageReceivedPayload {

@@ -32,7 +32,7 @@ import {
   type ValueEntry,
 } from '../domain/snapshot.ts';
 
-const RECONSTRUCT_VERSION = 25; // v25：记忆冷热分层——current 情景记忆热集有界(500)，超出按鲜活度淘汰最淡、压进冷聚合(遗忘即抽象、计数无损)；现有命远低于上限→逐位不变；旧 checkpoint 全量重放
+const RECONSTRUCT_VERSION = 26; // v26：感知补全——耳朵多听 6 维刺激固有特征(强度/新奇/清晰/归因/紧迫/玩笑)，折叠确定性用上；全部缺失→中性→旧事件逐位不变；旧 checkpoint 全量重放 // v25：记忆冷热分层——current 情景记忆热集有界(500)，超出按鲜活度淘汰最淡、压进冷聚合(遗忘即抽象、计数无损)；现有命远低于上限→逐位不变；旧 checkpoint 全量重放
 // 她活在出生地的时区：分钟东偏 UTC，【出生即冻结进 LIFE_GENESIS、终生不变】（不取 OS/用户时区，故 V2 可复现）。
 // 她是一个身体、只有一个昼夜。平台孵化的命缺省=北京 480；将来用户接生的命取创造者设备时区。
 const CIRCADIAN_OFFSET_MIN_DEFAULT = 480;
@@ -62,6 +62,13 @@ const K = {
   surpriseGain: 0.45, // 预期违背：越出乎预料越往心里去（信任的人变冷更痛、冷淡的人示好更暖）
   surpriseArousal: 0.5, // 预期违背 → 唤醒（越意外越心头一紧/一亮）
   expectEma: 0.3, // 对一个人"会怎么待我"的预期，按指数滑动更新
+  // —— 刺激固有感知的细分维度（installment：感知补全）——全部【缺失→中性默认→与旧轨迹逐位一致】。
+  perceiveNovelty: 0.15, // 话题新奇度 → 直接解无聊（喂 novelty soma），不必靠"预期违背"
+  perceiveCertaintyCalm: 0.5, // 表达含糊(低 certainty) → 轻微不安（calm 下降系数，乘 kCalm）
+  perceiveCertaintyArousal: 0.3, // 含糊 → 轻微警觉（arousal 上升系数，乘 kArousal）
+  perceiveBlame: 0.5, // 归因：被推责(+) → 更不安/紧绷；对方自责(-) → 更安心、少要修复
+  perceiveUrgency: 0.5, // 紧迫/求助 → 唤醒拉高、注意力被抓（乘 kArousal）
+  perceivePlayful: 0.6, // 玩笑成分 → 折掉这一比例的威胁（别把调侃当攻击）
   // —— 世界学习（§8.1）——全确定性，模型不参与 ——
   interestGain: 0.16, // 读到一条该主题 → 兴趣增量（再按相关度/情绪/好奇缩放）
   interestDecay: 0.97, // 每读一遍世界，所有旧兴趣轻微衰减（不再遇到的会淡出）
@@ -414,11 +421,19 @@ function appraiseMessage(st: RState, e: LifeEvent<'MESSAGE_RECEIVED'>): void {
   // 中性气质（warmth=0.5、sensitivity=1）下与旧轨迹逐位一致（老日志兼容）。
   const t = st.temperament;
   const warmBias = (t.warmth - 0.5) * 0.3;
-  const evFelt = clamp(ev + warmBias, -1.5, 1.5); // 她【体验到】的善意↔敌意
+  let evFelt = clamp(ev + warmBias, -1.5, 1.5); // 她【体验到】的善意↔敌意（玩笑会软化下面）
   const sens = t.sensitivity;
   // 人格塑形（在默认 0.5 处=恒等 → 老命轨迹不变）：玩心高 → 威胁笑着带过；驱力高 → 唤醒反应更强。
   threat = clamp(threat * (1 - 0.3 * (t.playfulness - 0.5)), 0, 1);
   const driveF = 1 + 0.3 * (t.drive - 0.5);
+  // —— 刺激固有感知细分（全部缺失→中性→与旧轨迹逐位一致）——
+  const per = p.perception;
+  const playful = clamp(per?.playful ?? 0, 0, 1);
+  // 玩笑/调侃成分 → 既折掉部分威胁（别把逗当攻击），也软化"被伤"感（把负向 evFelt 往中性提一点）。
+  threat = clamp(threat * (1 - K.perceivePlayful * playful), 0, 1);
+  if (playful) evFelt = clamp(evFelt + K.perceivePlayful * playful * Math.max(0, -evFelt) * 0.6, -1.5, 1.5);
+  // 情感强度：模型听出"这句多用力"。缺失/0.5→intF=1（恒等）；高→放大、低→收敛 她受影响的幅度。
+  const intF = per?.intensity != null ? clamp(0.6 + 0.8 * clamp(per.intensity, 0, 1), 0.6, 1.4) : 1;
 
   const bond = st.bonds[p.relationshipId];
   // 关系条件化 = 预期违背：同一句话，意义取决于"我本以为这个人会怎么待我"。
@@ -428,14 +443,23 @@ function appraiseMessage(st: RState, e: LifeEvent<'MESSAGE_RECEIVED'>): void {
   const ev2 = clamp(evFelt * (1 + K.surpriseGain * surprise), -1.5, 1.5); // 越出乎预料越往心里去
 
   const s = st.soma;
-  s.valence.value = clamp(s.valence.value + K.kValence * ev2 * sens, -1, 1);
-  s.connection.value = clamp(s.connection.value + K.kConnection * ev2 * sens, -1, 1);
-  s.vitality.value = clamp(s.vitality.value + K.kVitality * ev2, st.vitalityFloor, 1); // 灵性是底，不随敏感放大
-  s.calm.value = clamp(s.calm.value + K.kCalm * (warmth - threat) * sens, 0, 1); // 暖→更平静，威胁→更紧张
-  s.safety.value = clamp(s.safety.value + K.kSafety * (warmth - threat) * sens, 0, 1);
-  // 唤醒 = 强度 + 意外（越出乎预料越心头一紧/一亮）。
-  s.arousal.value = clamp(s.arousal.value + (K.kArousal * Math.max(warmth, threat, Math.abs(ev2) / 1.5) * sens + K.surpriseArousal * surprise * K.kArousal) * driveF, 0, 1);
-  s.novelty.value = clamp(s.novelty.value + 0.08 * surprise, 0, 1); // 出乎预料的话也带来新鲜感
+  s.valence.value = clamp(s.valence.value + K.kValence * ev2 * sens * intF, -1, 1); // 强度放大"往心里去"的幅度
+  s.connection.value = clamp(s.connection.value + K.kConnection * ev2 * sens * intF, -1, 1);
+  s.vitality.value = clamp(s.vitality.value + K.kVitality * ev2, st.vitalityFloor, 1); // 灵性是底，不随强度/敏感放大
+  s.calm.value = clamp(s.calm.value + K.kCalm * (warmth - threat) * sens * intF, 0, 1); // 暖→更平静，威胁→更紧张
+  s.safety.value = clamp(s.safety.value + K.kSafety * (warmth - threat) * sens * intF, 0, 1);
+  // 唤醒 = 强度 + 意外。强度优先用模型听出的 intensity，缺失则退回 max(暖,威胁,效价)（向后一致）。
+  const strength = Math.max(warmth, threat, Math.abs(ev2) / 1.5, per?.intensity ?? 0);
+  s.arousal.value = clamp(s.arousal.value + (K.kArousal * strength * sens + K.surpriseArousal * surprise * K.kArousal) * driveF, 0, 1);
+  s.novelty.value = clamp(s.novelty.value + 0.08 * surprise + K.perceiveNovelty * clamp(per?.novelty ?? 0, 0, 1), 0, 1); // 出乎预料 + 话题新奇 → 解无聊
+  if (per) {
+    // 表达含糊（低 certainty）→ 模棱两可让人没底：轻微不安 + 警觉。
+    if (per.certainty != null) { const amb = clamp(1 - per.certainty, 0, 1); s.calm.value = clamp(s.calm.value - K.kCalm * K.perceiveCertaintyCalm * amb * sens, 0, 1); s.arousal.value = clamp(s.arousal.value + K.kArousal * K.perceiveCertaintyArousal * amb, 0, 1); }
+    // 归因：被推责(+)→更不安/紧绷（被指着鼻子）；对方自责/道歉(-)→更安心。
+    if (per.blame) { const bl = clamp(per.blame, -1, 1); if (bl > 0) { s.safety.value = clamp(s.safety.value - K.kSafety * K.perceiveBlame * bl * sens, 0, 1); s.arousal.value = clamp(s.arousal.value + K.kArousal * K.perceiveBlame * bl, 0, 1); } else { s.safety.value = clamp(s.safety.value + K.kSafety * K.perceiveBlame * (-bl) * 0.6 * sens, 0, 1); } }
+    // 紧迫/求助 → 唤醒拉高、心头一提（被需要、想立刻回应）。
+    if (per.urgency != null) { s.arousal.value = clamp(s.arousal.value + K.kArousal * K.perceiveUrgency * clamp(per.urgency, 0, 1), 0, 1); }
+  }
 
   // —— 评价理论层（Scherer CPM / OCC，installment 4）——在"刺激本身"的感知之上，由【她自己的状态】确定性算【关系性评价】：
   // 不让模型替她评估"这对我意味着什么"（那会让活依赖模型）；而是用她的资源/牵挂/价值观去评——同一句话，对不同的她意义不同。
@@ -462,6 +486,7 @@ function appraiseMessage(st: RState, e: LifeEvent<'MESSAGE_RECEIVED'>): void {
     bond.closeness = clamp(bond.closeness + K.kCloseness * ev2, 0, 1);
     if (ev2 < 0) bond.repairNeed = clamp(bond.repairNeed + 0.5 * -ev2, 0, 1);
     else bond.repairNeed = clamp(bond.repairNeed - 0.3 * ev2, 0, 1);
+    if (per?.blame != null && per.blame < 0) bond.repairNeed = clamp(bond.repairNeed + K.perceiveBlame * per.blame * 0.5, 0, 1); // 对方道歉/自责 → 额外消解"需要修复"
     st.expect[p.relationshipId] = expected + (ev2 - expected) * K.expectEma; // 更新对ta的预期
   }
 

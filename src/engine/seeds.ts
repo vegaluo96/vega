@@ -78,5 +78,5 @@ export function genesisPayloadFor(
   creator: { relationshipId: RelationshipId; identityRef: string },
   circadianOffsetMin = 480,
 ): GenesisPayload {
-  return { innateSeed: innateSeedFor(id, circadianOffsetMin), reconstructVersionAtBirth: 25, creator }; // 与 RECONSTRUCT_VERSION 同步
+  return { innateSeed: innateSeedFor(id, circadianOffsetMin), reconstructVersionAtBirth: 26, creator }; // 与 RECONSTRUCT_VERSION 同步
 }
