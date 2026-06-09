@@ -13,8 +13,16 @@ trap 'kill $PID 2>/dev/null; rm -rf "$DIR"' EXIT
 for i in $(seq 1 40); do curl -fsS "http://127.0.0.1:$PORT/health" >/dev/null 2>&1 && break; sleep 0.25; done
 
 B="http://127.0.0.1:$PORT"
-# 归一化：抹掉时间戳/令牌/事件数等易变字段，只看结构与稳定字段。
-norm() { sed -E 's/"(at|occurredAt|recordedAt|lastActiveAt|createdAt|decidedAt|bornAt|clockAt|requestedAt)":"[^"]*"/"\1":"T"/g; s/"(token|bindToken|qr)":"[^"]*"/"\1":"X"/g; s/"(events|version|total|uptoSeq|seq|idleMinutes)":[0-9]+/"\1":0/g; s/[0-9]{2}:[0-9]{2}:[0-9]{2}/T/g'; }
+# 归一化：抹掉时间戳/令牌/随机 id/事件数等"每跑都不同"的易变字段，只看结构与稳定字段。
+# 注意：daemon 输出是 pretty-print JSON（冒号后带空格），所以字段规则要容忍 `": "`。
+# 顺序：先按字段名归一可控字段，再做"全局兜底"（ISO 时间戳/13+位 epoch-ms/16+位 hex）扫掉残留。
+norm() { sed -E \
+  -e 's/"(token|bindToken|qr|apiyiTokenMasked|apiKeyMasked)": ?"[^"]*"/"\1":"X"/g' \
+  -e 's/"(events|version|total|uptoSeq|seq|idleMinutes)": ?[0-9]+/"\1":0/g' \
+  -e 's/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z/T/g' \
+  -e 's/[0-9]{13,}/N/g' \
+  -e 's/"id": ?"[0-9a-f]{16,}"/"id":"X"/g' \
+  -e 's/[0-9a-f]{16,}/H/g'; echo; }   # 末尾补一行：让每段输出独占行、diff 更可读
 
 echo "### health";        curl -fsS "$B/health" | norm
 TOK=$(curl -fsS -XPOST "$B/api/auth/register" -H 'content-type: application/json' -d '{"email":"smoke@x.com","password":"password1","handle":"smoke"}' | tr -d '\n ' | grep -oE '"token":"[0-9a-f]+"' | grep -oE '[0-9a-f]{16,}')
