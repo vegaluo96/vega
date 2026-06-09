@@ -30,6 +30,7 @@ function arg(name: string): string | undefined {
 const num = (name: string, dflt: number): number => { const v = arg(name); return v == null ? dflt : Number(v); };
 
 const DATASET = arg('dataset');
+const SYNTH = process.argv.includes('--synthesize'); // 生成确定性"类 ESM"CSV 并跑全 --dataset 管线（管线自测/演示，非新证据）
 const INTERVAL_H = num('interval-hours', 1.5); // ESM 典型采样间隔（醒着每天~6-10 次）
 const EPISODE_TAU_RATIO = num('episode-tau-ratio', 3); // 情绪事件时长 ≈ K·τ（OU 约 3τ 回到~95% 基线）
 const SAD_DURATION_H = num('sad-duration', 120); // Verduyn & Lavrijsen 2011：哀伤 episode ≈120h
@@ -57,9 +58,9 @@ function autocorr1(x: number[]): number {
 const median = (x: number[]): number => { const s = [...x].sort((a, b) => a - b); const h = s.length >> 1; return s.length % 2 ? s[h] : (s[h - 1] + s[h]) / 2; };
 
 // ───────────────────── 数据集（服务器侧）→ 真实目标 ─────────────────────
-function targetsFromDataset(path: string): void {
-  const valCol = arg('valence-col'), aroCol = arg('arousal-col'), pidCol = arg('participant-col');
-  const sMin = num('scale-min', 0), sMax = num('scale-max', 1);
+type DatasetOpts = { aroCol?: string; valCol?: string; pidCol?: string; sMin: number; sMax: number };
+function targetsFromDataset(path: string, o: DatasetOpts): void {
+  const { valCol, aroCol, pidCol, sMin, sMax } = o;
   if (!aroCol) throw new Error('需 --arousal-col（瞬时唤醒/激活列名），用于拟 fast 层');
   const lines = readFileSync(path, 'utf8').trim().split(/\r?\n/);
   const header = lines[0].split(',').map((s) => s.trim());
@@ -79,6 +80,32 @@ function targetsFromDataset(path: string): void {
   target.arousalSD = median(sds);
   target.source = `数据集 ${path}（${groups.size} 人，arousal=${aroCol}${iVal >= 0 ? `，valence=${valCol}` : ''}）`;
   console.log(`  [数据集] ${groups.size} 人 → 瞬时 arousal 自相关 median=${target.arousalAutocorr.toFixed(3)}, SD median=${target.arousalSD.toFixed(3)}`);
+}
+
+// 生成【确定性】类 ESM 数据集：每人一条 AR(1) 瞬时序列(健康惯性 φ≈0.45)+ 偶发事件反应性尖峰 + 个体均值/变率差异，
+// 1–100 量表(像真 ESM 评分)。用于【端到端跑通 --dataset 管线 + 演示工作流】——【非】新实证(它就是按已知统计造的，循环)。
+function synthesizeEsm(path: string): { aroCol: string; valCol: string; pidCol: string; sMin: number; sMax: number } {
+  const people = num('people', 80), days = num('days', 7);
+  const perDay = Math.max(4, Math.floor(14 / INTERVAL_H)); // 清醒 ~14h / 采样间隔
+  let s = 0x9e3779b9 >>> 0; const r = (): number => (s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296;
+  const clamp01to100 = (x: number): number => Math.min(100, Math.max(1, x));
+  const rows: string[] = ['PID,Pleasant,Activated'];
+  for (let p = 0; p < people; p++) {
+    const meanA = 35 + 35 * r(), meanV = 45 + 25 * (r() - 0.5) * 2; // 个体差异：均值不同
+    const sdA = 8 + 12 * r(), sdV = 8 + 12 * r(); // 个体差异：变率不同
+    const phi = 0.35 + 0.25 * r(); // 健康惯性带 ~0.35–0.6
+    let a = meanA, v = meanV;
+    for (let i = 0; i < days * perDay; i++) {
+      const spikeA = r() < 0.15 ? (r() - 0.5) * 40 : 0; // 事件反应性尖峰(总变率的主来源)
+      const spikeV = r() < 0.15 ? (r() - 0.5) * 40 : 0;
+      a = clamp01to100(meanA + phi * (a - meanA) + (r() - 0.5) * 2 * sdA + spikeA);
+      v = clamp01to100(meanV + phi * (v - meanV) + (r() - 0.5) * 2 * sdV + spikeV);
+      rows.push(`P${p},${v.toFixed(1)},${a.toFixed(1)}`);
+    }
+  }
+  writeFileSync(path, rows.join('\n'));
+  console.log(`  [synthesize] 写入 ${path}：${people} 人 × ${days} 天 × ${perDay}/天（确定性、类 ESM、1–100 量表）`);
+  return { aroCol: 'Activated', valCol: 'Pleasant', pidCol: 'PID', sMin: 1, sMax: 100 };
 }
 
 // ───────────────────── 仿真（驱动真引擎） ─────────────────────
@@ -166,7 +193,8 @@ function fitFastPeriod(): FastFit {
 console.log('═'.repeat(72));
 console.log(' 情感动力学·离线拟合（installment 六）—— 两条时标分开拟，守哀伤持续');
 console.log('═'.repeat(72));
-if (DATASET) targetsFromDataset(DATASET);
+if (SYNTH) { const p = arg('dataset') ?? '/tmp/vega-esm-synth.csv'; targetsFromDataset(p, synthesizeEsm(p)); }
+else if (DATASET) targetsFromDataset(DATASET, { aroCol: arg('arousal-col'), valCol: arg('valence-col'), pidCol: arg('participant-col'), sMin: num('scale-min', 0), sMax: num('scale-max', 1) });
 console.log(`  目标来源：${target.source}`);
 console.log(`  瞬时(arousal) 目标：自相关 ${target.arousalAutocorr.toFixed(3)} / SD ${target.arousalSD.toFixed(3)}  (采样间隔 ${INTERVAL_H}h)`);
 console.log(`  情绪时长目标：哀伤 ${target.sadDurationH}h ≫ 喜悦 ${target.joyDurationH}h（episode≈${EPISODE_TAU_RATIO}τ）`);
@@ -251,6 +279,7 @@ writeFileSync('docs/affect-calibration-report.md', report);
 console.log('\n── 建议常量（已写入 docs/affect-calibration-report.md）──');
 console.log(block);
 console.log('\n' + '─'.repeat(72));
-console.log(DATASET ? '已用真实数据集拟合 fast 层。把上面 AFFECT 块固化进 src/kernel/affect-config.ts、升 RECONSTRUCT_VERSION、全量重放。'
-  : '本地文献锚定跑（无网）。要用真数据精修 fast 层：在 HK 服务器 npm run calibrate -- --dataset <csv> --arousal-col <列> …');
+console.log(SYNTH ? '⚠ 合成数据集（确定性自测，按已知统计造、循环 → 仅验证 --dataset 管线跑通，非新证据）。换真 ESM CSV：把 --synthesize 换成 --dataset <真csv>。'
+  : DATASET ? '已用真实数据集拟合 fast 层。若有"采用拟合"，把上面 AFFECT 块固化进 src/kernel/affect-config.ts、升 RECONSTRUCT_VERSION、全量重放。'
+  : '本地文献锚定跑（无网）。要用真数据精修 fast 层：npm run calibrate -- --dataset <真csv> --arousal-col <列> …（或先 --synthesize 看管线）');
 console.log('═'.repeat(72));
