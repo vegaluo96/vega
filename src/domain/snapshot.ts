@@ -142,7 +142,9 @@ export interface DerivedSnapshot {
   chapters: string[]; // 叙事身份：把人生按转折点确定性切成"篇章"（renarrate 的产物，纯只读，不污染身份）
   growth: string; // 阅历/成长：她活了多久、长成了什么形状（确定性合成，脱敏、不含任何用户）
   becoming: string; // 我正在成为的我：由 confirmed 价值 + 兴趣 + 气质合成的演化中独立自我（脱敏）
-  maturity: number; // 心智成熟度 [0,1]：随阅历缓慢累积（持续变聪明、情绪更稳），独立于先天气质
+  maturity: number; // 心智成熟度 [0,1]：随阅历缓慢累积（持续变聪明、情绪更稳），独立于先天气质（= 下面三面均值）
+  maturityFacets: { regulation: number; perspective: number; integration: number }; // 多维成熟（期5）：情绪调节/视角采择/整合——不同反思长不同的面
+  sleepPressure: number; // 睡眠压 S [0,1]（期5·Borbély）：醒着活跃期累积、休息期释放；下压精力=真实疲劳曲线
   baseline: { valence: number; connection: number }; // 习得的底色（allostasis）：先天设定点 + 持续经历造成的缓慢漂移
   aspirations: string[]; // 长期心愿（独立意志）：从 confirmed 价值/兴趣/牵挂确定性沉淀的"她想去的方向"
   defenseStyle: string; // 防御机制（由冻结气质+价值派生）：受伤/受威胁时的固定反应——退缩/变硬/幽默岔开/讨好

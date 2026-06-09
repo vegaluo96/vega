@@ -403,7 +403,7 @@
             <div class="ct-stage"><div class="ct-k">③ 状态 EngineSnapshot <span class="faint">引擎全貌——和④对比即知哪些能力没喂给模型</span></div><div class="ct-v">
               <b>{st.emotion}</b> · {st.feeling}{#if st.tension} · 内在拉扯：{st.tension}{/if}
               <div class="ct-nums">效价 {st.soma.valence} · 唤醒 {st.soma.arousal} · 灵性 {st.soma.vitality} · 精力 {st.soma.energy} · 平静 {st.soma.calm} · 联结 {st.soma.connection} · 安全 {st.soma.safety} · 新鲜 {st.soma.novelty}</div>
-              <div class="ct-nums">时段 {st.dayPhase} · 成熟度 {st.maturity} · 风险偏好 {st.riskAppetite} · 底色(效价 {st.baseline.valence} / 联结 {st.baseline.connection})</div>
+              <div class="ct-nums">时段 {st.dayPhase} · 睡眠压 {st.sleepPressure} · 成熟度 {st.maturity}(调节{st.maturityFacets.regulation}/视角{st.maturityFacets.perspective}/整合{st.maturityFacets.integration}) · 风险偏好 {st.riskAppetite} · 底色(效价 {st.baseline.valence}/联结 {st.baseline.connection})</div>
               <div class="ct-nums">需求(SDT)：自主 {st.needs.autonomy} · 胜任 {st.needs.competence} · 关系 {st.needs.relatedness} · 探索 {st.needs.novelty} ｜ 防御 {st.defenseStyle} · 依恋 {st.attachmentBias}</div>
               <div class="ct-sub">正在成为</div><div class="ct-prose">{st.becoming}</div>
               <div class="ct-sub">阅历</div><div class="ct-prose">{st.growth}</div>

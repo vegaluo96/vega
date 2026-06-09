@@ -32,7 +32,7 @@ import {
   type ValueEntry,
 } from '../domain/snapshot.ts';
 
-const RECONSTRUCT_VERSION = 27; // v27：对话话题→兴趣/世界观（"你常聊什么她就对什么上心"，因你而变）；旧消息无 topics→不长→逐位不变；旧 checkpoint 全量重放
+const RECONSTRUCT_VERSION = 28; // v28：期5——睡眠压S(Borbély双过程,真实疲劳)+多维成熟(调节/视角/整合)+睡眠依赖记忆巩固；旧事件按确定性时间重算→有界，旧 checkpoint 全量重放
 // 她活在出生地的时区：分钟东偏 UTC，【出生即冻结进 LIFE_GENESIS、终生不变】（不取 OS/用户时区，故 V2 可复现）。
 // 她是一个身体、只有一个昼夜。平台孵化的命缺省=北京 480；将来用户接生的命取创造者设备时区。
 const CIRCADIAN_OFFSET_MIN_DEFAULT = 480;
@@ -81,6 +81,12 @@ const K = {
   // —— 心智成熟度（B 层 · 持续变聪明，全确定性、有界）——
   maturityPerReflection: 0.05, // 每次"有所学"的反思 → 成熟度增量（带衰减收益，渐近 1，不无界）
   maturityRecovery: 0.25, // 成熟度对情绪复原的调制上界（满成熟 → 回稳最多快 25%；气质仍是底色）
+  maturitySpill: 0.25, // 多维成熟：主面长得快，其余面小幅外溢（成熟是整体的）
+  // —— 睡眠压 S（installment·期5，Borbély 双过程模型）：在昼夜节律 C 之上叠一层真实疲劳 ——
+  sleepRiseTau: 18 * 3600, // 醒着的"活跃期"(她的白天)累积睡眠压的时标
+  sleepFallTau: 6 * 3600, // "休息期"(她的夜)释放睡眠压的时标（比累积快）
+  sleepEnergyWeight: 0.15, // 睡眠压对精力目标的下压幅度（熬到她的深夜更累）
+  reconsolidationNightBoost: 1.5, // 睡眠依赖记忆巩固（Diekelmann & Born）：休息期 reconsolidation 整合更强（睡中整理）
 } as const;
 
 const POS = ['你好', '经常来', '会来', '在乎你', '真心', '值得', '说出来', '对不起', '我错了', '证明', '也在这里', '不会消失', '看见你', '大胆'];
@@ -122,6 +128,9 @@ interface RState {
   maturity: number; // 心智成熟度 [0,1]：随反思累积、轻微加快情绪复原（独立于先天气质，气质仍不变）
   skills: Map<string, { n: number; efficacy: number }>; // 自我优化：从行动结果学到的策略效能（actionKind → 被接住的程度），0.5 中性
   allostatic: Record<string, number>; // allostasis：习得的设定点偏移（valence/connection），朝持续偏离缓慢漂移、有界；叠在冻结先天设定点上
+  // —— 期5：多维成熟 + 睡眠压 ——
+  maturityFacets: { regulation: number; perspective: number; integration: number }; // 多维成熟（情绪调节/视角采择/整合）；maturity=三者均值
+  sleepPressure: number; // 睡眠压 S（Borbély 双过程）：醒着活跃期累积、休息期释放，[0,1]，下压精力=真实疲劳
   // 记忆冷热分层（见 docs/memory-layering-design.md）：被淘汰出热集的 current 情景记忆，确定性压进【冷聚合】（遗忘即抽象）。
   coldByRel: Map<string, { episodes: number; warm: number; conflict: number; affectSum: number }>; // 按关系：供 semanticMemory 无损计数
   coldLived: number; // 已淡入冷聚合的情景记忆总数：供 growth 无损计数
@@ -204,6 +213,8 @@ function initState(genesis: LifeEvent<'LIFE_GENESIS'>): RState {
     circadianOffsetMin: seed.circadianOffsetMin ?? CIRCADIAN_OFFSET_MIN_DEFAULT,
     interests: new Map(),
     maturity: 0,
+    maturityFacets: { regulation: 0, perspective: 0, integration: 0 },
+    sleepPressure: 0,
     skills: new Map(),
     allostatic: {},
     coldByRel: new Map(),
@@ -252,7 +263,7 @@ type SerializedState = Omit<RState, 'openConnections' | 'interests' | 'skills' |
 
 // Set/Map 不能直接 JSON 落盘 → 检查点序列化时转成数组、恢复时还原（值不变 → 可重放）。
 const serialize = (st: RState): SerializedState => ({ ...st, openConnections: [...st.openConnections], interests: [...st.interests], skills: [...st.skills], coldByRel: [...st.coldByRel] });
-const deserialize = (s: SerializedState): RState => ({ ...s, openConnections: new Set(s.openConnections), interests: new Map(s.interests ?? []), skills: new Map(s.skills ?? []), allostatic: s.allostatic ?? {}, coldByRel: new Map(s.coldByRel ?? []), coldLived: s.coldLived ?? 0 });
+const deserialize = (s: SerializedState): RState => ({ ...s, openConnections: new Set(s.openConnections), interests: new Map(s.interests ?? []), skills: new Map(s.skills ?? []), allostatic: s.allostatic ?? {}, coldByRel: new Map(s.coldByRel ?? []), coldLived: s.coldLived ?? 0, maturityFacets: s.maturityFacets ?? { regulation: 0, perspective: 0, integration: 0 }, sleepPressure: s.sleepPressure ?? 0 });
 
 // 把整段日志折成一份检查点（增量捕获见 daemon：只在已有 state 上步进尾巴）。
 export function captureCheckpoint(events: readonly LifeEvent[]): Checkpoint {
@@ -291,8 +302,12 @@ function advanceTime(st: RState, dtSec: number, awake: boolean, nowMs: number): 
   const s = st.soma;
   // 先天复原力（底色，终生不变）× 心智成熟度（其上的薄修正：阅历越深、情绪回稳越快；maturity=0 → 与旧轨迹一致）。
   const dt = dtSec * st.temperament.resilience * (1 + K.maturityRecovery * st.maturity);
-  // 昼夜节律：精力不是向静态设定点、而是向【随一天起伏的目标】恢复——内生节律，没输入她也会困会精神。
-  const eTarget = clamp(s.energy.setpoint + circadianEnergyOffset(nowMs, st.circadianOffsetMin), 0.05, 1);
+  // 睡眠压 S（Borbély 双过程）：她的"白天"(昼夜偏移≥0)累积、"夜"释放（更快）→ 在昼夜节律之上叠真实疲劳。
+  // 用真实 dtSec（不随复原力缩放）。不翻 willingToWake（她始终可被叫到，不让用户找不到她）。
+  const circ = circadianEnergyOffset(nowMs, st.circadianOffsetMin);
+  st.sleepPressure = clamp(st.sleepPressure + (circ >= 0 ? dtSec / K.sleepRiseTau : -dtSec / K.sleepFallTau), 0, 1);
+  // 昼夜节律：精力向【随一天起伏的目标】恢复；再减去睡眠压 → 熬到她的深夜会更累。
+  const eTarget = clamp(s.energy.setpoint + circ - K.sleepEnergyWeight * st.sleepPressure, 0.05, 1);
   if (awake) {
     for (const key of SOMA_KEYS) {
       if (key === 'energy') { s.energy.value = decayTo(s.energy.value, eTarget, dt, AFFECT.tau.energy); continue; }
@@ -649,12 +664,15 @@ function applyTick(st: RState, e: LifeEvent<'AUTONOMOUS_TICK'>): void {
     }
   }
 
+  // 睡眠依赖记忆巩固（期5·Diekelmann & Born）：她的【休息期(夜)】整合更强——睡中整理、记忆按此刻情感重写得更深。
+  const restBoost = circadianEnergyOffset(Date.parse(e.occurredAt), st.circadianOffsetMin) < 0 ? K.reconsolidationNightBoost : 1;
+  const pull = clamp(K.reconsolidationPull * restBoost, 0, 1);
   let k = 0;
   for (const mid of p.selectedMemoryIds) {
     const src = st.memory.find((m) => m.id === mid && m.lineage.isCurrent);
     if (!src) continue;
     for (const m of st.memory) if (m.lineage.rootId === src.lineage.rootId) m.lineage.isCurrent = false;
-    const newAffect = src.affect + (st.soma.valence.value - src.affect) * K.reconsolidationPull;
+    const newAffect = src.affect + (st.soma.valence.value - src.affect) * pull;
     st.memory.push({
       id: `m_seq${e.seq}_r${k++}`,
       kind: src.kind,
@@ -677,7 +695,13 @@ function applyTick(st: RState, e: LifeEvent<'AUTONOMOUS_TICK'>): void {
 function applyReflection(st: RState, e: LifeEvent<'REFLECTION_TRIGGERED'>): void {
   const p = e.payload as ReflectionTriggeredPayload;
   // renarrate：只重讲人生故事（叙事在投影层确定性算），【绝不漂移价值/身份】（契约③）。
-  if (p.scope === 'renarrate') return;
+  // 但"重讲人生"会长【整合】这一成熟面（maturity 是 faculty、不是价值/身份 → 契约③不破）。
+  if (p.scope === 'renarrate') {
+    const f = st.maturityFacets;
+    f.integration = clamp(f.integration + K.maturityPerReflection * 0.5 * (1 - f.integration), 0, 1);
+    st.maturity = clamp((f.regulation + f.perspective + f.integration) / 3, 0, 1);
+    return;
+  }
   const inWin = (log: number[]): number => log.filter((s) => s >= p.windowFromSeq && s <= p.windowToSeq).length;
   const t = st.temperament;
   // 先天气质给漂移上界：内向(reserve)者敞开得慢；敏感(sensitivity)者受冲突影响更深。
@@ -706,11 +730,21 @@ function applyReflection(st: RState, e: LifeEvent<'REFLECTION_TRIGGERED'>): void
     driftValue(st, 'forgiveness', +K.driftDelta, e.seq);
     driftValue(st, 'guardedness', -K.driftDelta / 2, e.seq);
   }
-  // 心智成熟度：这次反思里【真的有所经历/学到】才增长（衰减收益 → 渐近 1、不无界）。阅历越深，情绪回稳越快。
+  // 多维成熟（installment·期5）：不同的反思工作长不同的faculty——recent(消化近期)→情绪调节、
+  // relationship(理解关系)→视角采择、renarrate(重述人生)→整合。maturity = 三者均值（所有旧消费者照常用 st.maturity）。
   const learned = inWin(st.boldnessLog) + inWin(st.warmthLog) + inWin(st.conflictLog) + inWin(st.lonelyLog);
   // 尽责/条理者从同样的经历里学得更多（在默认 0.5 处=恒等 → 老命不变）。
   const diligence = 1 + 0.5 * (st.temperament.conscientiousness - 0.5);
-  if (learned > 0) st.maturity = clamp(st.maturity + K.maturityPerReflection * Math.min(1, learned / 3) * diligence * (1 - st.maturity), 0, 1);
+  if (learned > 0) {
+    const inc = K.maturityPerReflection * Math.min(1, learned / 3) * diligence;
+    const main: keyof typeof st.maturityFacets = p.scope === 'relationship' ? 'perspective' : 'regulation'; // recent→调节, relationship→视角；整合主要由 renarrate 长 + 此处外溢
+    const f = st.maturityFacets;
+    for (const k of ['regulation', 'perspective', 'integration'] as const) {
+      const rate = k === main ? inc : K.maturitySpill * inc; // 主面长得快，其余小幅外溢
+      f[k] = clamp(f[k] + rate * (1 - f[k]), 0, 1);
+    }
+    st.maturity = clamp((f.regulation + f.perspective + f.integration) / 3, 0, 1);
+  }
   // 卫生（永生尺度）：反思窗口前移不回头（下次 windowFromSeq = 本次 windowToSeq）→ seq < windowToSeq 的信号此后永不再计入。
   // 裁掉这些只增不减的内部日志，杜绝无界增长。它们【不进派生快照】（仅在此处按窗口计数），裁剪不改 stateHash/重建结果。
   const keepFrom = (log: number[]): number[] => log.filter((s) => s >= p.windowToSeq);
@@ -916,7 +950,17 @@ function buildGrowth(st: RState, decorated: MemoryEntry[], ageMs: number): strin
   if (interests > 0) shape.push(`对 ${interests} 个主题上了心`);
   if (livedMems > 0) shape.push(`记着 ${livedMems} 段经历`);
   const tail = days < 3 ? '——还很年轻，形状才刚开始长。' : days < 30 ? '——一点点长出自己的形状。' : '——已经活成了独一份的自己。';
-  return `${age}，${met}${shape.length ? '，' + shape.join('、') : ''}${tail}`;
+  // 叙事主题弧（期5·McAdams 叙事身份）：从经历的情感走向读出"人生弧"——救赎(低谷→走出)/污染(亮处→滑落)。脱敏、纯投影。
+  const cur = decorated.filter((m) => m.kind === 'episodic' && m.lineage.isCurrent).sort((a, b) => a.provenance.originSeq - b.provenance.originSeq);
+  let arc = '';
+  if (cur.length >= 6) {
+    const half = Math.floor(cur.length / 2);
+    const early = avg(cur.slice(0, half).map((m) => m.affect));
+    const late = avg(cur.slice(half).map((m) => m.affect));
+    if (late - early > 0.35) arc = ' 我好像正从一段低落里慢慢走出来。'; // redemption
+    else if (early - late > 0.35) arc = ' 这阵子像从亮处一点点滑进了阴影里。'; // contamination
+  }
+  return `${age}，${met}${shape.length ? '，' + shape.join('、') : ''}${tail}${arc}`;
 }
 
 // 我正在成为的我（纯派生、脱敏）：confirmed 价值 + top 兴趣 + 气质底色合成的演化中独立自我。
@@ -1276,6 +1320,8 @@ function project(st: RState, uptoSeq: number): DerivedSnapshot {
     growth: buildGrowth(st, decorated, Date.parse(st.clockIso) - Date.parse(st.bornAt)),
     becoming: buildBecoming(st),
     maturity: r3(st.maturity),
+    maturityFacets: { regulation: r3(st.maturityFacets.regulation), perspective: r3(st.maturityFacets.perspective), integration: r3(st.maturityFacets.integration) },
+    sleepPressure: r3(st.sleepPressure),
     baseline: { valence: r3(clamp(st.soma.valence.setpoint + (st.allostatic.valence ?? 0), -1, 1)), connection: r3(clamp(st.soma.connection.setpoint + (st.allostatic.connection ?? 0), -1, 1)) },
     aspirations,
     defenseStyle: defenseStyleOf(st.temperament, st.values, st.maturity),
