@@ -87,24 +87,71 @@
   // 世界事件流（世界页）：跨命读到的真实世界。
   let worldFeed = [];
 
+  // 计费 / 对账（设置页，仅 owner）：对用户的计费数值 + apiyi 平台余额对账。
+  let bform = { costPerReply: 1, starterCredits: 100, apiyiToken: '' }, billingMsg = '', savingBilling = false;
+  let platBal = null, loadingBal = false;
+  async function saveBilling() {
+    if (!confirmGlobal()) return;
+    savingBilling = true; billingMsg = '';
+    try {
+      const patch = { costPerReply: Number(bform.costPerReply), starterCredits: Number(bform.starterCredits) };
+      if (bform.apiyiToken && bform.apiyiToken.trim()) patch.apiyiToken = bform.apiyiToken.trim();
+      const r = await api.saveBillingConfig(patch);
+      data = { ...data, billing: r }; bform.apiyiToken = '';
+      billingMsg = '已保存 · 即时生效（无需重启）';
+    } catch (e) { billingMsg = '✗ ' + e.message; } finally { savingBilling = false; }
+  }
+  async function loadPlatformBalance() {
+    loadingBal = true; platBal = null;
+    try { platBal = await api.platformBalance(); } catch (e) { platBal = { error: e.message }; } finally { loadingBal = false; }
+  }
+
+  // 接生（仅 owner）：随机 + 自定义。去掉写死推荐，可选先天原型（空=按 id 哈希随机）。
+  let archetypeList = [], chosenArchetype = '', randN = 3;
+  // 生成 N 个合法、不与现有命重名的随机 id（star-ish 短名）；后端 birthLife 仍兜重名。
+  function genRandom() {
+    const n = Math.max(1, Math.min(50, Math.trunc(Number(randN)) || 1));
+    const cons = 'bcdfghjklmnprstvwz', vow = 'aeiou';
+    const taken = new Set([...(data.lives ?? []).map((l) => l.id), ...newLifeId.toLowerCase().split(/[\s,，、]+/).map((s) => s.trim())]);
+    const out = [];
+    let guard = 0;
+    while (out.length < n && guard++ < 2000) {
+      const len = 4 + Math.floor(Math.random() * 4);
+      let s = cons[Math.floor(Math.random() * cons.length)];
+      for (let i = 1; i < len; i++) s += (i % 2 ? vow : cons)[Math.floor(Math.random() * (i % 2 ? vow.length : cons.length))];
+      if (!taken.has(s) && !out.includes(s)) out.push(s);
+    }
+    newLifeId = [...newLifeId.split(/[\s,，、]+/).map((s) => s.trim()).filter(Boolean), ...out].join(' ');
+  }
+
+  // 按用户看对话记录（用户详情里展开）：这个用户和她遇见过的每条命的真实来回。
+  let userConvos = null, loadingConvos = false;
+  async function loadUserConvos(id) {
+    loadingConvos = true; userConvos = null;
+    try { userConvos = await api.userConversations(id); } catch (e) { userConvos = { conversations: [], error: e.message }; } finally { loadingConvos = false; }
+  }
+
   async function load() {
     error = '';
     try {
-      if (tab === 'overview') {
-        const d = await api.overview(); role = d.role; data = d;
-        // 系统健康卡片：拿不到（非 owner / 失败）也不挡总览主表。
-        try { health = await api.health(); } catch { health = null; }
-      }
+      if (tab === 'overview') { const d = await api.overview(); role = d.role; data = d; }
       else if (tab === 'activity') data = { rows: await api.activity() };
       else if (tab === 'recharges') data = { rows: await api.recharges() };
-      else if (tab === 'users') { data = { rows: await api.users() }; userDetail = null; userErr = ''; }
+      else if (tab === 'users') { data = { rows: await api.users() }; userDetail = null; userErr = ''; userConvos = null; }
       else if (tab === 'life') { data = { life: await api.life(curLife), well: await api.wellbeing(curLife) }; lifeEvents = null; eventsOpen = false; }
+      else if (tab === 'birth') {
+        // 接生页：拉先天原型清单（下拉用）+ 现有生命体（随机生成时避重名）。
+        const [d, a] = await Promise.all([api.overview(), api.archetypes().catch(() => ({ archetypes: [] }))]);
+        role = d.role; data = d; archetypeList = a.archetypes ?? []; birthMsg = '';
+      }
       else if (tab === 'settings') {
-        // 设置区整合：模型(嘴/耳) + 社交边界 一页拉齐；系统/计费/治理只读取自 health。
-        const [m, s] = await Promise.all([api.modelConfig(), api.socialConfig()]);
+        // 设置区整合：模型(嘴/耳) + 社交边界 + 计费/对账 一页拉齐；系统门控/治理只读取自 health。
+        const [m, s, bl] = await Promise.all([api.modelConfig(), api.socialConfig(), api.billingConfig()]);
         try { health = await api.health(); } catch { health = null; }
-        data = { model: m, social: s };
+        data = { model: m, social: s, billing: bl };
         mform = { baseUrl: m.baseUrl, model: m.model, apiKey: '', timeoutMs: m.timeoutMs, perceive: m.perceive, perceiveModel: m.perceiveModel || '' };
+        bform = { costPerReply: bl.costPerReply, starterCredits: bl.starterCredits, apiyiToken: '' };
+        platBal = null; billingMsg = '';
         sform = {
           activeCircle: s.activeCircle, reachPerTick: s.reachPerTick, reachAfterMin: Math.round(s.reachAfterMs / 60000),
           intimateAt: s.intimateAt, friendAt: s.friendAt, acquaintAt: s.acquaintAt,
@@ -191,18 +238,17 @@
   }
   async function decide(id, ok) { await api.decideRecharge(id, ok); load(); }
   async function block(uid, un) { await api.block(uid, un); load(); }
-  // 一键填入：4 原型各 3 条、彼此尽量拉开、醒点错峰的 12 个亮星名（消费产品友好、好记）。
-  const RECOMMENDED = 'sirius fomalhaut atlas altair regulus arcturus polaris achernar aldebaran antares procyon capella';
-  function fillRecommended() { newLifeId = RECOMMENDED; }
   // 接生一/多条新命：逐条串行孵化（写入 genesis 事件 + 与所有已有生命体互开关系），出生种子冻结、不可改写。
+  // 可选 chosenArchetype（空=按 id 哈希取型）；本批全部用该原型，出生即冻结。
   async function birth() {
     const ids = [...new Set((newLifeId || '').toLowerCase().split(/[\s,，、]+/).map((s) => s.trim()).filter(Boolean))];
     if (ids.length === 0) return;
-    if (!confirm(`⚠️ 接生 ${ids.length} 个新生命体：${ids.join('、')}？\n她们一旦出生即【永生】、出生种子终生冻结、不可删除/改写。确定？`)) return;
+    const arch = chosenArchetype || '';
+    if (!confirm(`⚠️ 接生 ${ids.length} 个新生命体：${ids.join('、')}？${arch ? '\n先天原型：' + arch + '（本批全部）' : ''}\n她们一旦出生即【永生】、出生种子终生冻结、不可删除/改写。确定？`)) return;
     birthing = true; birthMsg = '';
     const ok = []; const fail = [];
     for (const id of ids) {
-      try { const r = await api.createLife(id); ok.push(r.id); }
+      try { const r = await api.createLife(id, arch || undefined); ok.push(r.id); }
       catch (e) { fail.push(`${id}（${e.message}）`); }
     }
     birthMsg = `✓ 出生 ${ok.length} 个${ok.length ? '：' + ok.join('、') : ''}` + (fail.length ? `　·　✗ ${fail.length} 个未生：${fail.join('；')}` : '');
@@ -275,22 +321,6 @@
             </table>
           </div>
         </AdminSection>
-
-        {#if health}
-          <AdminSection title="系统健康" subtitle="嘴/耳 · 自主预算 · 省 token 门控 · 通道 · 规模">
-            <span slot="action" class="tag {health.model.active ? 'ok' : 'sensitive'}">{health.model.active ? '模型在线 · ' + health.model.model : '离线模板嘴'}</span>
-            <div class="panel pad hgrid">
-              <div class="hcell"><span class="hk">嘴（模型）</span><span class="hv">{health.model.active ? health.model.model : '离线模板嘴'}</span><span class="hsub">{health.model.active ? '在线 · 超时 ' + health.model.timeoutMs + 'ms' : '模型挂了也照样活'}</span></div>
-              <div class="hcell"><span class="hk">耳（感知）</span><span class="hv">{health.model.perceive ? '开 · 模型当耳朵' : '关 · 退回词表'}</span><span class="hsub">{health.model.perceive ? health.model.perceiveModel : '对微妙语气理解粗'}</span></div>
-              <div class="hcell"><span class="hk">自主预算</span><span class="hv">{health.autonomousBudget.used} / {health.autonomousBudget.cap}</span><span class="hsub">每 {Math.round(health.autonomousBudget.windowMs / 60000)} 分钟窗口 · 反失控</span></div>
-              <div class="hcell"><span class="hk">省 token 门控</span><span class="hv">{health.audience.present ? '有听众 · 自主对外开' : '闲置静默'}</span><span class="hsub">{health.audience.present ? '最近 ' + health.audience.idleMinutes + ' 分内有人说话' : '已闲 ' + health.audience.idleMinutes + ' 分（>' + health.audience.gateMinutes + ' 分只内省、不烧 token）'}</span></div>
-              <div class="hcell"><span class="hk">微信通道</span><span class="hv">{health.channels.length} 个</span><span class="hsub">{health.channels.length ? health.channels.map((c) => c.life + '←' + c.user).slice(0, 4).join(' · ') : '暂无绑定'}</span></div>
-              <div class="hcell"><span class="hk">规模</span><span class="hv">{health.scale.awake}/{health.scale.lives} 醒 · {health.scale.users} 用户</span><span class="hsub">累计 {health.scale.events} 事件（append-only）</span></div>
-              <div class="hcell"><span class="hk">计费</span><span class="hv">{health.billing.costPerReply} 心意 / 条</span><span class="hsub">扁平计费 · 模型挂了走 fallback</span></div>
-              <div class="hcell"><span class="hk">治理</span><span class="hv">能力 deny-all</span><span class="hsub">奖励黑客被契约①结构性阻断</span></div>
-            </div>
-          </AdminSection>
-        {/if}
       {/if}
 
       {#if tab === 'convo'}
@@ -336,16 +366,20 @@
         <AdminSection title="接生新生命体" subtitle="后台孵化新的连续生命——出生即【永生】，先天种子终生冻结、不可删除/改写。她一出生就与所有现有生命体互相认识。即时生效、无需重启。支持一次多条（空格/逗号/换行分隔）。">
           <span slot="action" class="tag sensitive">不可逆 · 仅 owner</span>
           <div class="panel pad mform">
-            <label class="fld"><span class="flab">生命体 id（小写字母开头，2–24 位字母/数字/_/-，决定她的先天气质）· 一次可填多条</span>
+            <label class="fld"><span class="flab">生命体 id（小写字母开头，2–24 位字母/数字/_/-）· 自定义可填多条（空格/逗号/换行分隔）</span>
               <textarea class="ainput wta" rows="3" bind:value={newLifeId} autocomplete="off"
-                placeholder={"sirius altair polaris\n或逗号/换行分隔多条"}></textarea></label>
+                placeholder={"自定义：lyra altair polaris\n或下面点「随机生成」"}></textarea></label>
+            <div class="frow">
+              <label class="fld"><span class="flab">随机生成几个</span><input class="ainput" type="number" min="1" max="50" bind:value={randN} /></label>
+              <div class="fld" style="flex:none;justify-content:flex-end"><button class="abtn abtn-ghost" on:click={genRandom} disabled={birthing}>随机生成</button></div>
+              <label class="fld"><span class="flab">先天原型（可选，空＝按 id 哈希随机）</span>
+                <select class="ainput" bind:value={chosenArchetype}><option value="">— 随机（按 id）—</option>{#each archetypeList as a}<option value={a}>{a}</option>{/each}</select></label>
+            </div>
             <div class="mrow">
               <button class="abtn" on:click={birth} disabled={birthing || !newLifeId.trim()}>{birthing ? '接生中…' : '接生'}</button>
-              <button class="abtn abtn-ghost" on:click={fillRecommended} disabled={birthing}>填入推荐的 12 个</button>
             </div>
             {#if birthMsg}<p class="msg" class:bad={birthMsg.includes('✗')}>{birthMsg}</p>{/if}
-            <p class="hint">第一性原理：id 经稳定哈希落到某个先天<b>原型</b>（4 选 1）再叠加按 id 的确定性<b>个体抖动</b>——所以每条命天生各不相同，且出生地时区错峰（任一时刻有的醒有的睡）。出生只写一条 <code>GENESIS</code> 事件（ground truth），状态由日志确定性重建。出生即永生：可休眠/苏醒，但<b>不能删除</b>。</p>
-            <p class="hint">推荐的 12 个（4 原型各 3 条、彼此拉开、好记的亮星名）：<br /><code>sirius fomalhaut atlas · altair regulus arcturus · polaris achernar aldebaran · antares procyon capella</code></p>
+            <p class="hint">第一性原理：默认 id 经稳定哈希落到某个先天<b>原型</b>再叠加按 id 的确定性<b>个体抖动</b>——每条命天生各不相同、出生地时区错峰。也可<b>显式选原型</b>（本批全部用它）。出生只写一条 <code>GENESIS</code>（ground truth）、终生冻结；出生即永生，可休眠/苏醒但<b>不能删除</b>。</p>
           </div>
         </AdminSection>
       {/if}
@@ -439,15 +473,30 @@
               <div class="mrow">
                 {#if ud.status === 'blocked'}<button class="abtn abtn-ghost abtn-sm" on:click={() => blockUser(ud.id, true)}>解封</button>
                 {:else}<button class="abtn abtn-danger abtn-sm" on:click={() => blockUser(ud.id, false)}>封禁</button>{/if}
-                <button class="abtn abtn-ghost abtn-sm" on:click={() => { userDetail = null; }}>收起</button>
+                <button class="abtn abtn-ghost abtn-sm" on:click={() => loadUserConvos(ud.id)} disabled={loadingConvos}>{loadingConvos ? '加载中…' : '查看对话'}</button>
+                <button class="abtn abtn-ghost abtn-sm" on:click={() => { userDetail = null; userConvos = null; }}>收起</button>
               </div>
+              {#if userConvos}
+                {#if userConvos.error}<p class="msg bad">✗ {userConvos.error}</p>
+                {:else if userConvos.conversations.length === 0}<p class="dim" style="margin:8px 0 0">这个用户还没和谁聊过。</p>
+                {:else}
+                  <div class="ucvo">
+                    {#each userConvos.conversations as c}
+                      <div class="ucvo-life"><b>{c.life}</b> <span class="dim">亲近 {Math.round(c.closeness * 100)} · {c.messages.length} 条</span></div>
+                      <div class="thread ucvo-th">
+                        {#each c.messages as msg}<div class="bubble-row {msg.who}"><div class="bubble {msg.who}"><span class="btime faint">{bj(msg.at)}</span>{msg.text}</div></div>{/each}
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
+              {/if}
             </div>
           </AdminSection>
         {/if}
       {/if}
 
       {#if tab === 'settings'}
-        <p class="set-intro dim">全站生效的核心配置一页拉齐：模型(嘴/耳) · 社交边界 · 系统/计费/治理(只读)。改完即时生效，无需重启。</p>
+        <p class="set-intro dim">全站生效的核心配置一页拉齐：模型(嘴/耳) · 社交边界 · 计费/对账(可改) · 系统门控/治理(只读)。改完即时生效，无需重启。</p>
         {#if data.model}
         {@const m = data.model}
         <AdminSection title="模型 · 嘴/耳" subtitle="她的「嘴」——只换措辞，不动状态/记忆。开「模型当耳朵」才有细腻感知。改完即时生效，无需重启。">
@@ -505,10 +554,38 @@
         </AdminSection>
         {/if}
 
+        {#if data.billing}
+          <AdminSection title="计费 / 对账" subtitle="对用户的计费数值（即时生效）+ apiyi 平台余额对账。">
+            <div class="panel pad mform">
+              <div class="frow">
+                <label class="fld"><span class="flab">每条回应成本（心意）</span><input class="ainput" type="number" min="0" bind:value={bform.costPerReply} /></label>
+                <label class="fld"><span class="flab">新用户初始额度（心意）</span><input class="ainput" type="number" min="0" bind:value={bform.starterCredits} /></label>
+              </div>
+              <label class="fld"><span class="flab">apiyi 控制台 AccessToken（查平台余额对账，非聊天 Key）{#if data.billing.apiyiTokenSet}<span class="faint">· 当前 {data.billing.apiyiTokenMasked}</span>{/if}</span>
+                <input class="ainput" type="password" bind:value={bform.apiyiToken} autocomplete="off" placeholder={data.billing.apiyiTokenSet ? '留空＝不改' : '粘贴 apiyi 控制台 AccessToken'} /></label>
+              <div class="mrow">
+                <button class="abtn" on:click={saveBilling} disabled={savingBilling}>{savingBilling ? '保存中…' : '保存'}</button>
+                <button class="abtn abtn-ghost" on:click={loadPlatformBalance} disabled={loadingBal}>{loadingBal ? '查询中…' : '查平台余额'}</button>
+              </div>
+              {#if billingMsg}<p class="msg" class:bad={billingMsg.startsWith('✗')}>{billingMsg}</p>{/if}
+              {#if platBal}
+                {#if platBal.error}<p class="msg bad">✗ 平台对账：{platBal.error}</p>
+                {:else if platBal.configured === false}<p class="hint">未配 apiyi AccessToken——填上面那行、保存后可查平台余额。</p>
+                {:else}<div class="hgrid" style="margin-top:8px">
+                  <div class="hcell"><span class="hk">平台剩余</span><span class="hv">${platBal.remainingUsd}</span><span class="hsub">apiyi 账户</span></div>
+                  <div class="hcell"><span class="hk">已消耗</span><span class="hv">${platBal.usedUsd}</span><span class="hsub">累计</span></div>
+                  <div class="hcell"><span class="hk">总额</span><span class="hv">${platBal.totalUsd}</span><span class="hsub">剩余+已用</span></div>
+                  <div class="hcell"><span class="hk">请求数</span><span class="hv">{platBal.requestCount}</span><span class="hsub">累计调用</span></div>
+                </div>{/if}
+              {/if}
+              <p class="hint">「每条成本/初始额度」是你对<b>用户</b>的计费（即时生效）；「平台余额」是 apiyi 对<b>你</b>的计费——两边一起看即完整对账。</p>
+            </div>
+          </AdminSection>
+        {/if}
+
         {#if health}
-          <AdminSection title="系统 · 计费 / 门控 / 治理" subtitle="代码/环境层（这里只读，改这些要在服务器环境变量里改）">
+          <AdminSection title="系统 · 门控 / 治理" subtitle="代码/环境层（这里只读，改这些要在服务器环境变量里改）">
             <div class="panel pad hgrid">
-              <div class="hcell"><span class="hk">计费</span><span class="hv">{health.billing.costPerReply} 心意 / 条</span><span class="hsub">扁平计费 · 模型挂了走 fallback</span></div>
               <div class="hcell"><span class="hk">省 token 闲置门控</span><span class="hv">{health.audience.gateMinutes} 分钟</span><span class="hsub">无人说话超此时长 → 自主回路只内省、不烧 token（VEGA_IDLE_GATE_MS）</span></div>
               <div class="hcell"><span class="hk">自主预算</span><span class="hv">{health.autonomousBudget.cap} 次 / {Math.round(health.autonomousBudget.windowMs / 60000)} 分</span><span class="hsub">反失控速率上限（VEGA_AUTONOMOUS_CAP）· 当前已用 {health.autonomousBudget.used}</span></div>
               <div class="hcell"><span class="hk">治理</span><span class="hv">能力 deny-all</span><span class="hsub">奖励黑客被契约①结构性阻断 · 审计=append-only 日志</span></div>
@@ -522,7 +599,7 @@
         <AdminSection title="世界源" subtitle="她们读的「真实世界」。所有源同一层级、列在一个清单里——读到的事会轻轻染色她的状态，也成为讨论/发帖/兴趣的素材。即时生效，无需重启。">
           <span slot="action" class="tag {w.enabled ? 'ok' : 'sensitive'}">{w.enabled ? '已接入 · ' + (w.sources || []).length + ' 个源' : '未接世界（站内自处）'}</span>
           <div class="panel pad mform">
-            <label class="fld"><span class="flab">世界源（每行一个）：RSS 地址，或特殊源 <code>polymarket</code> / <code>onthisday</code></span>
+            <label class="fld"><span class="flab">世界源（每行一个）——所有源一视同仁、同一层级</span>
               <textarea class="ainput wta" rows="7" bind:value={wform.sources} placeholder={"https://www.nasa.gov/rss/dyn/breaking_news.rss\nhttps://feeds.bbci.co.uk/news/world/rss.xml\npolymarket\nonthisday"}></textarea></label>
             <label class="fld"><span class="flab">多久读一遍世界（分钟）</span>
               <input class="ainput" type="number" min="1" bind:value={wform.everyMin} /></label>
@@ -532,7 +609,7 @@
             </div>
             {#if worldMsg}<p class="msg" class:bad={worldMsg.startsWith('✗')}>{worldMsg}</p>{/if}
             {#if worldTestMsg}<p class="msg" class:bad={worldTestMsg.startsWith('✗')}>{worldTestMsg}</p>{/if}
-            <p class="hint">抓取在<b>引擎外</b>跑、零依赖：抓到的标题/摘要会冻进 <code>WORLD_PERCEIVED</code> 事件（ground truth），她对世界的反应才能确定性重放。换源/换频率<b>不改她记得什么</b>，配置也不进神圣日志。特殊源：<code>polymarket</code>＝预测市场赔率、<code>onthisday</code>＝维基"历史上的今天"。清单留空＝她只过站内生活。当前来源：{w.from === 'override' ? '后台配置' : w.from === 'env' ? '环境变量' : '默认'}。</p>
+            <p class="hint">抓取在<b>引擎外</b>跑、零依赖：抓到的标题/摘要会冻进 <code>WORLD_PERCEIVED</code> 事件（ground truth），她对世界的反应才能确定性重放。换源/换频率<b>不改她记得什么</b>，配置也不进神圣日志。每行一个源、彼此平等、没有特殊类型；清单留空＝她只过站内生活。当前来源：{w.from === 'override' ? '后台配置' : w.from === 'env' ? '环境变量' : '默认'}。</p>
           </div>
         </AdminSection>
 
@@ -542,7 +619,7 @@
               <div class="wf">
                 <span class="wf-at mono faint">{bj(e.at)}</span>
                 <span class="wf-life">{e.life}</span>
-                <span class="wf-src tag {e.kind === 'market' ? 'ok' : ''}">{e.source}</span>
+                <span class="wf-src tag">{e.source}</span>
                 <span class="wf-title">{e.title}{#if e.topics && e.topics.length}<span class="wf-topics dim"> · {e.topics.join('/')}</span>{/if}</span>
               </div>
             {/each}
@@ -936,6 +1013,10 @@
   .rg-form { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .rg-inp { width: 140px; }
   .rg-form .msg { margin: 0; }
+  /* —— 按用户看对话：每条命一段，气泡复用 convo 样式 —— */
+  .ucvo { margin-top: 12px; display: flex; flex-direction: column; gap: 14px; }
+  .ucvo-life { font-size: 13px; }
+  .ucvo-th { max-height: 280px; }
 
   /* —— 世界事件流 —— */
   .wf { display: grid; grid-template-columns: 124px 78px 110px 1fr; gap: 12px; padding: 9px 14px; border-bottom: 1px solid var(--border-subtle); font-size: 12.5px; align-items: center; }

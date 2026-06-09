@@ -33,6 +33,7 @@ import {
   visibleTo,
   ensureUserRelationship,
   genesisPayloadFor,
+  ARCHETYPES,
   greet,
   makeTick,
   muse,
@@ -206,7 +207,16 @@ function layerOf(closeness: number, sc: EffSocial): { name: string; label: strin
   if (closeness >= sc.acquaintAt) return { name: 'acquaint', label: '相识', everyMs: sc.acquaintEveryMs };
   return { name: 'outer', label: '外圈', everyMs: Infinity };
 }
-const MODEL_COST = Number(process.env.VEGA_MODEL_COST ?? 1); // 每条模型回应计费（额度单位）
+// 计费数值（settings ⊕ env ⊕ 默认；后台「设置·计费」可即时改）。绝不进神圣日志。
+const ENV_MODEL_COST = process.env.VEGA_MODEL_COST ? Number(process.env.VEGA_MODEL_COST) : undefined;
+const ENV_STARTER = process.env.VEGA_STARTER_CREDITS ? Number(process.env.VEGA_STARTER_CREDITS) : undefined;
+function effBilling(): { costPerReply: number; starterCredits: number } {
+  const o = settings.getBilling();
+  return {
+    costPerReply: o.costPerReply ?? ENV_MODEL_COST ?? 1,
+    starterCredits: o.starterCredits ?? ENV_STARTER ?? 100,
+  };
+}
 // 省 token（按"有没有听众"门控）：超过此时长无任何用户活动 → 自主【对外】行动(心声/主动找人/同类寒暄)暂停，
 // 只保留【免费的内在 tick + 反思】（她照样活着、内在继续变）。用户一回来即恢复——不对空房间表演、不白烧 token。
 const IDLE_GATE_MS = Number(process.env.VEGA_IDLE_GATE_MS ?? 6 * 3600_000);
@@ -254,6 +264,15 @@ const livesMetBy = (a: Account): Array<{ id: string }> => {
   const rel = accounts.relIdFor(a.id);
   return lives.filter((l) => l.store.list().some((e) => e.type === 'RELATIONSHIP_OPENED' && e.relationshipId === rel)).map((l) => ({ id: l.id }));
 };
+// 一段关系的来回（对话监督用）：某条命与某 relId 的消息，最近 N 条。
+function buildThread(life: Life, rel: string, limit = 200): Array<{ who: 'user' | 'her'; text: string; at: string }> {
+  const msgs: Array<{ who: 'user' | 'her'; text: string; at: string }> = [];
+  for (const e of life.store.list()) {
+    if (e.type === 'MESSAGE_RECEIVED') { const p = e.payload as { relationshipId?: string; content?: string }; if (p.relationshipId === rel) msgs.push({ who: 'user', text: String(p.content ?? ''), at: e.occurredAt }); }
+    else if (e.type === 'MESSAGE_SENT') { const p = e.payload as { relationshipId?: string; utterance?: string }; if (p.relationshipId === rel) msgs.push({ who: 'her', text: String(p.utterance ?? ''), at: e.occurredAt }); }
+  }
+  return msgs.slice(-limit);
+}
 
 interface Life {
   id: string;
@@ -273,7 +292,8 @@ interface Life {
 }
 
 // 先天种子见 src/engine/seeds.ts（单一来源）。每条命按 id 取不同 archetype；出生即冻结、不可改写。
-const seedFor = (id: string): EventDraft<'LIFE_GENESIS'>['payload'] => genesisPayloadFor(id, { relationshipId: REL, identityRef: userName });
+// archetype（可选）：接生时显式选先天原型，覆盖按 id 哈希取型；写进 GENESIS 即冻结、终生不变。
+const seedFor = (id: string, archetype?: string): EventDraft<'LIFE_GENESIS'>['payload'] => genesisPayloadFor(id, { relationshipId: REL, identityRef: userName }, 480, archetype);
 
 // 心声间隔抖动：每次取 [0.5×, 1.5×] MUSE_MS → 不同命、不同时段都不一样，避免"整点齐步发帖"的机械感。
 const nextMuseGap = (): number => Math.floor(MUSE_MS * (0.5 + Math.random()));
@@ -322,8 +342,9 @@ async function respondAsUser(life: Life, me: Account, content: string, channel: 
   return serializer.run(life.id, async () => {
     snapOf(life); // 追平缓存态到末条 → 把它传给 converse 增量折叠（热路径不再每条消息全量重放）
     const cached = life.state ? { st: life.state, uptoSeq: life.stateSeq } : undefined;
-    const band = resourceBand(accounts.balance(me.id), MODEL_COST); // 资源=她和【这个人】此刻能给多少（随人而变）
-    let { mouth: useMouth, charge } = meterMouth(mouth, templateMouth, accounts.balance(me.id), MODEL_COST);
+    const cost = effBilling().costPerReply; // 后台「设置·计费」可即时改
+    const band = resourceBand(accounts.balance(me.id), cost); // 资源=她和【这个人】此刻能给多少（随人而变）
+    let { mouth: useMouth, charge } = meterMouth(mouth, templateMouth, accounts.balance(me.id), cost);
     // 预扣即决（原子）：走付费路径就先扣 1。debit 内部 check+UPDATE 同步原子，是计费的唯一权威闸——
     // 若并发（同号同时找多条命）把余额扣空了 → 本轮降级免费模板嘴、不计费（杜绝负余额/漏扣/白嫖，且不再忽略 debit 返回值）。
     if (charge > 0 && !accounts.debit(me.id, charge, 'model', life.id)) { useMouth = templateMouth; charge = 0; }
@@ -468,10 +489,10 @@ function saveCheckpoint(life: Life): void {
   }
 }
 
-function boot(life: Life): void {
+function boot(life: Life, archetype?: string): void {
   if (life.store.version() === 0) {
-    // 出生：每条命用自己的先天种子（archetypeFor(id)）——天生不同。种子一经写入永不改写。
-    runTurn(life.store, [{ type: 'LIFE_GENESIS', source: 'system', occurredAt: now(), payload: seedFor(life.id) }]);
+    // 出生：每条命用自己的先天种子（archetypeFor(id) 或显式 archetype）——天生不同。种子一经写入永不改写。
+    runTurn(life.store, [{ type: 'LIFE_GENESIS', source: 'system', occurredAt: now(), payload: seedFor(life.id, archetype) }]);
     runTurn(life.store, [{ type: 'RELATIONSHIP_OPENED', source: 'system', relationshipId: REL, occurredAt: now(), payload: { relationshipId: REL, kind: 'human', displayRef: userName } }]);
   }
   if (!snapOf(life).openConnections.includes(HOST_CONN)) {
@@ -490,14 +511,15 @@ function boot(life: Life): void {
 
 // 后台"生成生命体"：运行时接生一条新命——建日志 + 创世(冻结独立种子) + 与所有同类互开 peer 关系 +
 // 落盘名册(重启自动加载) + 并入所有自主回路(心跳/寒暄/世界/被发现)。立即生效、无需重启。
-async function birthLife(rawId: string): Promise<{ ok: boolean; error?: string; id?: string }> {
+async function birthLife(rawId: string, archetype?: string): Promise<{ ok: boolean; error?: string; id?: string }> {
   const id = String(rawId ?? '').trim().toLowerCase();
   if (!/^[a-z][a-z0-9_-]{1,23}$/.test(id)) return { ok: false, error: '名字需 2–24 位、字母开头、仅小写字母/数字/-/_' };
   if (lifeById(id)) return { ok: false, error: '已存在同名生命体' };
+  if (archetype && !ARCHETYPES.some((a) => a.name === archetype)) return { ok: false, error: '未知先天原型' };
   const life = makeLife(id, join(DATA_DIR, `${id}.jsonl`));
   lives.push(life);
   recomputePeers();
-  await serializer.run(life.id, async () => boot(life)); // 新命：创世 + host + 开到所有同类的 peer
+  await serializer.run(life.id, async () => boot(life, archetype)); // 新命：创世（可选显式原型）+ host + 开到所有同类的 peer
   for (const other of lives) { // 所有老命补开一条到新命的 peer 关系
     if (other.id === id) continue;
     const rid = peerId(id);
@@ -845,7 +867,7 @@ const server = createServer(async (req, res) => {
       if (req.method === 'GET' && url === '/api/society') return send(res, 200, [...allPeerExchanges()].sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, 40));
       if (req.method === 'POST' && url === '/api/auth/register') {
         const b = await readJson(req);
-        const r = accounts.register(String(b.email ?? ''), String(b.password ?? ''), String(b.handle ?? ''));
+        const r = accounts.register(String(b.email ?? ''), String(b.password ?? ''), String(b.handle ?? ''), effBilling().starterCredits);
         if (!r.ok) return send(res, 400, { error: r.error });
         const l = accounts.login(String(b.email ?? ''), String(b.password ?? ''));
         return send(res, 200, { account: publicAccount(r.account), token: l.ok ? l.token : null });
@@ -1205,18 +1227,25 @@ const server = createServer(async (req, res) => {
         const relId = typeof b.relId === 'string' && b.relId.trim() ? b.relId.trim() : 'r_trace'; // 默认临时关系；传真 relId 看具体关系（仍只读不提交）
         const trace = await traceConverse(life.store, mouth, relId, message, now(), perceiver);
         // 资源档位（平台层，按余额调对话）：给定一个余额，显示档位 + resourceAwareMouth 会不会改她的话（让"随余额调"可见、可验证）。
-        const balance = typeof b.balance === 'number' ? b.balance : MODEL_COST * 6;
-        const band = resourceBand(balance, MODEL_COST);
+        const cost = effBilling().costPerReply;
+        const balance = typeof b.balance === 'number' ? b.balance : cost * 6;
+        const band = resourceBand(balance, cost);
         const modifies = band === 'low' || band === 'scarce';
-        const resource = { balance, cost: MODEL_COST, band, modifies, note: modifies ? (band === 'low' ? '余额紧：话更精炼、挑要紧说、温度不减；绝不提钱' : '余额见底：坦诚"今天能陪你的有限，但我都在"；绝不催费') : '余额充裕(ok/abundant)→她原样给，满状态（设计：高余额不显形）' };
+        const resource = { balance, cost, band, modifies, note: modifies ? (band === 'low' ? '余额紧：话更精炼、挑要紧说、温度不减；绝不提钱' : '余额见底：坦诚"今天能陪你的有限，但我都在"；绝不催费') : '余额充裕(ok/abundant)→她原样给，满状态（设计：高余额不显形）' };
         return send(res, 200, { lifeId: life.id, relId, modelStatus: modelStatus(), resource, trace });
       }
 
-      // —— 生成生命体（仅 owner）：运行时接生一条新命，立即生效、无需重启；落盘名册重启也在。
+      // —— 先天原型清单（仅 owner）：接生页"可选原型"下拉用。
+      if (path === '/admin/archetypes' && req.method === 'GET') {
+        if (!owner) return send(res, 403, { error: '仅 owner' });
+        return send(res, 200, { archetypes: ARCHETYPES.map((a) => a.name) });
+      }
+      // —— 生成生命体（仅 owner）：运行时接生一条新命，立即生效、无需重启；落盘名册重启也在。archetype 可选（空=按 id 哈希取型）。
       if (path === '/admin/lives' && req.method === 'POST') {
         if (!owner) return send(res, 403, { error: '仅 owner 可生成生命体' });
         const b = await readJson(req);
-        const r = await birthLife(String(b.id ?? ''));
+        const archetype = typeof b.archetype === 'string' && b.archetype.trim() ? b.archetype.trim() : undefined;
+        const r = await birthLife(String(b.id ?? ''), archetype);
         return send(res, r.ok ? 200 : 400, r.ok ? { ok: true, id: r.id, total: lives.length } : { error: r.error });
       }
 
@@ -1226,6 +1255,47 @@ const server = createServer(async (req, res) => {
         if (req.method === 'GET') return send(res, 200, effSocial());
         if (req.method === 'POST') { settings.setSocial(await readJson(req)); return send(res, 200, effSocial()); }
         return send(res, 405, { error: 'method not allowed' });
+      }
+
+      // —— 计费数值配置（仅 owner）：每条成本 + 新用户初始额度 + 平台对账 token。即时生效（settings ⊕ env ⊕ 默认）。
+      if (path === '/admin/billing-config') {
+        if (!owner) return send(res, 403, { error: '仅 owner 可查看/修改计费' });
+        const view = (): Record<string, unknown> => {
+          const o = settings.getBilling();
+          const tok = (o.apiyiToken ?? '').trim();
+          return { ...effBilling(), apiyiTokenSet: tok !== '', apiyiTokenMasked: tok ? maskKey(tok) : null, balanceUrl: o.balanceUrl ?? '' };
+        };
+        if (req.method === 'GET') return send(res, 200, view());
+        if (req.method === 'POST') {
+          const b = await readJson(req);
+          const patch: Record<string, unknown> = {};
+          if (b.costPerReply !== undefined && b.costPerReply !== '') patch.costPerReply = Number(b.costPerReply);
+          if (b.starterCredits !== undefined && b.starterCredits !== '') patch.starterCredits = Number(b.starterCredits);
+          if (b.clearApiyiToken) patch.clearApiyiToken = true;
+          else if (typeof b.apiyiToken === 'string' && b.apiyiToken.trim()) patch.apiyiToken = b.apiyiToken.trim();
+          if (typeof b.balanceUrl === 'string') patch.balanceUrl = b.balanceUrl;
+          settings.setBilling(patch);
+          return send(res, 200, view());
+        }
+        return send(res, 405, { error: 'method not allowed' });
+      }
+      // —— 平台对账（仅 owner）：查 apiyi 平台余额/消耗（用控制台 AccessToken，非聊天 key），方便对账。失败不崩后台。
+      if (path === '/admin/platform-balance' && req.method === 'GET') {
+        if (!owner) return send(res, 403, { error: '仅 owner' });
+        const o = settings.getBilling();
+        const token = (o.apiyiToken ?? '').trim();
+        if (!token) return send(res, 200, { configured: false });
+        const url2 = (o.balanceUrl ?? '').trim() || (String(modelStatus().baseUrl).replace(/\/v1\/?$/, '') + '/api/user/self');
+        try {
+          const ctl = new AbortController();
+          const to = setTimeout(() => ctl.abort(), 8000);
+          const resp = await fetch(url2, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' }, signal: ctl.signal }).finally(() => clearTimeout(to));
+          if (!resp.ok) return send(res, 200, { configured: true, error: `HTTP ${resp.status}` });
+          const json = (await resp.json()) as Record<string, unknown>;
+          const u = (json.data ?? json) as Record<string, unknown>; // one-api 包 {success,data:{}}；也兼容直接返回 user 对象
+          const quota = Number(u.quota ?? 0), used = Number(u.used_quota ?? 0); // 500000 quota = $1
+          return send(res, 200, { configured: true, remainingUsd: round3(quota / 500000), usedUsd: round3(used / 500000), totalUsd: round3((quota + used) / 500000), requestCount: Number(u.request_count ?? 0) });
+        } catch (e) { return send(res, 200, { configured: true, error: String((e as Error).message ?? e) }); }
       }
 
       // —— 世界源配置（仅 owner，§8.1）：她们读哪些新闻 RSS / 是否接 Polymarket / 多久读一遍。即时生效、无需重启。
@@ -1274,6 +1344,19 @@ const server = createServer(async (req, res) => {
       }
       if (req.method === 'GET' && path === '/admin/users') {
         return send(res, 200, accounts.listUsers().map((u) => ({ id: u.id, handle: u.handle, email: owner ? u.email : '〔遮罩〕', role: u.role, status: u.status, balance: u.balance, lastActiveAt: u.lastActiveAt, createdAt: u.createdAt })));
+      }
+      // —— 按用户看对话记录（仅 owner）：这个用户和她遇见过的每条命的真实来回（私聊原文）。放在 /admin/users/:id 通配之前。——
+      if (req.method === 'GET' && path.startsWith('/admin/users/') && path.endsWith('/conversations')) {
+        if (!owner) return send(res, 403, { error: '对话监督仅 owner' });
+        const uid = decodeURIComponent(path.slice('/admin/users/'.length, -'/conversations'.length));
+        const ac = accounts.getAccount(uid);
+        if (!ac) return send(res, 404, { error: 'no such user' });
+        const rel = accounts.relIdFor(uid);
+        const conversations = livesMetBy(ac)
+          .map(({ id }) => { const l = lifeById(id)!; const b = snapOf(l).bonds[rel]; return { life: id, closeness: round3(b?.closeness ?? 0), messages: buildThread(l, rel) }; })
+          .filter((c) => c.messages.length > 0)
+          .sort((a, b) => b.closeness - a.closeness);
+        return send(res, 200, { userId: uid, handle: ac.handle, conversations });
       }
       // —— 用户详情（点用户表下钻）：余额/充值历史/遇见过哪些命（含亲疏）/微信通道/状态。email 仅 owner。——
       if (req.method === 'GET' && path.startsWith('/admin/users/') && path !== '/admin/users/block') {
@@ -1357,12 +1440,7 @@ const server = createServer(async (req, res) => {
         const l = lifeById(path.slice('/admin/lives/'.length, -'/thread'.length));
         if (!l) return send(res, 404, { error: 'no such life' });
         const rel = new URLSearchParams(url.split('?')[1] ?? '').get('rel') ?? '';
-        const msgs: Array<{ who: 'user' | 'her'; text: string; at: string }> = [];
-        for (const e of l.store.list()) {
-          if (e.type === 'MESSAGE_RECEIVED') { const p = e.payload as { relationshipId?: string; content?: string }; if (p.relationshipId === rel) msgs.push({ who: 'user', text: String(p.content ?? ''), at: e.occurredAt }); }
-          else if (e.type === 'MESSAGE_SENT') { const p = e.payload as { relationshipId?: string; utterance?: string }; if (p.relationshipId === rel) msgs.push({ who: 'her', text: String(p.utterance ?? ''), at: e.occurredAt }); }
-        }
-        return send(res, 200, { lifeId: l.id, rel, messages: msgs.slice(-200) });
+        return send(res, 200, { lifeId: l.id, rel, messages: buildThread(l, rel) });
       }
       // —— 原始事件日志（append-only ground truth）：直接看落库的 LifeEvent 序列——"从日志确定性重建"的真相源。
       // 私聊正文(u_*) steward 遮罩、owner 可见；其余事件公开。倒序、可调 limit。——
@@ -1445,7 +1523,7 @@ const server = createServer(async (req, res) => {
           audience: { present: audiencePresent(), idleMinutes: idleMin, gateMinutes: Math.round(IDLE_GATE_MS / 60_000) },
           channels, // 微信通道
           scale: { lives: lives.length, awake: lives.filter((l) => snapOf(l).awake).length, users: accounts.listUsers().length, events: lives.reduce((n, l) => n + l.store.version(), 0) },
-          billing: { costPerReply: MODEL_COST },
+          billing: effBilling(),
           governance: { capabilities: 'deny-all', rewardHacking: 'structurally-prevented(契约①)' },
         });
       }

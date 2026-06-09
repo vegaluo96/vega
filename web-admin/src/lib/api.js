@@ -33,7 +33,8 @@ export const api = {
   worldConfig: () => req('GET', '/admin/world-config'),
   saveWorldConfig: (patch) => req('POST', '/admin/world-config', patch),
   testWorld: () => req('POST', '/admin/world-config/test'),
-  createLife: (id) => req('POST', '/admin/lives', { id }),
+  createLife: (id, archetype) => req('POST', '/admin/lives', archetype ? { id, archetype } : { id }),
+  archetypes: () => req('GET', '/admin/archetypes'),
   chainTrace: (body) => req('POST', '/admin/chain-trace', body),
   health: () => req('GET', '/admin/health'),
   relations: (id) => req('GET', `/admin/lives/${id}/relations`),
@@ -41,6 +42,10 @@ export const api = {
   user: (id) => req('GET', `/admin/users/${encodeURIComponent(id)}`),
   lifeEvents: (id, limit = 120) => req('GET', `/admin/lives/${encodeURIComponent(id)}/events?limit=${limit}`),
   worldFeed: (limit = 80) => req('GET', `/admin/world-feed?limit=${limit}`),
+  billingConfig: () => req('GET', '/admin/billing-config'),
+  saveBillingConfig: (patch) => req('POST', '/admin/billing-config', patch),
+  platformBalance: () => req('GET', '/admin/platform-balance'),
+  userConversations: (id) => req('GET', `/admin/users/${encodeURIComponent(id)}/conversations`),
 };
 export const setSession = (t) => session.set(t || '');
 export const clearSession = () => session.set('');

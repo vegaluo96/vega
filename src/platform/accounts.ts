@@ -52,7 +52,7 @@ interface UserRow {
 }
 
 export interface AccountStore {
-  register(email: string, password: string, handle: string): AuthResult;
+  register(email: string, password: string, handle: string, starterOverride?: number): AuthResult;
   login(email: string, password: string): LoginResult;
   authenticate(token: string): Account | null;
   logout(token: string): void;
@@ -166,7 +166,7 @@ export function createAccountStore(path = ':memory:', opts: AccountStoreOptions 
   };
 
   return {
-    register(email, password, handle) {
+    register(email, password, handle, starterOverride) {
       const e = norm(email);
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) return { ok: false, error: '邮箱格式不对' };
       if (password.length < 8) return { ok: false, error: '密码至少 8 位' };
@@ -176,7 +176,8 @@ export function createAccountStore(path = ':memory:', opts: AccountStoreOptions 
       const t = now();
       db.prepare('INSERT INTO users(id,email,email_verified,pass_salt,pass_hash,handle,role,status,created_at,last_active_at) VALUES(?,?,0,?,?,?,?,?,?,?)')
         .run(id, e, salt, hash, handle.trim() || e.split('@')[0], roleFor(e), 'active', t, t);
-      if (starter > 0) credit(id, starter, 'starter_grant');
+      const grant = (typeof starterOverride === 'number' && Number.isFinite(starterOverride) && starterOverride >= 0) ? Math.round(starterOverride) : starter;
+      if (grant > 0) credit(id, grant, 'starter_grant');
       return { ok: true, account: toAccount(userById(id) as UserRow) };
     },
     login(email, password) {

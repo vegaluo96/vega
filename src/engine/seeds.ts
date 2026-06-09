@@ -41,8 +41,10 @@ const idHash = (id: string): number => { let h = 2166136261; for (const c of id)
 const det = (seed: number, n: number): number => { const x = Math.sin((seed % 100003) * 0.12931 + n * 7.823) * 43758.5453; return x - Math.floor(x); }; // [0,1) 确定性
 const clamp = (x: number, lo: number, hi: number): number => (x < lo ? lo : x > hi ? hi : x);
 
-export function innateSeedFor(id: string, circadianOffsetMin = 480): InnateSeed {
-  const a = archetypeFor(id);
+// archetypeName（可选）：创建时显式指定先天原型，覆盖按 id 的哈希取型。仍按 id 叠加确定性抖动，
+// 故"给定 id + 原型"的种子依旧逐位确定；结果写入 GENESIS 即冻结，reconstruct 永远只读冻结种子。
+export function innateSeedFor(id: string, circadianOffsetMin = 480, archetypeName?: string): InnateSeed {
+  const a = archetypeName ? (ARCHETYPES.find((x) => x.name === archetypeName) ?? archetypeFor(id)) : archetypeFor(id);
   const somaTau = { valence: 3600, vitality: 86400, connection: 7200 };
   if (id in NAMED) { // 钦定人格（vega/lyra）保持原样，不加抖动
     return { temperamentBias: a.temperamentBias, valueSeed: a.valueSeed, somaSetpoints: { valence: 0, vitality: 0.7, connection: 0, ...a.somaSetpoints }, somaTau, vitalityFloor: 0.15, circadianOffsetMin };
@@ -77,6 +79,7 @@ export function genesisPayloadFor(
   id: string,
   creator: { relationshipId: RelationshipId; identityRef: string },
   circadianOffsetMin = 480,
+  archetypeName?: string,
 ): GenesisPayload {
-  return { innateSeed: innateSeedFor(id, circadianOffsetMin), reconstructVersionAtBirth: 28, creator }; // 与 RECONSTRUCT_VERSION 同步
+  return { innateSeed: innateSeedFor(id, circadianOffsetMin, archetypeName), reconstructVersionAtBirth: 28, creator }; // 与 RECONSTRUCT_VERSION 同步
 }

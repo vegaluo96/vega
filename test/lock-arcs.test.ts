@@ -1,7 +1,22 @@
 // 锁 schema 前补的 3 条弧（§9 Arc 6/7/8 的运行时验证）。
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createInMemoryEventStore, reconstruct, verifyChain, genesisPayloadFor, type EventDraft } from '../src/index.ts';
+import { createInMemoryEventStore, reconstruct, verifyChain, genesisPayloadFor, innateSeedFor, ARCHETYPES, type EventDraft } from '../src/index.ts';
+
+test('创建生命·显式原型：确定性 + 出生版本不漂移 + 覆盖哈希取型', () => {
+  const cr = { relationshipId: 'r_c' as const, identityRef: 'T' };
+  const name = '沉静内省';
+  const g1 = genesisPayloadFor('zztest', cr, 480, name);
+  const g2 = genesisPayloadFor('zztest', cr, 480, name);
+  assert.equal(g1.reconstructVersionAtBirth, 28, '出生版本仍 28（不漂移）');
+  assert.deepEqual(g1.innateSeed, g2.innateSeed, '给定 id+原型 → 种子逐位确定');
+  const other = ARCHETYPES.find((a) => a.name !== name)!.name;
+  assert.notDeepEqual(innateSeedFor('zztest', 480, other).temperamentBias, innateSeedFor('zztest', 480, name).temperamentBias, '显式原型确实改了先天底色');
+  let t = Date.parse('2026-02-02T00:00:00.000Z');
+  const s = createInMemoryEventStore('zztest');
+  s.append({ type: 'LIFE_GENESIS', source: 'system', occurredAt: new Date((t += 60_000)).toISOString(), payload: g1 });
+  assert.equal(reconstruct(s.list()).reconstructVersion, 28, '重建后版本仍 28');
+});
 
 test('版本同步：出生记录的 reconstructVersionAtBirth 必须 == 当前 reconstructVersion（防漂移）', () => {
   ms = Date.parse('2026-01-01T00:00:00.000Z');

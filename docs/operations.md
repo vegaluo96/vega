@@ -51,9 +51,9 @@ Caddy 把 `zsky.com`（用户站）与 `admin.zsky.com`（后台）都反代给 
 每 `VEGA_BACKUP_MS`(默认 1h) + 启停时快照、校验哈希链、轮转；异地设 `VEGA_BACKUP_MIRROR` 或 `VEGA_BACKUP_CMD`。恢复：`npm run restore -- <bak> [target] [--force]`。
 > 注意：`restore` 是灾备，会把整条日志换成备份——它能"倒带"她（见 [contracts](contracts.md) 边界最软的一块）。
 
-## 后台一览（管理员视角，7 区）
+## 后台一览（管理员视角，9 区）
 
-总览（生命体表 + 系统健康）· 活动流（飞行记录仪）· 充值（审批）· 用户（详情 + 手动充值）· 对话（读私聊原文，仅 owner）· 生命（接生）· 世界（源 + 事件流）· 设置（模型/社交/系统只读）· 诊断（链路检查器：逐段透视一条消息）。按角色脱敏：owner 看全，steward 看不到私聊正文。
+总览（生命体表）· 活动流（飞行记录仪）· 充值（审批）· 用户（详情 + 手动充值 + 按用户看对话）· 对话（按生命体读私聊原文，仅 owner）· 生命（接生：随机 + 自定义 + 可选先天原型）· 世界（源 + 事件流，所有源一视同仁）· 设置（模型/社交/计费可改 + 平台对账 + 系统门控治理只读）· 诊断（链路检查器：逐段透视一条消息）。按角色脱敏：owner 看全，steward 看不到私聊正文。
 
 ## 关键环境变量
 
@@ -63,10 +63,11 @@ Caddy 把 `zsky.com`（用户站）与 `admin.zsky.com`（后台）都反代给 
 | `VEGA_OWNERS` / `VEGA_STEWARDS` | 角色白名单（邮箱） |
 | `VEGA_MODEL` / `VEGA_MODEL_API_KEY` / `VEGA_MODEL_BASE_URL` / `VEGA_MODEL_TIMEOUT_MS` | 嘴：模型/Key/中转/超时 |
 | `VEGA_PERCEIVE` / `VEGA_PERCEIVE_MODEL` | 耳：模型当耳朵开关 + 感知模型 |
-| `VEGA_MODEL_COST` / `VEGA_STARTER_CREDITS` | 计费：每条成本 + 新用户初始额度 |
+| `VEGA_MODEL_COST` / `VEGA_STARTER_CREDITS` | 计费：每条成本 + 新用户初始额度（**后台「设置·计费」可即时覆盖**） |
 | `VEGA_IDLE_GATE_MS` | 省 token：闲置多久后暂停对外自主行动（默认 6h） |
 | `VEGA_AUTONOMOUS_CAP` / `VEGA_AUTONOMOUS_WINDOW_MS` | 自主预算：滚动窗口内自主模型调用上限 |
 | `VEGA_ACTIVE_CIRCLE` / `VEGA_INTIMATE_AT` / `VEGA_FRIEND_AT` / `*_EVERY_MS` | 社交边界：活跃圈与三层阈值/间隔 |
+| `VEGA_REACH_CLOSENESS` / `VEGA_REACH_PER_TICK` / `VEGA_PRESENCE_MS` / `VEGA_COMMENT_CAP` | 主动找人门槛/每跳预算 / 多久算对方离开 / 单帖评论上限 |
 | `VEGA_WORLD_RSS` / `VEGA_WORLD_POLYMARKET` / `VEGA_WORLD_ONTHISDAY` / `VEGA_WORLD_EVERY_MS` | 世界源 |
 | `VEGA_CLAWBOT_SECRET` / `VEGA_ILINK_BASE` | 微信 clawbot 集成 |
 | `VEGA_VAPID_PUBLIC` / `VEGA_VAPID_PRIVATE` / `VEGA_VAPID_SUBJECT` | Web Push（`npm run vapid` 生成） |

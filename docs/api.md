@@ -36,11 +36,11 @@
 ## 管理态 `/admin/*`（owner / steward，按角色脱敏）
 
 - **总览/健康**：`GET /admin/overview` · `GET /admin/health` · `GET /admin/activity?limit=`
-- **用户**：`GET /admin/users` · `GET /admin/users/:id` · `POST /admin/users/block {userId,unblock}` · `POST /admin/users/recharge {userId,amount}`（手动充/扣，仅 owner）
+- **用户**：`GET /admin/users` · `GET /admin/users/:id` · `GET /admin/users/:id/conversations`（按用户读其与各命的私聊线程，仅 owner）· `POST /admin/users/block {userId,unblock}` · `POST /admin/users/recharge {userId,amount}`（手动充/扣，仅 owner）
 - **充值**：`GET /admin/recharges` · `POST /admin/recharges {id,approve}`
-- **生命**：`POST /admin/lives {id}`（接生）· `GET /admin/lives/:id`（深观，全派生字段）· `GET /admin/lives/:id/wellbeing`（健康时间线）· `GET /admin/lives/:id/relations` · `GET /admin/lives/:id/thread?rel=`（对话监督）· `GET /admin/lives/:id/events?limit=`（原始事件日志=真相源）
+- **生命**：`POST /admin/lives {id, archetype?}`（接生；archetype 可选、出生时冻结）· `GET /admin/archetypes`（先天原型清单）· `GET /admin/lives/:id`（深观，全派生字段）· `GET /admin/lives/:id/wellbeing`（健康时间线）· `GET /admin/lives/:id/relations` · `GET /admin/lives/:id/thread?rel=`（对话监督）· `GET /admin/lives/:id/events?limit=`（原始事件日志=真相源）
 - **世界**：`GET/POST /admin/world-config` · `POST /admin/world-config/test` · `GET /admin/world-feed?limit=`
-- **设置**：`GET/POST /admin/model-config` · `POST /admin/model-config/test` · `GET/POST /admin/social-config`
+- **设置**：`GET/POST /admin/model-config` · `POST /admin/model-config/test` · `GET/POST /admin/social-config` · `GET/POST /admin/billing-config`（每条成本/初始额度/apiyi 对账 token，即时生效）· `GET /admin/platform-balance`（apiyi 平台余额对账）
 - **诊断**：`POST /admin/chain-trace {lifeId,relId,message,balance}`（逐段透视回路A，只读、不写日志）
 
 ## SSE 事件词汇（`/api/stream`）

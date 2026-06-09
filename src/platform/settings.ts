@@ -36,7 +36,16 @@ export interface WorldConfig {
   everyMs?: number;      // 多久读一遍世界
 }
 
-interface SettingsState { model: ModelOverride; social: SocialConfig; world: WorldConfig }
+// 计费 / 对账（§13）：对用户的计费数值（每条成本/新用户初始额度）+ 平台对账（apiyi 控制台 AccessToken）。
+// 全是运营数值，绝不进神圣日志；与 model/social/world 同路（settings ⊕ env ⊕ 默认）。
+export interface BillingConfig {
+  costPerReply?: number;    // 每条模型回应计费（额度单位）
+  starterCredits?: number;  // 新用户注册初始额度
+  apiyiToken?: string;      // apiyi 控制台 AccessToken（查平台余额/消耗，非 sk- 聊天 key；只后端用）
+  balanceUrl?: string;      // 平台余额查询地址覆盖（默认由模型 baseUrl 推出）
+}
+
+interface SettingsState { model: ModelOverride; social: SocialConfig; world: WorldConfig; billing: BillingConfig }
 
 export interface SettingsStore {
   getModel(): ModelOverride;
@@ -45,14 +54,16 @@ export interface SettingsStore {
   setSocial(patch: Partial<SocialConfig>): SocialConfig;
   getWorld(): WorldConfig;
   setWorld(patch: Partial<WorldConfig>): WorldConfig;
+  getBilling(): BillingConfig;
+  setBilling(patch: Partial<BillingConfig> & { clearApiyiToken?: boolean }): BillingConfig;
 }
 
 export function createSettingsStore(path: string): SettingsStore {
-  let state: SettingsState = { model: {}, social: {}, world: {} };
+  let state: SettingsState = { model: {}, social: {}, world: {}, billing: {} };
   if (existsSync(path)) {
     try {
       const loaded = JSON.parse(readFileSync(path, 'utf8')) as Partial<SettingsState>;
-      if (loaded && typeof loaded === 'object') state = { model: loaded.model ?? {}, social: loaded.social ?? {}, world: loaded.world ?? {} };
+      if (loaded && typeof loaded === 'object') state = { model: loaded.model ?? {}, social: loaded.social ?? {}, world: loaded.world ?? {}, billing: loaded.billing ?? {} };
     } catch {
       /* 配置坏了就用空，回落默认/环境变量，不影响她活着 */
     }
@@ -104,6 +115,20 @@ export function createSettingsStore(path: string): SettingsStore {
       state = { ...state, world: next };
       persist();
       return state.world;
+    },
+    getBilling: () => state.billing,
+    setBilling: (patch) => {
+      const next: BillingConfig = { ...state.billing };
+      const cpr = num((patch as Record<string, unknown>).costPerReply);
+      if (cpr !== undefined && cpr >= 0) next.costPerReply = Math.round(cpr);
+      const sc = num((patch as Record<string, unknown>).starterCredits);
+      if (sc !== undefined && sc >= 0) next.starterCredits = Math.round(sc);
+      if (patch.clearApiyiToken) delete next.apiyiToken;
+      else if (typeof patch.apiyiToken === 'string' && patch.apiyiToken.trim() !== '') next.apiyiToken = patch.apiyiToken.trim();
+      if (typeof patch.balanceUrl === 'string') next.balanceUrl = patch.balanceUrl.trim() || undefined;
+      state = { ...state, billing: next };
+      persist();
+      return state.billing;
     },
   };
 }
