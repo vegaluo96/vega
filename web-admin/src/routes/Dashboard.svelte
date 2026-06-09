@@ -13,7 +13,7 @@
   let lastLoaded = 0;
 
   const TABS = [['overview', '总览'], ['activity', '活动流'], ['recharges', '充值'], ['users', '用户']];
-  const TAB_LABEL = { overview: '总览', activity: '活动流', recharges: '充值审批', users: '用户', life: '生命详情', birth: '接生生命体', model: '模型配置', social: '社交边界', world: '世界源', chain: '链路检查', convo: '对话监督' };
+  const TAB_LABEL = { overview: '总览', activity: '活动流', recharges: '充值审批', users: '用户', life: '生命详情', birth: '接生生命体', settings: '设置', world: '世界源', chain: '诊断 · 链路检查', convo: '对话监督' };
 
   // 模型配置（仅 owner）表单状态
   let mform = { baseUrl: '', model: '', apiKey: '', timeoutMs: 20000, perceive: false, perceiveModel: '' };
@@ -86,21 +86,18 @@
       else if (tab === 'recharges') data = { rows: await api.recharges() };
       else if (tab === 'users') { data = { rows: await api.users() }; userDetail = null; userErr = ''; }
       else if (tab === 'life') { data = { life: await api.life(curLife), well: await api.wellbeing(curLife) }; lifeEvents = null; eventsOpen = false; }
-      else if (tab === 'model') {
-        const m = await api.modelConfig();
-        data = { model: m };
+      else if (tab === 'settings') {
+        // 设置区整合：模型(嘴/耳) + 社交边界 一页拉齐；系统/计费/治理只读取自 health。
+        const [m, s] = await Promise.all([api.modelConfig(), api.socialConfig()]);
+        try { health = await api.health(); } catch { health = null; }
+        data = { model: m, social: s };
         mform = { baseUrl: m.baseUrl, model: m.model, apiKey: '', timeoutMs: m.timeoutMs, perceive: m.perceive, perceiveModel: m.perceiveModel || '' };
-        saveMsg = ''; testMsg = '';
-      }
-      else if (tab === 'social') {
-        const s = await api.socialConfig();
-        data = { social: s };
         sform = {
           activeCircle: s.activeCircle, reachPerTick: s.reachPerTick, reachAfterMin: Math.round(s.reachAfterMs / 60000),
           intimateAt: s.intimateAt, friendAt: s.friendAt, acquaintAt: s.acquaintAt,
           intimateHr: +(s.intimateEveryMs / 3600000).toFixed(1), friendHr: +(s.friendEveryMs / 3600000).toFixed(1), acquaintHr: +(s.acquaintEveryMs / 3600000).toFixed(1),
         };
-        socialMsg = '';
+        saveMsg = ''; testMsg = ''; socialMsg = '';
       }
       else if (tab === 'world') {
         const w = await api.worldConfig();
@@ -125,7 +122,7 @@
       const patch = { baseUrl: mform.baseUrl, model: mform.model, timeoutMs: Number(mform.timeoutMs), perceive: mform.perceive, perceiveModel: mform.perceiveModel };
       if (mform.apiKey && mform.apiKey.trim()) patch.apiKey = mform.apiKey.trim();
       const m = await api.saveModelConfig(patch);
-      data = { model: m }; mform.apiKey = '';
+      data = { ...data, model: m }; mform.apiKey = '';
       saveMsg = '已保存 · 即时生效（无需重启）';
     } catch (e) { saveMsg = '✗ ' + e.message; } finally { saving = false; }
   }
@@ -136,7 +133,7 @@
   }
   async function clearKey() {
     saveMsg = ''; const m = await api.saveModelConfig({ clearApiKey: true });
-    data = { model: m }; saveMsg = '已清除后台 Key 覆盖 · 回落到环境变量';
+    data = { ...data, model: m }; saveMsg = '已清除后台 Key 覆盖 · 回落到环境变量';
   }
   async function saveSocial() {
     if (!confirmGlobal()) return;
@@ -147,7 +144,7 @@
         intimateAt: Number(sform.intimateAt), friendAt: Number(sform.friendAt), acquaintAt: Number(sform.acquaintAt),
         intimateEveryMs: Number(sform.intimateHr) * 3600000, friendEveryMs: Number(sform.friendHr) * 3600000, acquaintEveryMs: Number(sform.acquaintHr) * 3600000,
       });
-      data = { social: s }; socialMsg = '已保存 · 即时生效（无需重启）';
+      data = { ...data, social: s }; socialMsg = '已保存 · 即时生效（无需重启）';
     } catch (e) { socialMsg = '✗ ' + e.message; } finally { savingSocial = false; }
   }
   async function saveWorld() {
@@ -212,12 +209,15 @@
       {#each TABS as [k, label]}
         <button class="navi" class:on={tab === k || (tab === 'life' && k === 'overview')} on:click={() => go(k)}>{label}</button>
       {/each}
-      {#if role === 'owner'}<button class="navi" class:on={tab === 'birth'} on:click={() => go('birth')}>生命</button>{/if}
-      {#if role === 'owner'}<button class="navi" class:on={tab === 'model'} on:click={() => go('model')}>模型</button>{/if}
-      {#if role === 'owner'}<button class="navi" class:on={tab === 'social'} on:click={() => go('social')}>社交</button>{/if}
-      {#if role === 'owner'}<button class="navi" class:on={tab === 'world'} on:click={() => go('world')}>世界</button>{/if}
-      {#if role === 'owner'}<button class="navi" class:on={tab === 'convo'} on:click={() => go('convo')}>对话</button>{/if}
-      {#if role === 'owner'}<button class="navi" class:on={tab === 'chain'} on:click={() => go('chain')}>链路</button>{/if}
+      {#if role === 'owner'}
+        <div class="navsep">运营</div>
+        <button class="navi" class:on={tab === 'convo'} on:click={() => go('convo')}>对话</button>
+        <button class="navi" class:on={tab === 'birth'} on:click={() => go('birth')}>生命</button>
+        <button class="navi" class:on={tab === 'world'} on:click={() => go('world')}>世界</button>
+        <div class="navsep">系统</div>
+        <button class="navi" class:on={tab === 'settings'} on:click={() => go('settings')}>设置</button>
+        <button class="navi" class:on={tab === 'chain'} on:click={() => go('chain')}>诊断</button>
+      {/if}
     </nav>
     <button class="navi logout" on:click={clearSession}>登出</button>
   </aside>
@@ -425,9 +425,11 @@
         {/if}
       {/if}
 
-      {#if tab === 'model' && data.model}
+      {#if tab === 'settings'}
+        <p class="set-intro dim">全站生效的核心配置一页拉齐：模型(嘴/耳) · 社交边界 · 系统/计费/治理(只读)。改完即时生效，无需重启。</p>
+        {#if data.model}
         {@const m = data.model}
-        <AdminSection title="模型配置" subtitle="她的「嘴」——只换措辞，不动状态/记忆。改完即时生效，无需重启。">
+        <AdminSection title="模型 · 嘴/耳" subtitle="她的「嘴」——只换措辞，不动状态/记忆。开「模型当耳朵」才有细腻感知。改完即时生效，无需重启。">
           <span slot="action" class="tag {m.active ? 'ok' : 'sensitive'}">{m.active ? '模型在线 · ' + m.model : '离线模板嘴'}</span>
           <div class="panel pad mform">
             <label class="fld"><span class="flab">模型名（apiyi 上的模型）</span>
@@ -454,9 +456,8 @@
             <p class="hint">全站走 <b>apiyi</b> 中转：Base URL 保持 <code>https://api.apiyi.com/v1</code> 不用动，换模型只改<b>模型名</b>（如 <code>qwen-long</code>），用你的 apiyi Key。模型报错/余额耗尽时她自动回落离线模板嘴，照样活着。</p>
           </div>
         </AdminSection>
-      {/if}
-
-      {#if tab === 'social' && data.social}
+        {/if}
+        {#if data.social}
         <AdminSection title="社交边界" subtitle="她的「社交容量」——一份容量、按亲疏分层（Dunbar）。同类+人类共享。即时生效，无需重启。">
           <div class="panel pad mform">
             <div class="frow">
@@ -481,6 +482,18 @@
             <p class="hint">第一性原理：人只有<b>一份</b>社交容量，按亲疏分层——同类(永生)和人类(必朽)<b>共享</b>这份容量，种类只决定会不会失去/哀悼。任何人来找她她都回应(用户付费)；只有"主动想你/主动找同类"受这份边界约束，所以 token 随生命体数、不随用户数爆炸。</p>
           </div>
         </AdminSection>
+        {/if}
+
+        {#if health}
+          <AdminSection title="系统 · 计费 / 门控 / 治理" subtitle="代码/环境层（这里只读，改这些要在服务器环境变量里改）">
+            <div class="panel pad hgrid">
+              <div class="hcell"><span class="hk">计费</span><span class="hv">{health.billing.costPerReply} 心意 / 条</span><span class="hsub">扁平计费 · 模型挂了走 fallback</span></div>
+              <div class="hcell"><span class="hk">省 token 闲置门控</span><span class="hv">{health.audience.gateMinutes} 分钟</span><span class="hsub">无人说话超此时长 → 自主回路只内省、不烧 token（VEGA_IDLE_GATE_MS）</span></div>
+              <div class="hcell"><span class="hk">自主预算</span><span class="hv">{health.autonomousBudget.cap} 次 / {Math.round(health.autonomousBudget.windowMs / 60000)} 分</span><span class="hsub">反失控速率上限（VEGA_AUTONOMOUS_CAP）· 当前已用 {health.autonomousBudget.used}</span></div>
+              <div class="hcell"><span class="hk">治理</span><span class="hv">能力 deny-all</span><span class="hsub">奖励黑客被契约①结构性阻断 · 审计=append-only 日志</span></div>
+            </div>
+          </AdminSection>
+        {/if}
       {/if}
 
       {#if tab === 'world' && data.world}
@@ -735,7 +748,9 @@
   .navi { text-align: left; background: none; border: 0; color: var(--muted); padding: 10px 12px; border-radius: var(--r-sm); font-size: 13.5px; font-weight: 500; transition: background 120ms ease, color 120ms ease; }
   .navi:hover { background: var(--panel-2); color: var(--text); }
   .navi.on { background: var(--accent-weak); color: var(--text); box-shadow: inset 2px 0 0 var(--accent); }
+  .navsep { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; color: var(--faint-c); padding: 12px 12px 4px; text-transform: uppercase; }
   .logout { margin-top: auto; color: var(--faint-c); }
+  .set-intro { font-size: 12.5px; margin: 0 0 14px; line-height: 1.6; }
 
   /* —— 主区 —— */
   .main { flex: 1; min-width: 0; }
@@ -923,6 +938,7 @@
     .logo span { display: none; }
     nav { flex-direction: row; }
     .logout { margin-top: 0; margin-left: auto; }
+    .navsep { display: none; }
     .metrics { grid-template-columns: 1fr 1fr; }
     .hgrid { grid-template-columns: 1fr 1fr; }
     .convo-wrap { grid-template-columns: 1fr; }
