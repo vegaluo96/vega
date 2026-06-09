@@ -55,6 +55,18 @@ function bornLife(path: string): DurableEventStore {
   return s;
 }
 
+test('Phase3 现实校验(#23)：共同经历少→对ta的判断留余地（不过度解读）', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'vega-rc-'));
+  try {
+    const store = bornLife(join(dir, 'vega.jsonl'));
+    await userSay(store, createTemplateMouth(), 'u_new', '新朋友', '嗨', at()); // 只 1 段经历 → 关系尚浅
+    const ws = deriveWorkspace(reconstruct(store.list()), 'u_new');
+    assert.ok(ws.selfFacts.includes('共同经历还很少') && ws.selfFacts.includes('留点余地'), '关系尚浅 → grounding 提醒她别过度解读');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('多用户私密隔离：两个用户对同一条命，各自一段 u_<id> 关系，记忆不串味', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'vega-conv-'));
   try {

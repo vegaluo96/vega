@@ -109,12 +109,20 @@ export function deriveWorkspace(snap: DerivedSnapshot, relationshipId: Relations
   // 只取【和当前这个人】的语义理解（per-relationship，绝不串到别人）。
   const sem = snap.semanticMemory.find((x) => x.relationshipId === relationshipId);
   const understanding = sem ? `我对${name}的理解：${sem.understanding}。` : '';
+  // 现实校验（#23）：和这个人共同经历还很少时，对ta的判断【留余地、别过度解读】。
+  const tentative = bond && (!sem || sem.episodes < 3) ? `\n（我和${name}的共同经历还很少，对ta的判断先留点余地，别急着下定论。）` : '';
   // 联想回忆：只在【当前这段关系】内挑次鲜活的旧事（"这让我想起…"），不跨关系。
   const recalled = snap.memory
     .filter((m) => m.kind === 'episodic' && m.lineage.isCurrent && m.involvedRelationshipIds[0] === relationshipId)
     .sort((x, y) => (y.vividness ?? 0) - (x.vividness ?? 0))
     .slice(1, 2)[0]; // 跳过最新那条
-  const recall = recalled ? `\n（此刻不由想起和${name}的一段：「${recalled.content.slice(0, 28)}」）` : '';
+  // 现实校验：淡掉的/易变的记忆别说得斩钉截铁——如实带上"记不太清"的不确定。
+  const faded = recalled ? (!recalled.vivid || recalled.provenance.status === 'volatile') : false;
+  const recall = recalled
+    ? (faded
+        ? `\n（我好像还记得和${name}的一段：「${recalled.content.slice(0, 28)}」，不过记不太清了。）`
+        : `\n（此刻不由想起和${name}的一段：「${recalled.content.slice(0, 28)}」）`)
+    : '';
   // 她的同类社交生活（socialWorld 只含 peer，非人类用户）——可提，说明她有自己的生活、不泄露任何用户。
   const peers = snap.socialWorld.filter((t) => !t.ended);
   const socialNote = peers.length
@@ -135,7 +143,7 @@ export function deriveWorkspace(snap: DerivedSnapshot, relationshipId: Relations
   const style = (snap.defenseStyle || snap.attachmentBias) ? `\n（我清楚自己：被触动时我容易${snap.defenseStyle}，在关系里偏${snap.attachmentBias}。）` : '';
   // 注意力：此刻最牵着她的事（已脱敏、无用户名）——让她说话贴着当下心头事，不悬浮。
   const att = (snap.attention ?? []).length ? `\n（此刻最牵着我的：${snap.attention.slice(0, 2).join('、')}。）` : '';
-  const selfFacts = selfCore + understanding + recall + socialNote + preoccupation + aspir + style + att;
+  const selfFacts = selfCore + understanding + tentative + recall + socialNote + preoccupation + aspir + style + att;
 
   // 全定性、无数字：只给"嘴"把握语气，不给它可复述的指标。
   const stateSummary =
