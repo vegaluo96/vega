@@ -75,7 +75,7 @@ export async function converse(
   const head = store.head();
   const lastSeq = events.length ? events[events.length - 1].seq : -1;
   // 之前的对话（不含本条），给"嘴"做上下文。
-  const recentContext = recentTurns(store, relationshipId, 6);
+  const recentContext = recentTurns(store, relationshipId, 40);
 
   // 感知（可选）：模型把这句话解析成结构化特征，【冻进事件】。失败/未启用则回退确定性词表。
   let perception;
@@ -167,7 +167,7 @@ export async function reachOut(
         intent: `你很想念${ws.relationshipDisplay}，主动、简短地跟ta说一句你此刻想ta了`, // 给"嘴"的语气指引（不会外露）
         fallback: `${ws.relationshipDisplay}，我突然有点想你了。`, // 模型挂了也说人话（而非这条指令）
       };
-  const input = { ...outreach, lastUserMessage: world ? `（你想跟ta聊聊你读到的：${world.title}）` : '（此刻无人发起，是你自己想开口）', recentContext: recentTurns(store, relationshipId, 6) };
+  const input = { ...outreach, lastUserMessage: world ? `（你想跟ta聊聊你读到的：${world.title}）` : '（此刻无人发起，是你自己想开口）', recentContext: recentTurns(store, relationshipId, 40) };
   let raw = '';
   try {
     raw = await mouth.speak(input);
@@ -324,7 +324,7 @@ export async function traceConverse(
   const snapshot = reconstruct([...events, previewReceived]);
   // ③ SoulWorkspace（确定性装配）。
   const workspace = deriveWorkspace(snapshot, relationshipId);
-  const input: MouthInput = { ...workspace, lastUserMessage: content, recentContext: recentTurns(store, relationshipId, 6) };
+  const input: MouthInput = { ...workspace, lastUserMessage: content, recentContext: recentTurns(store, relationshipId, 40) };
   // ④ 模型当嘴：真调一次当前配置的嘴。usedRealModel=非模板；prompt 用 apiyiMessages 还原（真嘴发出去的同一构造）。
   const usedRealModel = mouth.id !== 'template';
   let raw = '', ok = false, error: string | undefined;
