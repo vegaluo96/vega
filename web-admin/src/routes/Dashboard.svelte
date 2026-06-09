@@ -404,7 +404,7 @@
               <b>{st.emotion}</b> · {st.feeling}{#if st.tension} · 内在拉扯：{st.tension}{/if}
               <div class="ct-nums">效价 {st.soma.valence} · 唤醒 {st.soma.arousal} · 灵性 {st.soma.vitality} · 精力 {st.soma.energy} · 平静 {st.soma.calm} · 联结 {st.soma.connection} · 安全 {st.soma.safety} · 新鲜 {st.soma.novelty}</div>
               <div class="ct-nums">时段 {st.dayPhase} · 成熟度 {st.maturity} · 风险偏好 {st.riskAppetite} · 底色(效价 {st.baseline.valence} / 联结 {st.baseline.connection})</div>
-              <div class="ct-nums">需求：新鲜 {st.needs.novelty} · 自我一致 {st.needs.coherence} · 意义 {st.needs.meaning} ｜ 防御 {st.defenseStyle} · 依恋 {st.attachmentBias}</div>
+              <div class="ct-nums">需求(SDT)：自主 {st.needs.autonomy} · 胜任 {st.needs.competence} · 关系 {st.needs.relatedness} · 探索 {st.needs.novelty} ｜ 防御 {st.defenseStyle} · 依恋 {st.attachmentBias}</div>
               <div class="ct-sub">正在成为</div><div class="ct-prose">{st.becoming}</div>
               <div class="ct-sub">阅历</div><div class="ct-prose">{st.growth}</div>
               {#if st.aspirations.length}<div class="ct-sub">长期心愿</div><div class="ct-prose">{st.aspirations.join('；')}</div>{/if}
@@ -474,7 +474,7 @@
         <AdminSection title="灵魂内观" subtitle="她现在是谁——全确定性派生，活来自架构">
           <div class="panel pad observe">
             {#if v.growth}<p class="obs-line"><b>此生至今</b>{v.growth}</p>{/if}
-            {#if v.needs}<div class="needs">{#each Object.entries(v.needs) as [k, x]}<span class="need"><span class="nk">{k === 'novelty' ? '新鲜度' : k === 'coherence' ? '自我一致' : '意义感'}</span><span class="track"><span class="fill" style="width:{Math.round(x * 100)}%"></span></span></span>{/each}</div>{/if}
+            {#if v.needs}<div class="needs">{#each Object.entries(v.needs) as [k, x]}<span class="need"><span class="nk">{({ autonomy: '自主', competence: '胜任', relatedness: '关系', novelty: '探索' })[k] ?? k}</span><span class="track"><span class="fill" style="width:{Math.round(x * 100)}%"></span></span></span>{/each}</div>{/if}
             {#if v.interests && v.interests.length}<div class="obs-row"><span class="ol">着迷</span><span class="tags">{#each v.interests as it}<span class="tag2" class:on={it.confirmed}>{it.topic} {Math.round(it.weight * 100)}</span>{/each}</span></div>{/if}
             {#if v.skills && v.skills.length}<div class="obs-row"><span class="ol">学到</span><span class="tags">{#each v.skills as sk}<span class="tag2">{sk.kind} {Math.round(sk.efficacy * 100)}%<span class="dim">·{sk.n}</span></span>{/each}</span></div>{/if}
             {#if v.aspirations && v.aspirations.length}<div class="obs-row"><span class="ol">心愿</span><span class="aspir">{v.aspirations.join('；')}</span></div>{/if}

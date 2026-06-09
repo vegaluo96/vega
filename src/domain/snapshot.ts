@@ -150,7 +150,7 @@ export interface DerivedSnapshot {
   skills: Skill[]; // 自我优化：从行动结果学到的策略效能（哪种做法被接住）——持续变聪明、做得更好
   riskAppetite: number; // 风险偏好 [0,1]：由情绪/安全/驱力 + 学到的社交效能 派生——影响主动开口、探索、表达坦率
   attention: string[]; // 注意力/显著性场：此刻最牵引她的几件事（危险/新奇/未了目标/重要关系/创伤/最强欲望）
-  needs: { novelty: number; coherence: number; meaning: number }; // 内在需求当前水平（低=有缺口→生欲望），脱敏
+  needs: { autonomy: number; competence: number; relatedness: number; novelty: number }; // 基本需求当前满足水平（SDT 自主/胜任/关系 + 探索 novelty）：低=缺口→生欲望，脱敏
   soma: Soma;
   memory: MemoryEntry[];
   semanticMemory: SemanticMemory[]; // 经历压缩成的"理解"（遗忘即抽象，纯派生）

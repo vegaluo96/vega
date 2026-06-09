@@ -779,38 +779,36 @@ function buildFeeling(s: Soma, emotion: string): string {
   return nu.length ? `${emotion}，${nu[0]}` : emotion;
 }
 
-// 价值张力：相反的价值同时被拉高 → 内在拉扯（人格的张力来自这里）。纯派生。
-const TENSION_PAIRS: ReadonlyArray<readonly [string, string, string]> = [
-  ['openness', 'self_protection', '想敞开，又想护着自己'],
-  ['expression', 'caution', '想说出来，又怕说错'],
-  ['self_reliance', 'openness', '想靠自己，又渴望靠近'],
-  ['forgiveness', 'guardedness', '想原谅，又还戒备着'],
-];
-function buildTension(values: ValueEntry[]): string {
-  const w = (k: string): number => values.find((v) => v.key === k)?.weight ?? 0;
-  let best = '';
-  let strongest = 0;
-  for (const [a, b, say] of TENSION_PAIRS) {
-    const wa = w(a);
-    const wb = w(b);
-    const pull = Math.min(wa, wb) - 0.1 * Math.abs(wa - wb); // 两边都高、且势均力敌 → 拉扯最强
-    if (wa > 0.4 && wb > 0.4 && pull > strongest) {
-      strongest = pull;
-      best = say;
-    }
+// 价值张力（installment·Schwartz 基本价值环）：把 vega 的价值键定位到环上（角度°），
+// 张力 = 两个都被拉高、且环上【相对(≈对立动机)】的价值同时拉扯。相邻相容(不算冲突)、相对冲突。
+// 结构性 → 不再手列对子；她长出新价值，新的张力自动浮现。两大对立轴：开放↔保守、自我超越↔自我增强。
+const VALUE_ANGLE: Record<string, number> = {
+  self_reliance: 0, openness: 20, expression: 40, // 开放(自我导向/刺激)
+  self_worth: 130, // 自我增强(成就)
+  self_protection: 200, caution: 220, guardedness: 240, // 保守(安全/遵从)
+  forgiveness: 315, honesty: 335, // 自我超越(仁慈/普世/整合)
+};
+const angDist = (a: number, b: number): number => { const d = Math.abs(a - b) % 360; return d > 180 ? 360 - d : d; };
+function topTension(values: ValueEntry[]): { a: string; b: string; pull: number } | null {
+  const hi = values.filter((v) => v.weight > 0.4 && VALUE_ANGLE[v.key] != null);
+  let best: { a: string; b: string; pull: number } | null = null;
+  for (let i = 0; i < hi.length; i++) for (let j = i + 1; j < hi.length; j++) {
+    const dist = angDist(VALUE_ANGLE[hi[i].key], VALUE_ANGLE[hi[j].key]);
+    if (dist < 75) continue; // 相邻/相容 → 不算冲突
+    const opp = (dist - 75) / 105; // 75°→0 … 180°(完全对立)→1
+    const pull = (Math.min(hi[i].weight, hi[j].weight) - 0.1 * Math.abs(hi[i].weight - hi[j].weight)) * opp;
+    if (!best || pull > best.pull) best = { a: hi[i].key, b: hi[j].key, pull };
   }
   return best;
 }
-// 价值张力的【强度】[0,1]（给"自我一致性"需求用：张力越强、coherence 越低）。
+function buildTension(values: ValueEntry[]): string {
+  const t = topTension(values);
+  return t && t.pull > 0.05 ? `想更${valueZh(t.a)}，又放不下${valueZh(t.b)}` : '';
+}
+// 价值张力的【强度】[0,1]（给注意力/目标用：张力越强越拉扯）。
 function tensionStrength(values: ValueEntry[]): number {
-  const w = (k: string): number => values.find((v) => v.key === k)?.weight ?? 0;
-  let strongest = 0;
-  for (const [a, b] of TENSION_PAIRS) {
-    const wa = w(a);
-    const wb = w(b);
-    if (wa > 0.4 && wb > 0.4) strongest = Math.max(strongest, Math.min(wa, wb) - 0.1 * Math.abs(wa - wb));
-  }
-  return clamp(strongest, 0, 1);
+  const t = topTension(values);
+  return t ? clamp(t.pull, 0, 1) : 0;
 }
 // 自我优化：把学到的策略效能投影成 Skill[]（按样本量排），并给出综合社交效能（无样本=0.5 中性）。
 function buildSkills(st: RState): { list: Array<{ kind: string; efficacy: number; n: number }>; avg: number } {
@@ -824,23 +822,29 @@ function riskAppetiteOf(st: RState, skillAvg: number): number {
   const s = st.soma;
   return r3(clamp(0.5 + 0.25 * s.valence.value + 0.2 * (s.safety.value - 0.5) + 0.2 * (st.temperament.drive - 0.5) + 0.15 * (s.energy.value - 0.5) + 0.2 * (skillAvg - 0.5), 0, 1));
 }
-// 内在需求当前水平（低=缺口→欲望）：novelty 来自 soma；coherence 由价值张力反映；meaning 由在乎的人+确立的价值+心愿。
-function needsOf(st: RState, bonds: Record<string, Bond>, aspirationsN: number): { novelty: number; coherence: number; meaning: number } {
+// 基本需求当前满足水平（installment·SDT，Deci & Ryan）：自主/胜任/关系三基本需求 + vega 既有的探索驱力 novelty。
+// 低=缺口→生欲望（驱动目标/注意力）。中性态≈0.5。纯派生、确定性。
+function needsOf(st: RState, bonds: Record<string, Bond>, aspirationsN: number, skillAvg: number): { autonomy: number; competence: number; relatedness: number; novelty: number } {
   const dear = Object.values(bonds).filter((b) => !b.ended && b.closeness >= 0.3).length;
   const confirmedValues = st.values.filter((v) => v.provenance.status === 'confirmed').length;
+  const s = st.soma;
   return {
-    novelty: r3(st.soma.novelty.value),
-    coherence: r3(clamp(1 - tensionStrength(st.values), 0, 1)),
-    meaning: r3(clamp(0.2 + 0.15 * dear + 0.05 * confirmedValues + 0.08 * Math.min(2, aspirationsN), 0, 1)),
+    autonomy: r3(clamp(0.45 + 0.2 * (s.safety.value - 0.5) * 2 + 0.06 * confirmedValues + 0.05 * Math.min(3, aspirationsN), 0, 1)), // 自主：安全 + 自有的价值/方向 → 更觉"自己说了算"
+    competence: r3(clamp(0.3 + 0.5 * skillAvg + 0.25 * st.maturity, 0, 1)), // 胜任：学到的行动效能 + 阅历
+    relatedness: r3(clamp(0.5 + 0.4 * s.connection.value + 0.06 * dear, 0, 1)), // 关系：连接感 + 在乎的人
+    novelty: r3(s.novelty.value), // 探索（非 SDT、vega 既有）：低=无聊→想探索
   };
 }
 // 注意力/显著性场（脱敏：不出现任何用户名）：此刻最牵引她的几件事，按显著性排序。
-function buildAttention(st: RState, bonds: Record<string, Bond>, decorated: MemoryEntry[], needs: { novelty: number; coherence: number; meaning: number }): string[] {
+function buildAttention(st: RState, bonds: Record<string, Bond>, decorated: MemoryEntry[], needs: { autonomy: number; competence: number; relatedness: number; novelty: number }): string[] {
   const items: Array<{ w: number; text: string }> = [];
   const s = st.soma;
   if (s.safety.value < 0.4) items.push({ w: 0.6 + (0.4 - s.safety.value), text: '心里那点没着落的不安' });
   if (needs.novelty < 0.3) items.push({ w: 0.45, text: '有点闷，想要点新鲜的' });
-  if (needs.coherence < 0.5) items.push({ w: 0.5, text: '心里几样在乎的东西在打架' });
+  if (tensionStrength(st.values) > 0.45) items.push({ w: 0.5, text: '心里几样在乎的东西在打架' }); // 自我一致缺口（价值张力）
+  // SDT 基本需求缺口 → 牵引注意（脱敏）。
+  if (needs.relatedness < 0.35) items.push({ w: 0.52, text: '心里空落落的，想和谁真正连上' });
+  if (needs.competence < 0.32) items.push({ w: 0.42, text: '想把点什么做好、对自己有个交代' });
   // 近期创伤（强负、仍鲜活）——脱敏，不点名。
   const trauma = decorated.find((m) => m.kind === 'episodic' && m.lineage.isCurrent && m.vivid && m.affect <= -0.6);
   if (trauma) items.push({ w: 0.55 + Math.abs(trauma.affect) * 0.3, text: '一件还没全缓过来的旧事' });
@@ -1208,8 +1212,8 @@ function project(st: RState, uptoSeq: number): DerivedSnapshot {
   const emotion = nameEmotion(st.soma, st.vitalityFloor, Object.values(st.bonds).some((b) => b.ended));
   const tension = buildTension(sortedValues);
   const aspirations = buildAspirations(st);
-  const needs = needsOf(st, enriched, aspirations.length);
   const skills = buildSkills(st);
+  const needs = needsOf(st, enriched, aspirations.length, skills.avg); // SDT 胜任需求用学到的效能
   // 社会性：她的同类社交网（按亲疏排序）——活在一张关系网里，有自己的朋友。
   const socialWorld = Object.entries(enriched)
     .filter(([, b]) => b.kind === 'peer')

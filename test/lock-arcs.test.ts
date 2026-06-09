@@ -121,7 +121,7 @@ test('Phase1 内在驱动/情绪→决策/注意力：novelty 衰减→无聊→
   s.append({ type: 'CONNECTION_OPENED', source: 'host', relationshipId: 'r_c', occurredAt: at(), payload: { relationshipId: 'r_c', host: { kind: 'http', ref: 'say' } } }); // 醒着——休眠会冻结 novelty（仅 vitality/energy 回暖）
   const snap0 = reconstruct(s.list());
   assert.ok(snap0.riskAppetite >= 0 && snap0.riskAppetite <= 1, 'riskAppetite 在 [0,1]');
-  assert.ok(typeof snap0.needs.novelty === 'number' && typeof snap0.needs.coherence === 'number' && typeof snap0.needs.meaning === 'number', 'needs 三项派生');
+  assert.ok(typeof snap0.needs.autonomy === 'number' && typeof snap0.needs.competence === 'number' && typeof snap0.needs.relatedness === 'number' && typeof snap0.needs.novelty === 'number', 'needs(SDT 四项)派生');
   assert.ok(Array.isArray(snap0.attention), 'attention 是数组');
   // 读到世界 → novelty 被推高（解无聊）；随后长时间无输入 → 衰减回落（无聊重来）= 自调节闭环。
   s.append({ type: 'WORLD_PERCEIVED', source: 'autonomous_loop', occurredAt: '2026-04-01T00:05:00.000Z', payload: { source: 'x', worldKind: 'news', title: '一件很意外的大事', summary: '', url: '', topics: ['科学'], perception: { valence: 0.6, arousal: 0.7, relevance: 0.9 } } });

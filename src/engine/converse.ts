@@ -290,7 +290,7 @@ export interface ChainTrace {
     emotion: string; feeling: string; tension: string;
     soma: { valence: number; arousal: number; vitality: number; energy: number; calm: number; connection: number; safety: number; novelty: number };
     dayPhase: string; maturity: number; baseline: { valence: number; connection: number }; riskAppetite: number;
-    needs: { novelty: number; coherence: number; meaning: number };
+    needs: { autonomy: number; competence: number; relatedness: number; novelty: number };
     defenseStyle: string; attachmentBias: string; becoming: string; growth: string;
     aspirations: string[]; goals: { kind: string; intent: string; target?: string }[];
     interests: { topic: string; weight: number; status: string }[]; skills: { kind: string; efficacy: number; n: number }[];
@@ -344,7 +344,7 @@ export async function traceConverse(
       emotion: snapshot.emotion, feeling: snapshot.feeling, tension: snapshot.tension,
       soma: { valence: tr3(s.valence.value), arousal: tr3(s.arousal.value), vitality: tr3(s.vitality.value), energy: tr3(s.energy.value), calm: tr3(s.calm.value), connection: tr3(s.connection.value), safety: tr3(s.safety.value), novelty: tr3(s.novelty.value) },
       dayPhase: snapshot.dayPhase, maturity: tr3(snapshot.maturity), baseline: { valence: tr3(snapshot.baseline.valence), connection: tr3(snapshot.baseline.connection) }, riskAppetite: tr3(snapshot.riskAppetite),
-      needs: { novelty: tr3(snapshot.needs.novelty), coherence: tr3(snapshot.needs.coherence), meaning: tr3(snapshot.needs.meaning) },
+      needs: { autonomy: tr3(snapshot.needs.autonomy), competence: tr3(snapshot.needs.competence), relatedness: tr3(snapshot.needs.relatedness), novelty: tr3(snapshot.needs.novelty) },
       defenseStyle: snapshot.defenseStyle, attachmentBias: snapshot.attachmentBias, becoming: snapshot.becoming, growth: snapshot.growth,
       aspirations: snapshot.aspirations, goals: snapshot.goals.map((g) => ({ kind: g.kind, intent: g.intent, target: g.target })),
       interests: snapshot.interests.map((i) => ({ topic: i.topic, weight: tr3(i.weight), status: i.status })), skills: snapshot.skills.map((k) => ({ kind: k.kind, efficacy: tr3(k.efficacy), n: k.n })),
