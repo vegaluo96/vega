@@ -21,7 +21,8 @@
     "backup": "node --disable-warning=ExperimentalWarning --experimental-strip-types src/cli/backup.ts",
     "restore": "node --disable-warning=ExperimentalWarning --experimental-strip-types src/cli/restore.ts",
     "vapid": "node --experimental-strip-types src/cli/vapid.ts",
-    "check": "node --experimental-strip-types src/cli/selftest.ts"
+    "check": "node --experimental-strip-types src/cli/selftest.ts",
+    "calibrate": "node --disable-warning=ExperimentalWarning --experimental-strip-types src/cli/affect-calibrate.ts"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
