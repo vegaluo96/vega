@@ -18,14 +18,9 @@ import {
   createEventBus,
   createSerializer,
   createTemplateMouth,
-  meterMouth,
-  resourceBand,
-  resourceAwareMouth,
   governedMouth,
   createAutonomousBudget,
   runTurn,
-  sendPush,
-  userSay,
   type Account,
 } from '../index.ts';
 import { send, sendHtml, serveStatic, readJson, FALLBACK_HTML } from './http.ts';
@@ -36,6 +31,9 @@ import { startLoops } from './loops.ts';
 import { createWechat, cleanBindToken } from './wechat.ts';
 import { createConfig } from './config.ts';
 import { createLives } from './lives.ts';
+import { createPresence } from './presence.ts';
+import { createResponder } from './respond.ts';
+import { setupPush } from './push.ts';
 
 const LIFE_PATH = process.env.VEGA_LIFE_PATH ?? join(process.cwd(), '.vega', 'life.jsonl');
 const DATA_DIR = dirname(LIFE_PATH);
@@ -84,28 +82,13 @@ const perceiver = createDynamicPerceiver(config.effPerceiveConfig);
 // 省 token（按"有没有听众"门控）：超过此时长无任何用户活动 → 自主【对外】行动(心声/主动找人/同类寒暄)暂停，
 // 只保留【免费的内在 tick + 反思】（她照样活着、内在继续变）。用户一回来即恢复——不对空房间表演、不白烧 token。
 const IDLE_GATE_MS = Number(process.env.VEGA_IDLE_GATE_MS ?? 6 * 3600_000);
-let lastActiveMs = Date.now(); // 最近一次有用户说话（任意命）
-const audiencePresent = (): boolean => Date.now() - lastActiveMs < IDLE_GATE_MS;
-const idleMs = (): number => Date.now() - lastActiveMs; // 距上次用户活动多久——给 /admin/health 显示闲置分钟
+const presence = createPresence(IDLE_GATE_MS); // 省 token 闲置门控（"有没有听众"）——见 ./presence.ts
 const CLAWBOT_SECRET = process.env.VEGA_CLAWBOT_SECRET; // 微信网关(clawbot)共享密钥；未配则微信端点禁用
 const serializer = createSerializer(); // 每命串行：并发用户的回合不穿插
 const bus = createEventBus(); // SSE 实时总线（广场/触达/醒睡）
-// Web Push（PWA）：配了 VAPID 才启用。她想你了 → app 关着也能推到手机。
+// Web Push（PWA）：配了 VAPID 才启用。她想你了 → app 关着也能推到手机。订阅逻辑见 ./push.ts（accounts 就绪后挂）。
 const VAPID = process.env.VEGA_VAPID_PUBLIC && process.env.VEGA_VAPID_PRIVATE ? { publicKey: process.env.VEGA_VAPID_PUBLIC, privateKey: process.env.VEGA_VAPID_PRIVATE } : null;
 const VAPID_SUBJECT = process.env.VEGA_VAPID_SUBJECT ?? 'mailto:admin@zsky.com';
-if (VAPID) {
-  bus.subscribe((e) => {
-    if (e.type !== 'reach_out' || !e.audience.startsWith('u_')) return; // 只给"她想你了"且属于某个用户的事件推
-    const userId = e.audience.slice(2);
-    const d = e.data as { life?: string; text?: string };
-    const payload = JSON.stringify({ title: `${d.life} 想你了`, body: d.text ?? '', life: d.life });
-    for (const sub of accounts.getPushSubs(userId)) {
-      sendPush(sub, payload, VAPID, VAPID_SUBJECT)
-        .then((st) => { if (st === 404 || st === 410) accounts.removePushSub(sub.endpoint); })
-        .catch((e) => console.warn('[push] 发送失败（不影响其他）:', (e as Error).message)); // 留一行日志，别让推送全挂成黑盒
-    }
-  });
-}
 
 // 平台身份/账号层（多用户）：node:sqlite，与神圣日志物理分离。
 const ACCOUNTS_DB = process.env.VEGA_ACCOUNTS_DB ?? join(DATA_DIR, 'accounts.db');
@@ -125,6 +108,7 @@ const bearer = (req: IncomingMessage): string => {
 };
 const sessionAccount = (req: IncomingMessage): Account | null => accounts.authenticate(bearer(req));
 const publicAccount = (a: Account): Record<string, unknown> => ({ id: a.id, handle: a.handle, role: a.role, email: a.email, emailVerified: a.emailVerified });
+setupPush({ bus, accounts, VAPID, VAPID_SUBJECT }); // Web Push 订阅（reach_out → 推送）；accounts 已就绪
 // 生命体子系统（实现见 ./lives.ts）：名册/句柄/有界重放(snapOf)/创世接生(boot·birthLife)/读助手/聚合器。
 // 解构出的名字与原定义一致 → 下方 respondAsUser/createWechat/ctx/回路/shutdown 直接引用，无需改写。
 const {
@@ -133,26 +117,8 @@ const {
   allFeedPosts, feedPosts, allPeerExchanges, adminActivity, nextMuseGap,
 } = createLives({ accounts, serializer, peerId, REL, HOST_CONN, userName, HOST, PORT, MUSE_MS, DATA_DIR, LIFE_PATH });
 
-// 一个具体用户对一条命说话（计费 + 串行 + 渠道标记）。/api/say 与微信 /api/wechat/say 共用。
-async function respondAsUser(life: Life, me: Account, content: string, channel: string): Promise<Record<string, unknown>> {
-  lastActiveMs = Date.now(); // 有用户在 → 自主回路恢复对外行动（省 token 门控）
-  return serializer.run(life.id, async () => {
-    snapOf(life); // 追平缓存态到末条 → 把它传给 converse 增量折叠（热路径不再每条消息全量重放）
-    const cached = life.state ? { st: life.state, uptoSeq: life.stateSeq } : undefined;
-    const cost = config.effBilling().costPerReply; // 后台「设置·计费」可即时改
-    const band = resourceBand(accounts.balance(me.id), cost); // 资源=她和【这个人】此刻能给多少（随人而变）
-    let { mouth: useMouth, charge } = meterMouth(mouth, templateMouth, accounts.balance(me.id), cost);
-    // 预扣即决（原子）：走付费路径就先扣 1。debit 内部 check+UPDATE 同步原子，是计费的唯一权威闸——
-    // 若并发（同号同时找多条命）把余额扣空了 → 本轮降级免费模板嘴、不计费（杜绝负余额/漏扣/白嫖，且不再忽略 debit 返回值）。
-    if (charge > 0 && !accounts.debit(me.id, charge, 'model', life.id)) { useMouth = templateMouth; charge = 0; }
-    if (charge > 0) useMouth = resourceAwareMouth(useMouth, band); // 余额紧 → 她精炼/坦诚有限（绝不催费）；充裕 → 原样给
-    // 注：资源是【运行期能力】，只改此刻能给多少；绝不进神圣日志、不改她是谁（V2 不破）。
-    // 走付费路径就算已交付（fallback 也算，Fix B）→ 不退；只有这轮没落库（乐观锁/磁盘错抛出）才退回预扣，保账实一致。
-    const r = await userSay(life.store, useMouth, accounts.relIdFor(me.id), me.handle, content, now(), charge > 0 ? perceiver : undefined, channel, cached)
-      .catch((e: unknown) => { if (charge > 0) accounts.credit(me.id, charge, 'refund', life.id); throw e; });
-    return { utterance: r.utterance, verdict: r.verdict, emotion: r.snapshot.emotion, balance: accounts.balance(me.id), voice: useMouth.id === 'template' ? 'plain' : 'rich', resource: band };
-  });
-}
+// 写链路（神圣链路·用户侧入口，实现见 ./respond.ts）：计费 + 串行 + 资源感知。/api/say 与微信 /api/wechat/say 共用。
+const { respondAsUser } = createResponder({ accounts, serializer, snapOf, mouth, templateMouth, perceiver, effBilling: config.effBilling, touch: presence.touch });
 
 // 微信 / iLink 通道（实现见 ./wechat.ts）：长轮询收发 + 统一应答。写链路 respondAsUser 仍在本文件、注入进去。
 const { runChannel, wechatReply } = createWechat({
@@ -173,7 +139,7 @@ const ctx: Ctx = {
   respondAsUser, wechatReply, runChannel, birthLife, cleanBindToken,
   allFeedPosts, feedPosts, allPeerExchanges,
   reachState, pickRecentWorld, pickInsightPair, lastUserMsgMs, adminActivity,
-  bearer, sessionAccount, publicAccount, audiencePresent, idleMs,
+  bearer, sessionAccount, publicAccount, audiencePresent: presence.audiencePresent, idleMs: presence.idleMs,
   reachOutPending, channelGen, creditHintAt, scheduleWorld,
   VAPID, VAPID_SUBJECT, WEB_DIST, ADMIN_DIST, CLAWBOT_SECRET, IDLE_GATE_MS, WECHAT_LIFE, REL, peerId,
 };
