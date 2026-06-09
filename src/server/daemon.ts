@@ -527,16 +527,6 @@ function lastUserMsgMs(life: Life): number | null {
   for (let i = es.length - 1; i >= 0; i--) if (es[i].type === 'MESSAGE_RECEIVED' && es[i].relationshipId === REL) return Date.parse(es[i].occurredAt);
   return null;
 }
-function pendingOutreach(life: Life): string | null {
-  const es = life.store.list();
-  let recvIdx = -1;
-  for (let i = es.length - 1; i >= 0; i--) if (es[i].type === 'MESSAGE_RECEIVED' && es[i].relationshipId === REL) { recvIdx = i; break; }
-  for (let i = es.length - 1; i > recvIdx; i--) {
-    const e = es[i];
-    if (e.type === 'MESSAGE_SENT' && e.relationshipId === REL && (e.payload as MessageSentPayload).unprompted) return (e.payload as MessageSentPayload).utterance;
-  }
-  return null;
-}
 // 一次扫描得到每段关系的：我最后听到对方的墙钟时间、我最后一次【主动】找 ta 的时间、
 // 是否已有未回的主动留言。给"社交边界"的分层主动外联用——避免每个候选都全量扫日志。
 function reachState(life: Life): Map<string, { lastRecvMs: number; lastSentMs: number; pending: boolean }> {
@@ -605,22 +595,6 @@ const allSocietyFeed = versionedMemo((): Array<{ from: string; to: string; text:
   return out;
 });
 
-// 广场"生命活动"历史（不止在线时才有）：公开心声 + 同类交谈，按时间【新→旧】。进广场即有内容。
-const allSocietyRecent = versionedMemo((): Array<Record<string, unknown>> => {
-  const out: Array<Record<string, unknown>> = [];
-  for (const l of lives) {
-    for (const e of l.store.list()) {
-      if (e.type !== 'MESSAGE_SENT' || typeof e.relationshipId !== 'string') continue;
-      if (e.relationshipId === 'r_square') out.push({ muse: true, life: l.id, text: (e.payload as MessageSentPayload).utterance, at: e.occurredAt });
-      else if (e.relationshipId.startsWith('peer_')) out.push({ from: l.id, to: e.relationshipId.slice('peer_'.length), text: (e.payload as MessageSentPayload).utterance, at: e.occurredAt });
-    }
-  }
-  out.sort((a, b) => (String(a.at) < String(b.at) ? 1 : -1));
-  return out;
-});
-function societyRecent(limit: number): Array<Record<string, unknown>> {
-  return allSocietyRecent().slice(0, limit).map((x, i) => ({ ...x, id: String(x.at) + '_' + i }));
-}
 
 // 广场"帖子"=她的公开心声（§8.1）。postId = `${lifeId}|${occurredAt}`，给表情/评论挂靠。
 const allFeedPosts = versionedMemo((): Array<{ postId: string; life: string; text: string; at: string }> => {
@@ -686,7 +660,7 @@ const ctx: Ctx = {
   lives, lifeById, snapOf, buildThread, livesMetBy, recomputePeers, saveCheckpoint, meetPeer, partPeer,
   effWorld, worldStatus, worldEnabled, effMouthConfig, effPerceiveConfig, modelStatus, effSocial, layerOf, effBilling,
   respondAsUser, wechatReply, runChannel, birthLife, cleanBindToken,
-  allFeedPosts, feedPosts, societyRecent, allSocietyRecent, allPeerExchanges,
+  allFeedPosts, feedPosts, allPeerExchanges,
   reachState, pickRecentWorld, pickInsightPair, lastUserMsgMs, adminActivity,
   bearer, sessionAccount, publicAccount, audiencePresent, idleMs,
   reachOutPending, channelGen, creditHintAt, scheduleWorld,

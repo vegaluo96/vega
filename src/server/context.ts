@@ -89,8 +89,6 @@ export interface Ctx {
   // —— 聚合 / 只读派生 ——
   allFeedPosts(): FeedPost[];
   feedPosts(limit: number): FeedPost[];
-  societyRecent(limit: number): Array<Record<string, unknown>>;
-  allSocietyRecent(): Array<Record<string, unknown>>;
   allPeerExchanges(): PeerExchange[];
   reachState(life: Life): Map<string, ReachInfo>;
   pickRecentWorld(life: Life): { title: string; summary: string; source: string; url: string } | undefined;
