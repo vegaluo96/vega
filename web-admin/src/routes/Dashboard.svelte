@@ -179,7 +179,8 @@
     if (!confirmGlobal()) return;
     saving = true; saveMsg = ''; testMsg = '';
     try {
-      const patch = { baseUrl: mform.baseUrl, model: mform.model, timeoutMs: Number(mform.timeoutMs), perceive: mform.perceive, perceiveModel: mform.perceiveModel };
+      // 「耳」是和「嘴」同等的常驻器官——不再有开关，始终在听（perceive 恒为 true；无模型/无 Key 时引擎自动回落确定性词表，不烧钱）。
+      const patch = { baseUrl: mform.baseUrl, model: mform.model, timeoutMs: Number(mform.timeoutMs), perceive: true, perceiveModel: mform.perceiveModel };
       if (mform.apiKey && mform.apiKey.trim()) patch.apiKey = mform.apiKey.trim();
       const m = await api.saveModelConfig(patch);
       data = { ...data, model: m }; mform.apiKey = '';
@@ -512,10 +513,9 @@
             <label class="fld"><span class="flab">超时（毫秒）</span>
               <input class="ainput" type="number" bind:value={mform.timeoutMs} /></label>
 
-            <div class="cfg-head">耳 · 听懂自然语言<span class="cfg-sub">和「嘴」同等重要：开了她才听得出微妙语气（每条多一次调用），关了退回确定性词表、理解会粗</span></div>
-            <label class="chk"><input type="checkbox" bind:checked={mform.perceive} /> 开启「模型当耳朵」</label>
+            <div class="cfg-head">耳 · 听懂自然语言<span class="cfg-sub">和「嘴」同等重要、常驻在听：模型把每条话听成 9 维感知（每条多一次调用）；无模型/无 Key 时自动回落确定性词表，不烧钱</span></div>
             <label class="fld"><span class="flab">感知模型（留空＝同「嘴」的模型；建议用快模型）</span>
-              <input class="ainput" bind:value={mform.perceiveModel} placeholder={mform.model || '同嘴'} disabled={!mform.perceive} /></label>
+              <input class="ainput" bind:value={mform.perceiveModel} placeholder={mform.model || '同嘴'} /></label>
 
             <div class="mrow">
               <button class="abtn" on:click={saveModel} disabled={saving}>{saving ? '保存中…' : '保存'}</button>
@@ -556,22 +556,20 @@
         {/if}
 
         {#if data.billing}
-          <AdminSection title="计费 / 对账" subtitle="对用户的计费数值（即时生效）+ apiyi 平台余额对账。">
+          <AdminSection title="计费 · 对用户 与 对账 · apiyi" subtitle="两层一起看即完整对账：「计费」是你对用户的收费（即时生效）、「对账」是 apiyi 对你的收费。">
             <div class="panel pad mform">
+              <div class="cfg-head">计费 · 对用户<span class="cfg-sub">你对用户的收费数值，即时生效、无需重启；余额耗尽她照样活着，只是话朴素</span></div>
               <div class="frow">
                 <label class="fld"><span class="flab">每条回应成本（心意）</span><input class="ainput" type="number" min="0" bind:value={bform.costPerReply} /></label>
                 <label class="fld"><span class="flab">新用户初始额度（心意）</span><input class="ainput" type="number" min="0" bind:value={bform.starterCredits} /></label>
               </div>
-              <label class="fld"><span class="flab">apiyi 控制台 AccessToken（查平台余额对账，非聊天 Key）{#if data.billing.apiyiTokenSet}<span class="faint">· 当前 {data.billing.apiyiTokenMasked}</span>{/if}</span>
+
+              <div class="cfg-head">对账 · apiyi 平台<span class="cfg-sub">apiyi 对你的收费——密钥与余额同处一层：填控制台 AccessToken 即可查平台剩余/消耗</span></div>
+              <label class="fld"><span class="flab">apiyi 控制台 AccessToken（查平台余额，非聊天 Key）{#if data.billing.apiyiTokenSet}<span class="faint">· 当前 {data.billing.apiyiTokenMasked}</span>{/if}</span>
                 <input class="ainput" type="password" bind:value={bform.apiyiToken} autocomplete="off" placeholder={data.billing.apiyiTokenSet ? '留空＝不改' : '粘贴 apiyi 控制台 AccessToken'} /></label>
-              <div class="mrow">
-                <button class="abtn" on:click={saveBilling} disabled={savingBilling}>{savingBilling ? '保存中…' : '保存'}</button>
-                <button class="abtn abtn-ghost" on:click={loadPlatformBalance} disabled={loadingBal}>{loadingBal ? '查询中…' : '查平台余额'}</button>
-              </div>
-              {#if billingMsg}<p class="msg" class:bad={billingMsg.startsWith('✗')}>{billingMsg}</p>{/if}
               {#if platBal}
                 {#if platBal.error}<p class="msg bad">✗ 平台对账：{platBal.error}</p>
-                {:else if platBal.configured === false}<p class="hint">未配 apiyi AccessToken——填上面那行、保存后可查平台余额。</p>
+                {:else if platBal.configured === false}<p class="hint">未配 apiyi AccessToken——填上面那行、保存后点「查平台余额」。</p>
                 {:else}<div class="hgrid" style="margin-top:8px">
                   <div class="hcell"><span class="hk">平台剩余</span><span class="hv">${platBal.remainingUsd}</span><span class="hsub">apiyi 账户</span></div>
                   <div class="hcell"><span class="hk">已消耗</span><span class="hv">${platBal.usedUsd}</span><span class="hsub">累计</span></div>
@@ -579,7 +577,12 @@
                   <div class="hcell"><span class="hk">请求数</span><span class="hv">{platBal.requestCount}</span><span class="hsub">累计调用</span></div>
                 </div>{/if}
               {/if}
-              <p class="hint">「每条成本/初始额度」是你对<b>用户</b>的计费（即时生效）；「平台余额」是 apiyi 对<b>你</b>的计费——两边一起看即完整对账。</p>
+
+              <div class="mrow">
+                <button class="abtn" on:click={saveBilling} disabled={savingBilling}>{savingBilling ? '保存中…' : '保存'}</button>
+                <button class="abtn abtn-ghost" on:click={loadPlatformBalance} disabled={loadingBal}>{loadingBal ? '查询中…' : '查平台余额'}</button>
+              </div>
+              {#if billingMsg}<p class="msg" class:bad={billingMsg.startsWith('✗')}>{billingMsg}</p>{/if}
             </div>
           </AdminSection>
         {/if}
