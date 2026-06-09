@@ -31,7 +31,6 @@ import {
   governedMouth,
   createAutonomousBudget,
   visibleTo,
-  endRelationship,
   ensureUserRelationship,
   genesisPayloadFor,
   greet,
@@ -611,62 +610,6 @@ function mbtiOf(t: DerivedSnapshot['temperament']): string {
     (t.conscientiousness >= 0.5 ? 'J' : 'P')   // 判断/感知 ← 尽责
   );
 }
-function view(life: Life, s: DerivedSnapshot): Record<string, unknown> {
-  const b = s.bonds[REL];
-  return {
-    id: life.id,
-    awake: s.awake,
-    willingToWake: s.willingToWake,
-    vitality: round3(s.soma.vitality.value),
-    valence: round3(s.soma.valence.value),
-    connection: round3(s.soma.connection.value),
-    bondTrust: b ? round3(b.trust) : null,
-    repairNeed: b ? round3(b.repairNeed) : null,
-    emotion: s.emotion,
-    feeling: s.feeling,
-    dayPhase: s.dayPhase,
-    goals: s.goals.slice(0, 3).map((g) => g.intent),
-    memories: s.memory.filter((m) => m.lineage.isCurrent).length,
-    peers: life.peers,
-    narrative: s.narrative,
-    pendingOutreach: pendingOutreach(life),
-    events: life.store.version(),
-    mouth: mouth.id,
-  };
-}
-function innerView(life: Life, s: DerivedSnapshot): Record<string, unknown> {
-  return {
-    id: life.id,
-    awake: s.awake,
-    emotion: s.emotion,
-    feeling: s.feeling,
-    dayPhase: s.dayPhase,
-    tension: s.tension,
-    narrative: s.narrative,
-    innerLife: s.innerLife,
-    chapters: s.chapters,
-    temperament: { label: tempLabel(s.temperament), ...s.temperament },
-    soma: {
-      valence: round3(s.soma.valence.value),
-      arousal: round3(s.soma.arousal.value),
-      vitality: round3(s.soma.vitality.value),
-      energy: round3(s.soma.energy.value),
-      calm: round3(s.soma.calm.value),
-      connection: round3(s.soma.connection.value),
-      safety: round3(s.soma.safety.value),
-    },
-    bonds: Object.entries(s.bonds).map(([id, b]) => ({ id, name: b.displayRef, kind: b.kind, trust: round3(b.trust), closeness: round3(b.closeness), repairNeed: round3(b.repairNeed), style: b.theoryOfMind.style, predictability: b.theoryOfMind.predictability, attachment: b.relationalSelf.attachment, stance: b.relationalSelf.stance, ended: b.ended ? b.ended.reason : null })),
-    socialWorld: s.socialWorld.map((t) => ({ name: t.displayRef, closeness: round3(t.closeness), attachment: t.attachment, style: t.style, ended: t.ended })),
-    values: s.values.map((v) => ({ key: v.key, weight: round3(v.weight), status: v.provenance.status, drifts: v.provenance.driftedAtSeqs.length })),
-    // 遗忘即抽象：当下记得的(vivid)在前、淡去的在后；原始日志一条不少。
-    memories: s.memory.filter((m) => m.lineage.isCurrent).sort((a, b) => (b.vividness ?? 0) - (a.vividness ?? 0)).map((m) => ({ id: m.id, affect: round3(m.affect), content: m.content, vivid: m.vivid === true, vividness: round3(m.vividness ?? 0) })),
-    understanding: s.semanticMemory.map((x) => x.understanding),
-    goals: s.goals.map((g) => ({ kind: g.kind, intent: g.intent, weight: g.weight })),
-    recentEvents: life.store.list().slice(-18).map((e) => ({ seq: e.seq, type: e.type, rel: e.relationshipId ?? '', at: e.occurredAt })),
-    events: life.store.version(),
-  };
-}
-
 // O(events) 全量扫描的读路径优化：按【所有命的版本号】记忆化——状态没变时多用户同时刷广场只算一次，
 // 任一命落新事件即自动失效重算。结果是纯派生，调用方都 slice/map 出副本，不会改到被缓存的数组。
 const allLivesSig = (): string => lives.map((l) => l.store.version()).join(',');
@@ -675,7 +618,7 @@ function versionedMemo<T>(compute: () => T): () => T {
   return () => { const sig = allLivesSig(); if (!cache || cache.sig !== sig) cache = { sig, val: compute() }; return cache.val; };
 }
 
-// 广场：把各生命体之间（peer_ 关系上）说过的话，按时间汇成一条可读的对话流。
+// 广场：把各生命体之间（peer_ 关系上）说过的话，按时间汇成一条可读的对话流（供「同类来往」聚合）。
 const allSocietyFeed = versionedMemo((): Array<{ from: string; to: string; text: string; at: string }> => {
   const out: Array<{ from: string; to: string; text: string; at: string }> = [];
   for (const l of lives) {
@@ -688,9 +631,6 @@ const allSocietyFeed = versionedMemo((): Array<{ from: string; to: string; text:
   out.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
   return out;
 });
-function societyFeed(): Array<{ from: string; to: string; text: string; at: string }> {
-  return allSocietyFeed().slice(-80);
-}
 
 // 广场"生命活动"历史（不止在线时才有）：公开心声 + 同类交谈，按时间【新→旧】。进广场即有内容。
 const allSocietyRecent = versionedMemo((): Array<Record<string, unknown>> => {
@@ -1478,45 +1418,8 @@ const server = createServer(async (req, res) => {
     }
 
     if (!authed(req)) return send(res, 401, { error: 'unauthorized' });
-    if (req.method === 'GET' && url === '/society-feed') return send(res, 200, societyFeed());
-    if (req.method === 'GET' && url === '/lives') {
-      return send(res, 200, lives.map((l) => { const s = snapOf(l); return { id: l.id, awake: s.awake, emotion: s.emotion }; }));
-    }
-    // 生命体作用域：/<id>/<action>；缺省（/state /inner /say）落到第一个生命体（向后兼容）。
-    let life: Life | undefined;
-    let action: string;
-    if (seg.length >= 2 && lifeById(seg[0])) {
-      life = lifeById(seg[0]);
-      action = seg[1];
-    } else {
-      life = lives[0];
-      action = seg[0] ?? '';
-    }
-    if (!life) return send(res, 404, { error: 'no such life' });
-    if (req.method === 'GET' && action === 'state') return send(res, 200, view(life, snapOf(life)));
-    if (req.method === 'GET' && action === 'inner') return send(res, 200, innerView(life, snapOf(life)));
-    if (req.method === 'POST' && action === 'say') {
-      const body = await readJson(req);
-      const content = String(body.content ?? '').slice(0, 4000).trim();
-      if (content === '') return send(res, 400, { error: 'content required' });
-      const before = snapOf(life);
-      if (!before.willingToWake) return send(res, 200, { awake: false, note: '她在更深的睡眠里，暂不回应。' });
-      const r = await serializer.run(life.id, async () => {
-        if (!snapOf(life).openConnections.includes(REL)) {
-          runTurn(life.store, [{ type: 'CONNECTION_OPENED', source: 'host', relationshipId: REL, occurredAt: now(), payload: { relationshipId: REL, host: { kind: 'http', ref: 'say' } } }]);
-        }
-        return converse(life.store, mouth, REL, content, now(), perceiver);
-      });
-      return send(res, 200, { utterance: r.utterance, verdict: r.verdict, modelId: r.modelId, state: view(life, r.snapshot) });
-    }
-    if (req.method === 'POST' && action === 'farewell') {
-      const body = await readJson(req);
-      const relationshipId = String(body.relationshipId ?? '');
-      const reason = String(body.reason ?? 'farewell');
-      if (relationshipId === '') return send(res, 400, { error: 'relationshipId required' });
-      const r = endRelationship(life.store, relationshipId, reason === 'death' || reason === 'lost' ? reason : 'farewell', now(), body.note ? String(body.note) : undefined);
-      return send(res, 200, { ended: relationshipId, reason, state: view(life, r.snapshot) });
-    }
+    // 旧的 /<id>/state|inner|say|farewell、/lives、/society-feed 旧路面已删除——
+    // 用户端走 /api/*，后台走 /admin/*；告别(farewell)的引擎能力 endRelationship 仍在，待 UI 重构后接 /api 正式路由。
     send(res, 404, { error: 'not found' });
   } catch (e) {
     send(res, 500, { error: String(e) });
