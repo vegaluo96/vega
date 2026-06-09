@@ -32,7 +32,7 @@ import {
   type ValueEntry,
 } from '../domain/snapshot.ts';
 
-const RECONSTRUCT_VERSION = 24; // v24：内生变异——id 种子化确定性慢振荡，静息也有自发心绪起伏(不是死水)；无 RNG、V2 可重放；旧 checkpoint 全量重放
+const RECONSTRUCT_VERSION = 25; // v25：记忆冷热分层——current 情景记忆热集有界(500)，超出按鲜活度淘汰最淡、压进冷聚合(遗忘即抽象、计数无损)；现有命远低于上限→逐位不变；旧 checkpoint 全量重放
 // 她活在出生地的时区：分钟东偏 UTC，【出生即冻结进 LIFE_GENESIS、终生不变】（不取 OS/用户时区，故 V2 可复现）。
 // 她是一个身体、只有一个昼夜。平台孵化的命缺省=北京 480；将来用户接生的命取创造者设备时区。
 const CIRCADIAN_OFFSET_MIN_DEFAULT = 480;
@@ -57,6 +57,7 @@ const K = {
   halfLifeEmoSec: 30 * 24 * 3600,
   vividCap: 9, // "当下记得"的工作集上限；其余淡入"理解"（原始日志永不抹）
   vividFloor: 0.04, // 鲜活度低于此 → 算淡去
+  memoryHotCap: 500, // 记忆冷热分层（见 docs/memory-layering-design.md）：current 情景记忆热集上限。超出→按鲜活度淘汰最淡的、压进冷聚合（遗忘即抽象）。慷慨取值→现有命逐位不变、部署安全；原始事件日志永不抹。
   circadianAmp: 0.22, // 昼夜节律：精力随她内在时钟"一天"起伏的幅度（内生、不靠输入）
   surpriseGain: 0.45, // 预期违背：越出乎预料越往心里去（信任的人变冷更痛、冷淡的人示好更暖）
   surpriseArousal: 0.5, // 预期违背 → 唤醒（越意外越心头一紧/一亮）
@@ -114,6 +115,9 @@ interface RState {
   maturity: number; // 心智成熟度 [0,1]：随反思累积、轻微加快情绪复原（独立于先天气质，气质仍不变）
   skills: Map<string, { n: number; efficacy: number }>; // 自我优化：从行动结果学到的策略效能（actionKind → 被接住的程度），0.5 中性
   allostatic: Record<string, number>; // allostasis：习得的设定点偏移（valence/connection），朝持续偏离缓慢漂移、有界；叠在冻结先天设定点上
+  // 记忆冷热分层（见 docs/memory-layering-design.md）：被淘汰出热集的 current 情景记忆，确定性压进【冷聚合】（遗忘即抽象）。
+  coldByRel: Map<string, { episodes: number; warm: number; conflict: number; affectSum: number }>; // 按关系：供 semanticMemory 无损计数
+  coldLived: number; // 已淡入冷聚合的情景记忆总数：供 growth 无损计数
 }
 
 const clamp = (x: number, lo: number, hi: number): number => (x < lo ? lo : x > hi ? hi : x);
@@ -195,6 +199,8 @@ function initState(genesis: LifeEvent<'LIFE_GENESIS'>): RState {
     maturity: 0,
     skills: new Map(),
     allostatic: {},
+    coldByRel: new Map(),
+    coldLived: 0,
   };
 }
 // 哪些维度有 allostatic 底色漂移（"底色心境"：好坏感 + 孤独/联结）。
@@ -206,6 +212,7 @@ function stepState(st: RState, e: LifeEvent): void {
   const awake = st.openConnections.size > 0 && st.willingToWake;
   advanceTime(st, (nowMs - st.lastMs) / 1000, awake, nowMs);
   applyEvent(st, e);
+  compactMemory(st, nowMs); // 记忆冷热分层：超热集→按鲜活度淘汰最淡、压进冷聚合（确定性、用事件时刻）
   st.lastMs = nowMs;
   st.clockIso = e.occurredAt;
 }
@@ -233,11 +240,12 @@ export interface Checkpoint {
 }
 type InterestEntry = [string, { weight: number; episodes: number; lastSeq: number; lastAffect: number }];
 type SkillEntry = [string, { n: number; efficacy: number }];
-type SerializedState = Omit<RState, 'openConnections' | 'interests' | 'skills'> & { openConnections: string[]; interests: InterestEntry[]; skills: SkillEntry[] };
+type ColdEntry = [string, { episodes: number; warm: number; conflict: number; affectSum: number }];
+type SerializedState = Omit<RState, 'openConnections' | 'interests' | 'skills' | 'coldByRel'> & { openConnections: string[]; interests: InterestEntry[]; skills: SkillEntry[]; coldByRel: ColdEntry[] };
 
 // Set/Map 不能直接 JSON 落盘 → 检查点序列化时转成数组、恢复时还原（值不变 → 可重放）。
-const serialize = (st: RState): SerializedState => ({ ...st, openConnections: [...st.openConnections], interests: [...st.interests], skills: [...st.skills] });
-const deserialize = (s: SerializedState): RState => ({ ...s, openConnections: new Set(s.openConnections), interests: new Map(s.interests ?? []), skills: new Map(s.skills ?? []), allostatic: s.allostatic ?? {} });
+const serialize = (st: RState): SerializedState => ({ ...st, openConnections: [...st.openConnections], interests: [...st.interests], skills: [...st.skills], coldByRel: [...st.coldByRel] });
+const deserialize = (s: SerializedState): RState => ({ ...s, openConnections: new Set(s.openConnections), interests: new Map(s.interests ?? []), skills: new Map(s.skills ?? []), allostatic: s.allostatic ?? {}, coldByRel: new Map(s.coldByRel ?? []), coldLived: s.coldLived ?? 0 });
 
 // 把整段日志折成一份检查点（增量捕获见 daemon：只在已有 state 上步进尾巴）。
 export function captureCheckpoint(events: readonly LifeEvent[]): Checkpoint {
@@ -838,7 +846,7 @@ function buildGrowth(st: RState, decorated: MemoryEntry[], ageMs: number): strin
   const humans = Object.values(st.bonds).filter((b) => b.kind === 'human' && !b.ended).length;
   const confirmedValues = st.values.filter((v) => v.provenance.status === 'confirmed').length;
   const interests = [...st.interests.values()].filter((v) => v.weight >= 0.05).length;
-  const livedMems = decorated.filter((m) => (m.kind === 'episodic' || m.kind === 'world') && m.lineage.isCurrent).length;
+  const livedMems = decorated.filter((m) => (m.kind === 'episodic' || m.kind === 'world') && m.lineage.isCurrent).length + st.coldLived; // 热集 + 已淡入"理解"的冷段（无损总数）
   const age = days >= 1 ? `醒来 ${days} 天` : '今天刚醒来不久';
   const met = humans + peers > 0 ? `遇过 ${humans + peers} 个人/同类` : '还没真正认识谁';
   const shape: string[] = [];
@@ -908,15 +916,33 @@ function formatDuration(ms: number): string {
 // 被想起(巩固)会刷新。只有最鲜活的一小撮留在"当下记得"(vivid)，其余淡去（vivid=false），
 // 但【原始事件仍在 append-only 日志里，永不抹】——可随时重算。
 const isExperiential = (k: MemoryEntry['kind']): boolean => k === 'episodic' || k === 'world'; // 情景记忆 + 世界记忆走同一套衰减/鲜活
+// 此刻鲜活度（纯函数）：salience·2^(-age/half)，情绪越浓 half 越长（越刻骨）。非 current 双轨副本=0。
+// decorateMemories（投影）与 compactMemory（淘汰）共用 → 二者对"谁最淡"判断一致。
+function vividnessOf(m: MemoryEntry, clockMs: number): number {
+  if (!isExperiential(m.kind) || !m.lineage.isCurrent) return 0;
+  const ageSec = Math.max(0, (clockMs - Date.parse(m.at)) / 1000);
+  const emo = Math.min(1, Math.abs(m.affect));
+  const half = K.halfLifeBaseSec + (K.halfLifeEmoSec - K.halfLifeBaseSec) * emo;
+  return clamp(m.salience * Math.pow(2, -ageSec / half), 0, 1);
+}
+// 记忆冷热分层：超热集上限时，按鲜活度淘汰最不鲜活的（非 current 副本=0 最先走）；current 情景记忆压进冷聚合（遗忘即抽象）。
+// 确定性：用淘汰事件的 nowMs、无 RNG；只在 fold 内调用。current episodic 计数过 cap 才触发 → 现有命(远低)逐位不变。
+function compactMemory(st: RState, nowMs: number): void {
+  while (st.memory.filter((m) => m.kind === 'episodic' && m.lineage.isCurrent).length > K.memoryHotCap) {
+    let wi = -1, wv = Infinity;
+    for (let i = 0; i < st.memory.length; i++) { const v = vividnessOf(st.memory[i], nowMs); if (v < wv) { wv = v; wi = i; } }
+    if (wi < 0) break;
+    const m = st.memory[wi];
+    if (m.kind === 'episodic' && m.lineage.isCurrent) { // 压进冷聚合（无损计数：段数/暖/磕碰/情感和）
+      const rid = m.involvedRelationshipIds[0];
+      if (rid) { const a = st.coldByRel.get(rid) ?? { episodes: 0, warm: 0, conflict: 0, affectSum: 0 }; a.episodes += 1; if (m.affect > 0.3) a.warm += 1; if (m.affect < -0.3) a.conflict += 1; a.affectSum += m.affect; st.coldByRel.set(rid, a); }
+      st.coldLived += 1;
+    }
+    st.memory.splice(wi, 1);
+  }
+}
 function decorateMemories(mems: MemoryEntry[], clockMs: number): MemoryEntry[] {
-  const scored = mems.map((m) => {
-    if (!isExperiential(m.kind) || !m.lineage.isCurrent) return { ...m, vividness: 0, vivid: false };
-    const ageSec = Math.max(0, (clockMs - Date.parse(m.at)) / 1000);
-    const emo = Math.min(1, Math.abs(m.affect));
-    const half = K.halfLifeBaseSec + (K.halfLifeEmoSec - K.halfLifeBaseSec) * emo;
-    const recency = Math.pow(2, -ageSec / half);
-    return { ...m, vividness: clamp(m.salience * recency, 0, 1) };
-  });
+  const scored = mems.map((m) => (isExperiential(m.kind) && m.lineage.isCurrent ? { ...m, vividness: vividnessOf(m, clockMs) } : { ...m, vividness: 0, vivid: false }));
   const ranked = scored
     .filter((m) => isExperiential(m.kind) && m.lineage.isCurrent)
     .slice()
@@ -950,15 +976,21 @@ function buildSemanticMemory(st: RState, decorated: MemoryEntry[]): SemanticMemo
     else groups.set(rid, [m]);
   }
   const out: SemanticMemory[] = [];
-  for (const [rid, mems] of groups) {
-    const warm = mems.filter((m) => m.affect > 0.3).length;
-    const conflict = mems.filter((m) => m.affect < -0.3).length;
-    const faded = mems.filter((m) => !m.vivid).length;
-    const avg = mems.reduce((acc, m) => acc + m.affect, 0) / mems.length;
+  // 热集分组 ∪ 冷聚合的关系（被淘汰进"理解"的旧段也要计入 → 段数/暖/磕碰无损，正是遗忘即抽象）。
+  const rids = new Set<string>([...groups.keys(), ...st.coldByRel.keys()]);
+  for (const rid of rids) {
+    const mems = groups.get(rid) ?? [];
+    const cold = st.coldByRel.get(rid) ?? { episodes: 0, warm: 0, conflict: 0, affectSum: 0 };
+    const episodes = mems.length + cold.episodes;
+    if (episodes === 0) continue;
+    const warm = mems.filter((m) => m.affect > 0.3).length + cold.warm;
+    const conflict = mems.filter((m) => m.affect < -0.3).length + cold.conflict;
+    const faded = mems.filter((m) => !m.vivid).length + cold.episodes; // 冷段=已淡成理解
+    const avg = (mems.reduce((acc, m) => acc + m.affect, 0) + cold.affectSum) / episodes;
     const name = st.bonds[rid]?.displayRef ?? rid;
     const tone = avg > 0.2 ? '总体是温暖的' : avg < -0.2 ? '让我受过伤' : '平淡';
     const fade = faded > 0 ? `，有 ${faded} 段细节已淡成底色` : '';
-    out.push({ relationshipId: rid, displayRef: name, episodes: mems.length, warm, conflict, avgAffect: avg, understanding: `和${name}相处过 ${mems.length} 段：暖 ${warm}、磕碰 ${conflict}，${tone}${fade}` });
+    out.push({ relationshipId: rid, displayRef: name, episodes, warm, conflict, avgAffect: avg, understanding: `和${name}相处过 ${episodes} 段：暖 ${warm}、磕碰 ${conflict}，${tone}${fade}` });
   }
   return out.sort((a, b) => b.episodes - a.episodes);
 }
