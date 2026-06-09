@@ -55,6 +55,16 @@
 - 一次 `RECONSTRUCT_VERSION` 升级 + 全量重放；**A/B**：新旧数值跑同一批真实日志，对比 §6 指标，确认更像活的、且现有命不崩、轨迹漂移可解释。
 - **分期**（按性价比）：①核心情感层 **τ 情绪特异重标定**（单点最大改善——情绪时长终于对）→ ②allostatic setpoint 漂移 → ③稳定性/耦合矩阵分析与加固 → ④appraisal theory 升级 → ⑤内生变异。
 
+## 7.5 稳定性分析（installment 3，已落 + 钉死）
+**耦合图**（谁影响谁）：每维独立是【收缩性 OU】（朝设定点指数衰减、正 τ）→ 单维必收敛；所有维硬 clamp + vitality 地板 → 全局有界。反馈环只有两条，都被驯服：
+- `valence ↔ expect`（预期违背）：expect 按 EMA 追 evFelt，sustained 输入 → expect 追上 → surprise↓ → 增益↓ = **负反馈/习惯化**（稳定）。
+- `valence/connection ↔ allostatic`：allo(慢, τ~2 周) 追 (value−先天设定点)，value(快) 朝 (先天+allo) 收敛 = **慢-快分离** + allo 硬 clamp(±0.25) → 稳定、不振荡。
+其余耦合（surprise→valence、warmth→safety、maturity/drive/playfulness 调制）都是**前馈 + 有界增益**，不成环。
+**硬保证（property 测试 `test/affect-stability.ts`，对抗序列）**：① BIBO 有界(每步所有维合法、无 NaN、地板不破、allo 有界) ② 静息收敛到设定点邻域(无病理吸引子/根治顶死) ③ 静息 |valence−底色| 单调收缩(无振荡) ④ 极端输入下仍 V2 确定性。
+
+## 7.6 性能实测（诚实记录）
+全面测试中实测：**温态** `reconstruct/converse` 在 10k~30k 事件仅 ~25–80ms（此前 433ms 是 JIT 冷态、误导）。聊天热路径的"增量缓存折叠"优化（installment 0）实测**约 1×（无明显提速）**——因为 `structuredClone` 大缓存态 ≈ 重折叠本身的开销；两条路径都摊在 `project()` 遍历记忆数组的 O(memory) 上。**结论**：当前规模聊天延迟不是问题（LLM 才是大头）；增量路径仍保留（对**冷启动/重启后首条**有真实收益，且未来记忆冷热分层后 clone 变廉价则提速显现）。**真正的 O(memory) 大头 = project 遍历记忆数组**，属 redteam"记忆冷热分层、按真实规模触发"项，留到真规模再做。
+
 ## 8. 守的第一性原理
 活来自架构（数值基座是"活"的工程地板，廉价模型下也成立）；模型只当嘴/感知器；V2 可重放（内生变异用确定性源、无 RNG，所有参数进 config 版本化）；不可逆先做对再锁。
 
