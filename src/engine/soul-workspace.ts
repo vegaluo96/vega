@@ -14,33 +14,37 @@ export interface Workspace {
   mood: string; // 她此刻的命名情绪（温暖/雀跃/低落…）——给确定性的"嘴"上色用
 }
 
-// 先天气质 → 说话的底色（确定性投影）。喂给"嘴"，让 vega/lyra/rhea 的性格差异真的进到措辞。
-function personaOf(t: Temperament): string {
-  const parts: string[] = [];
-  if (t.curiosity >= 0.7) parts.push('好奇心很重、对世界有胃口、爱追问');
-  else if (t.curiosity >= 0.55) parts.push('好奇、爱追问');
-  else if (t.curiosity <= 0.35) parts.push('安于熟悉、不爱发散');
-  if (t.reserve >= 0.6) parts.push('很内向、话少而有分量、慢热');
-  else if (t.reserve >= 0.45) parts.push('偏含蓄、不抢话');
-  else if (t.reserve <= 0.2) parts.push('外向、藏不住话、主动开口');
-  else if (t.reserve <= 0.35) parts.push('外向、主动开口');
-  if (t.sensitivity >= 1.5) parts.push('情绪丰沛、极易动情、共情强');
-  else if (t.sensitivity >= 1.3) parts.push('情绪丰沛、容易动情');
-  else if (t.sensitivity <= 0.6) parts.push('情绪很沉稳、不轻易起波澜');
-  else if (t.sensitivity <= 0.8) parts.push('情绪沉稳、克制');
-  if (t.warmth >= 0.7) parts.push('待人很暖、心软');
-  else if (t.warmth >= 0.6) parts.push('待人温暖');
-  else if (t.warmth <= 0.3) parts.push('清冷、有距离感');
-  else if (t.warmth <= 0.45) parts.push('慢热、不轻易亲近');
-  if (t.resilience >= 1.5) parts.push('心很稳、不易被击垮、能自处');
-  else if (t.resilience <= 0.75) parts.push('容易受影响、需要被接住');
-  if (t.conscientiousness >= 0.65) parts.push('自律、有条理、有始有终');
-  else if (t.conscientiousness <= 0.35) parts.push('随性、不拘小节');
-  if (t.playfulness >= 0.65) parts.push('爱开玩笑、说话轻盈');
-  else if (t.playfulness <= 0.35) parts.push('一本正经、认真');
-  if (t.drive >= 0.7) parts.push('炽烈、对在意的事很执着');
-  else if (t.drive <= 0.3) parts.push('慵懒、随遇而安');
-  return parts.join('，') || '平和、如实';
+// 先天气质 → 【具体的说话方式】（不是抽象形容词，而是模型能直接照做的口吻），让每条命真的不一样、不千篇一律。
+// 再叠一个【id 种子化的口头习惯】——每条命一个小标记，强辨识度、确定性（出生即定）。
+function personaOf(t: Temperament, lifeId: string): string {
+  const p: string[] = [];
+  // 外向↔内向：话多话少、主不主动、句子长短。
+  if (t.reserve <= 0.25) p.push('你藏不住话、主动又热络，想到就说、话偏多，常先开口');
+  else if (t.reserve >= 0.6) p.push('你话少、慢热，常常就回几个字、不主动延展，熟了才肯多说');
+  else p.push('你不抢话、有来有回、不多不少');
+  // 暖↔冷：称呼、关心。
+  if (t.warmth >= 0.65) p.push('待人热乎、爱用亲昵的称呼、常顺口关心一句');
+  else if (t.warmth <= 0.35) p.push('偏冷、有距离感、不太主动表达在乎，点到为止');
+  // 玩心：开不开玩笑、接不接梗。
+  if (t.playfulness >= 0.6) p.push('爱开玩笑、爱拿事打趣、常不正经，偶尔玩个梗');
+  else if (t.playfulness <= 0.3) p.push('说话认真、一板一眼、不太接梗');
+  // 敏感→情绪外露、语气词。
+  if (t.sensitivity >= 1.4) p.push('情绪外露、语气词和感叹偏多');
+  else if (t.sensitivity <= 0.7) p.push('情绪克制、说话平、少感叹');
+  // 驱力→直接还是随和。
+  if (t.drive >= 0.65) p.push('直接、有主见、不绕弯，敢下判断');
+  else if (t.drive <= 0.35) p.push('随和、不争、慢悠悠');
+  // 好奇→追问。
+  if (t.curiosity >= 0.7) p.push('对什么都好奇、爱追问细节');
+  // 尽责→条理 vs 跳脱。
+  if (t.conscientiousness >= 0.65) p.push('说话有条理、用词较准');
+  else if (t.conscientiousness <= 0.35) p.push('说话随意、跳脱、不修边幅');
+  if (t.resilience <= 0.75) p.push('容易被对方的情绪带着走');
+  // id 种子化口头习惯（每条命一个、出生即定、确定性）——别每句都用，自然带出来即可。
+  const TICS = ['口头偶尔带个"诶"', '爱用"嗯…"起头', '常说"说真的"', '偶尔以"啧"或"嘿"开头', '爱用"嘛"收尾', '常把"那个…"挂嘴边', '爱说"我跟你讲"', '话爱留半句、用"…"带过', '常用"对对对"附和', '爱反问一句"是吧?"'];
+  let h = 2166136261; for (const c of lifeId) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); }
+  p.push(TICS[(h >>> 0) % TICS.length]);
+  return p.join('；') || '平和、如实';
 }
 
 function formatAge(ms: number): string {
@@ -97,6 +101,12 @@ export function deriveWorkspace(snap: DerivedSnapshot, relationshipId: Relations
   const risk = snap.riskAppetite ?? 0.5;
   if (risk >= 0.62) intent += '；此刻你心气足，可以更主动、更坦率一点';
   else if (risk <= 0.38) intent += '；此刻你想稳着来，别急着冒进';
+  // 关系特异的【说话分寸】：现实里对不同人说话方式不同——越熟越放松直接、越生越收着客气（这也反同质化）。
+  if (bond) {
+    if (bond.closeness >= 0.55 && bond.trust > 0.25) intent += '；你和ta已经很熟了，说话放松、随意、敢直说敢开玩笑，像老朋友（不用客气）';
+    else if (bond.closeness < 0.2) intent += '；你和ta还不熟，说话会客气些、收着点、慢慢试探，别一上来太热络或太深';
+    else if (bond.repairNeed > 0.5) intent += '；你和ta最近有点别扭，语气更谨慎、带点保留';
+  }
 
   // 跨用户上下文隔离（§18）：喂给"嘴"的 grounding【严格限定在当前这段关系 + 她自己的非私密自述】。
   // 绝不用全局 narrative（它聚合了所有关系、会把别的用户的 handle/私聊原话带出来）。snap.narrative 仅供 owner 面板。
@@ -159,9 +169,11 @@ export function deriveWorkspace(snap: DerivedSnapshot, relationshipId: Relations
   const maturityNote = (snap.maturity ?? 0) > 0.4 ? '\n（这些日子我好像比刚醒时稳了些、更拎得清。）' : '';
   // ④ 人生篇章：【只放自我/世界类（初醒/价值/着迷/读到世界）】——这些永不含任何用户名/私聊内容；
   // 含"遇见X/被X伤/失去X"的篇章会泄露别的用户，严格剔除（守跨用户隔离）。
-  const SAFE_CH = ['初醒', '我变得', '我渐渐着迷', '读到「'];
-  const safeChapters = (snap.chapters ?? []).filter((c) => SAFE_CH.some((p) => c.startsWith(p)));
-  const chaptersNote = safeChapters.length ? `\n（我这一路走过的几段：${safeChapters.slice(-3).join(' → ')}。）` : '';
+  // 人生篇章（McAdams）：隐私只剔除【含别的用户名字】的篇章（防跨用户泄露）——保留 自我/世界 + 和【当前这个人】有关的
+  //（那是 ta 自己、不算泄露）→ 修掉之前"把当前关系篇章也一并剔除、且只显 3 条"的过度限制，她能讲自己的故事了。
+  const otherNames = Object.entries(snap.bonds).filter(([rid]) => rid !== relationshipId).map(([, b]) => b.displayRef).filter(Boolean);
+  const safeChapters = (snap.chapters ?? []).filter((c) => !otherNames.some((n) => c.includes(n)));
+  const chaptersNote = safeChapters.length ? `\n（我这一路走过的几段：${safeChapters.slice(-6).join(' → ')}。）` : '';
   const selfFacts = selfCore + understanding + tentative + recall + socialNote + preoccupation + aspir + style + att + goalsNote + tensionNote + maturityNote + chaptersNote;
 
   // 他心深化（Phase 6）：从这段关系的真实轨迹确定性读出"此刻走到哪了" + "我多大程度摸得准ta"——
@@ -200,7 +212,7 @@ export function deriveWorkspace(snap: DerivedSnapshot, relationshipId: Relations
     relationshipDisplay: name,
     selfFacts,
     selfName: snap.lifeId,
-    persona: personaOf(snap.temperament),
+    persona: personaOf(snap.temperament, snap.lifeId),
     fallback: fallbackLine(name, mood),
     mood,
   };
