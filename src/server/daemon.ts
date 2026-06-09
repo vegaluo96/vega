@@ -207,6 +207,11 @@ function layerOf(closeness: number, sc: EffSocial): { name: string; label: strin
   return { name: 'outer', label: '外圈', everyMs: Infinity };
 }
 const MODEL_COST = Number(process.env.VEGA_MODEL_COST ?? 1); // 每条模型回应计费（额度单位）
+// 省 token（按"有没有听众"门控）：超过此时长无任何用户活动 → 自主【对外】行动(心声/主动找人/同类寒暄)暂停，
+// 只保留【免费的内在 tick + 反思】（她照样活着、内在继续变）。用户一回来即恢复——不对空房间表演、不白烧 token。
+const IDLE_GATE_MS = Number(process.env.VEGA_IDLE_GATE_MS ?? 6 * 3600_000);
+let lastActiveMs = Date.now(); // 最近一次有用户说话（任意命）
+const audiencePresent = (): boolean => Date.now() - lastActiveMs < IDLE_GATE_MS;
 const CLAWBOT_SECRET = process.env.VEGA_CLAWBOT_SECRET; // 微信网关(clawbot)共享密钥；未配则微信端点禁用
 const serializer = createSerializer(); // 每命串行：并发用户的回合不穿插
 const bus = createEventBus(); // SSE 实时总线（广场/触达/醒睡）
@@ -313,6 +318,7 @@ function snapOf(life: Life): DerivedSnapshot {
 
 // 一个具体用户对一条命说话（计费 + 串行 + 渠道标记）。/api/say 与微信 /api/wechat/say 共用。
 async function respondAsUser(life: Life, me: Account, content: string, channel: string): Promise<Record<string, unknown>> {
+  lastActiveMs = Date.now(); // 有用户在 → 自主回路恢复对外行动（省 token 门控）
   return serializer.run(life.id, async () => {
     snapOf(life); // 追平缓存态到末条 → 把它传给 converse 增量折叠（热路径不再每条消息全量重放）
     const cached = life.state ? { st: life.state, uptoSeq: life.stateSeq } : undefined;
@@ -1460,6 +1466,7 @@ const heartbeat = setInterval(async () => {
         .slice(0, sc.activeCircle);
       let reached = 0;
       for (const [rel, b] of circle) {
+        if (!audiencePresent()) break; // 省 token：没听众就不主动找人（免费的内在 tick 仍在跑）
         if (reached >= sc.reachPerTick) break;
         if (!(rel.startsWith('u_') || rel === REL)) continue; // 同类的主动走寒暄回路，这里只处理人类
         const st = rs.get(rel);
@@ -1480,7 +1487,7 @@ const heartbeat = setInterval(async () => {
       }
       // 自我优化：学到的"公开表达效能"调发帖频率——心声总没回响→发得少些，常被接住→更愿意说。0.5 中性=恒等。
       const museEff = after.skills.find((s) => s.kind === 'muse')?.efficacy ?? 0.5;
-      if (Date.now() - life.lastMuseAt > life.museEveryMs * (1.5 - museEff) && autoBudget.tryConsume()) { // 治理：自主预算（超额则这轮安静）
+      if (audiencePresent() && Date.now() - life.lastMuseAt > life.museEveryMs * (1.5 - museEff) && autoBudget.tryConsume()) { // 省 token：没听众不发心声；治理：自主预算（超额则这轮安静）
         const mt = now();
         const pair = pickInsightPair(life); // 自发洞见的材料（仅公开世界/兴趣，无用户痕迹）
         life.lastMuseAt = Date.now();
@@ -1529,6 +1536,7 @@ const socialTimer = lives.length >= 2
         const a = lifeById(chosen.a);
         const b = lifeById(chosen.b);
         if (!a || !b) return;
+        if (!audiencePresent()) return; // 省 token：没听众就不撮合同类寒暄
         if (!autoBudget.tryConsume()) return; // 治理：自主预算超额 → 这轮同类不寒暄
         lastPaired.set(pairKey(a.id, b.id), Date.now());
         // 每命串行：各自的写入排进各自队列，和用户对话/心跳不穿插。
