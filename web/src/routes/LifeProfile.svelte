@@ -33,6 +33,7 @@
       <h1 class="name">{p.id}</h1>
       <div class="pillrow"><LifeStatePill awake={p.awake} dayPhase={p.dayPhase} emotion={p.emotion} /></div>
       <p class="feeling">{p.awake ? `此刻${p.dayPhase ? p.dayPhase + '，' : ''}${p.feeling || p.emotion}` : t('life.asleep')}</p>
+      {#if p.becoming}<p class="becoming">正在成为：{p.becoming}</p>{/if}
       <p class="age">{ageText}{p.tension ? ` · 心里在拉扯：${p.tension}` : ''}</p>
       <div class="cta">
         <button class="btn btn-ghost" on:click={() => (showWx = !showWx)}>绑定微信</button>
@@ -45,6 +46,13 @@
       <h2 class="section-title">先天气质</h2>
       <p class="temper">{p.temperament}</p>
     </section>
+
+    {#if p.growth}
+      <section class="mod">
+        <h2 class="section-title">此生至今</h2>
+        <p class="temper">{p.growth}</p>
+      </section>
+    {/if}
 
     <section class="mod">
       <h2 class="section-title">她着迷的</h2>
@@ -107,6 +115,7 @@
   .name { font-size: clamp(20px, 5.5vw, 26px); margin: 0 0 10px; font-weight: 800; letter-spacing: -0.02em; }
   .pillrow { display: flex; justify-content: center; }
   .feeling { color: var(--text); font-size: var(--fs-body); margin: var(--s3) 0 0; }
+  .becoming { color: var(--accent); font-size: var(--fs-md); margin: 8px 0 0; line-height: 1.5; }
   .age { color: var(--faint); font-size: var(--fs-sm); margin: 6px 0 0; }
   .cta { display: flex; gap: var(--s2); justify-content: center; margin-top: var(--s5); }
   .wxwrap { max-width: 360px; margin: var(--s4) auto 0; text-align: left; }

@@ -128,6 +128,8 @@ export interface DerivedSnapshot {
   narrative: string; // 自传叙事：确定性投影、只读，绝不回写身份（契约③）
   innerLife: string; // 内外两层之"内"：没说出口的私密心声（确定性投影、只读，绝不外发）
   chapters: string[]; // 叙事身份：把人生按转折点确定性切成"篇章"（renarrate 的产物，纯只读，不污染身份）
+  growth: string; // 阅历/成长：她活了多久、长成了什么形状（确定性合成，脱敏、不含任何用户）
+  becoming: string; // 我正在成为的我：由 confirmed 价值 + 兴趣 + 气质合成的演化中独立自我（脱敏）
   soma: Soma;
   memory: MemoryEntry[];
   semanticMemory: SemanticMemory[]; // 经历压缩成的"理解"（遗忘即抽象，纯派生）

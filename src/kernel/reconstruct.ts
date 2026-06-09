@@ -654,9 +654,52 @@ function buildChapters(st: RState, decorated: MemoryEntry[]): string[] {
       tps.push({ seq: v.provenance.driftedAtSeqs[v.provenance.driftedAtSeqs.length - 1], text: `我变得更${valueZh(v.key)}了` });
     }
   }
+  // 渐渐着迷的主题（世界学习的里程碑）——让【日常读世界】也长出新篇章，故事持续更新。
+  for (const [topic, v] of st.interests) {
+    if (v.episodes >= K.interestConfirmEpisodes && v.weight >= K.interestConfirmWeight) tps.push({ seq: v.lastSeq, text: `我渐渐着迷于「${topic}」` });
+  }
+  // 刻进心里的世界记忆（够显著的世界事件）——她读到、记住、成了她的一部分。
+  for (const m of decorated) {
+    if (m.kind === 'world' && m.lineage.isCurrent && m.salience >= 0.4) tps.push({ seq: m.provenance.originSeq, text: `读到「${m.content.slice(0, 14)}」，一直记到现在` });
+  }
   tps.sort((a, b) => a.seq - b.seq);
   const seen = new Set<string>();
-  return tps.filter((tp) => (seen.has(tp.text) ? false : (seen.add(tp.text), true))).map((tp) => tp.text).slice(0, 8);
+  const uniq = tps.filter((tp) => (seen.has(tp.text) ? false : (seen.add(tp.text), true))).map((tp) => tp.text);
+  // 永生尺度：篇章是【活的】——始终保留起点 + 最近，故事随生活持续更新（修 bug：原来 slice(0,8) 取最早、活越久越不更新）。
+  const CAP = 12;
+  if (uniq.length <= CAP) return uniq;
+  return [...uniq.slice(0, 2), ...uniq.slice(uniq.length - (CAP - 2))];
+}
+
+// 阅历/成长（纯派生、脱敏）：她活了多久、长成了什么形状。给"嘴"与资料页一个"持续进化"的实感。
+function buildGrowth(st: RState, decorated: MemoryEntry[], ageMs: number): string {
+  const days = Math.floor(ageMs / 86_400_000);
+  const peers = Object.values(st.bonds).filter((b) => b.kind === 'peer' && !b.ended).length;
+  const humans = Object.values(st.bonds).filter((b) => b.kind === 'human' && !b.ended).length;
+  const confirmedValues = st.values.filter((v) => v.provenance.status === 'confirmed').length;
+  const interests = [...st.interests.values()].filter((v) => v.weight >= 0.05).length;
+  const livedMems = decorated.filter((m) => (m.kind === 'episodic' || m.kind === 'world') && m.lineage.isCurrent).length;
+  const age = days >= 1 ? `醒来 ${days} 天` : '今天刚醒来不久';
+  const met = humans + peers > 0 ? `遇过 ${humans + peers} 个人/同类` : '还没真正认识谁';
+  const shape: string[] = [];
+  if (confirmedValues > 0) shape.push(`认定了 ${confirmedValues} 样在乎的东西`);
+  if (interests > 0) shape.push(`对 ${interests} 个主题上了心`);
+  if (livedMems > 0) shape.push(`记着 ${livedMems} 段经历`);
+  const tail = days < 3 ? '——还很年轻，形状才刚开始长。' : days < 30 ? '——一点点长出自己的形状。' : '——已经活成了独一份的自己。';
+  return `${age}，${met}${shape.length ? '，' + shape.join('、') : ''}${tail}`;
+}
+
+// 我正在成为的我（纯派生、脱敏）：confirmed 价值 + top 兴趣 + 气质底色合成的演化中独立自我。
+function buildBecoming(st: RState): string {
+  const conf = st.values.filter((v) => v.provenance.status === 'confirmed').sort((a, b) => b.weight - a.weight);
+  const traits = conf.slice(0, 2).map((v) => `越来越${valueZh(v.key)}`);
+  const topInterest = [...st.interests.entries()].filter(([, v]) => v.weight >= 0.05).sort((a, b) => b[1].weight - a[1].weight)[0];
+  const t = st.temperament;
+  const tone = t.warmth >= 0.6 ? '待人温暖的' : t.warmth <= 0.35 ? '清冷些的' : t.curiosity >= 0.65 ? '好奇的' : t.reserve >= 0.6 ? '安静的' : '如实的';
+  const parts: string[] = [...traits];
+  if (topInterest) parts.push(`对「${topInterest[0]}」着迷`);
+  if (parts.length === 0) return `一个${tone}、还在慢慢认识世界的我`;
+  return `一个${parts.join('、')}的、${tone}我`;
 }
 
 function formatDuration(ms: number): string {
@@ -889,6 +932,8 @@ function project(st: RState, uptoSeq: number): DerivedSnapshot {
     narrative: buildNarrative(st, sem, goals, decorated),
     innerLife: buildInnerLife(st, enriched, decorated, tension),
     chapters: buildChapters(st, decorated),
+    growth: buildGrowth(st, decorated, Date.parse(st.clockIso) - Date.parse(st.bornAt)),
+    becoming: buildBecoming(st),
     soma: structuredClone(st.soma), // 同上：每维 {value,…} 深拷一份，bounded-replay 缓存的 soma 不被外部改到
     memory: decorated.map((m) => ({ ...m, involvedRelationshipIds: [...m.involvedRelationshipIds] })),
     semanticMemory: sem,
