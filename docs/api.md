@@ -57,7 +57,7 @@
 ## 集成态（`VEGA_CLAWBOT_SECRET`）
 
 - `GET /v1/models` · `POST /v1/chat/completions`（OpenAI 兼容层，给微信 clawbot）
-- `POST /api/wechat/bind` · `POST /api/wechat/hook`（clawbot webhook）
+- `POST /api/wechat/bind {token,openid}`（绑定码↔账号） · `POST /api/wechat/hook {openid,content}`（统一 webhook：未绑定当绑定码、已绑定即聊天，自动判断） · `POST /api/wechat/say {openid,content}`（已绑定 openid 直接说一句，走神圣链路 channel=wechat）→ `{awake, utterance, verdict, emotion, balance, voice, resource}`
 
 ## 静态 / 健康
 
