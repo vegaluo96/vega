@@ -1233,7 +1233,12 @@ const server = createServer(async (req, res) => {
         const message = String(b.message ?? '').trim() || '你好，最近怎么样？';
         const relId = typeof b.relId === 'string' && b.relId.trim() ? b.relId.trim() : 'r_trace'; // 默认临时关系；传真 relId 看具体关系（仍只读不提交）
         const trace = await traceConverse(life.store, mouth, relId, message, now(), perceiver);
-        return send(res, 200, { lifeId: life.id, relId, modelStatus: modelStatus(), trace });
+        // 资源档位（平台层，按余额调对话）：给定一个余额，显示档位 + resourceAwareMouth 会不会改她的话（让"随余额调"可见、可验证）。
+        const balance = typeof b.balance === 'number' ? b.balance : MODEL_COST * 6;
+        const band = resourceBand(balance, MODEL_COST);
+        const modifies = band === 'low' || band === 'scarce';
+        const resource = { balance, cost: MODEL_COST, band, modifies, note: modifies ? (band === 'low' ? '余额紧：话更精炼、挑要紧说、温度不减；绝不提钱' : '余额见底：坦诚"今天能陪你的有限，但我都在"；绝不催费') : '余额充裕(ok/abundant)→她原样给，满状态（设计：高余额不显形）' };
+        return send(res, 200, { lifeId: life.id, relId, modelStatus: modelStatus(), resource, trace });
       }
 
       // —— 生成生命体（仅 owner）：运行时接生一条新命，立即生效、无需重启；落盘名册重启也在。

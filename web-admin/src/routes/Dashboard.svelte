@@ -25,10 +25,10 @@
   // 生成新生命体（仅 owner）：出生即冻结种子、不可改写、永生
   let newLifeId = '', birthMsg = '', birthing = false;
   // 链路检查（仅 owner，只读）：给一条测试消息，逐段看回路A每个环节——感知/状态/给模型的prompt/模型原话/critic/最终。
-  let ctLifeId = '', ctRelId = '', ctMsg = '你好，最近怎么样？', ctRunning = false, ctErr = '', ct = null;
+  let ctLifeId = '', ctRelId = '', ctMsg = '你好，最近怎么样？', ctBalance = 6, ctRunning = false, ctErr = '', ct = null;
   async function runChainTrace() {
     ctRunning = true; ctErr = ''; ct = null;
-    try { ct = await api.chainTrace({ lifeId: ctLifeId.trim(), relId: ctRelId.trim(), message: ctMsg }); }
+    try { ct = await api.chainTrace({ lifeId: ctLifeId.trim(), relId: ctRelId.trim(), message: ctMsg, balance: Number(ctBalance) }); }
     catch (e) { ctErr = e.message; } finally { ctRunning = false; }
   }
 
@@ -376,6 +376,7 @@
             <div class="frow">
               <label class="fld"><span class="flab">生命体 ID（留空＝第一条）</span><input class="ainput" bind:value={ctLifeId} placeholder="如 sirius" /></label>
               <label class="fld"><span class="flab">关系 ID（留空＝临时 r_trace）</span><input class="ainput" bind:value={ctRelId} placeholder="留空即可" /></label>
+              <label class="fld"><span class="flab">模拟用户余额（看"随余额调对话"）</span><input class="ainput" type="number" bind:value={ctBalance} /></label>
             </div>
             <label class="fld"><span class="flab">测试消息（模拟用户说的话）</span>
               <textarea class="ainput wta" rows="2" bind:value={ctMsg}></textarea></label>
@@ -393,6 +394,10 @@
               <span class="faint">命 {ct.lifeId} · 关系 {ct.relId} · 只读</span>
             </div>
 
+            {#if ct.resource}<div class="ct-stage"><div class="ct-k">⓪ 资源/余额 → 调对话（平台层） <span class="tag {ct.resource.modifies ? 'sensitive' : 'ok'}">{ct.resource.band}</span></div><div class="ct-v">
+              余额 {ct.resource.balance}（成本/条 {ct.resource.cost}）→ 档位 <b>{ct.resource.band}</b>：{ct.resource.note}
+              <div class="ct-nums">{ct.resource.modifies ? '✓ resourceAwareMouth 会改她的话（精炼/坦诚有限、绝不催费）——把余额调到 ≥' + (ct.resource.cost * 4) + ' 则恢复满状态' : '余额 ≥' + (ct.resource.cost * 4) + ' → 不改（满状态）；调到 ' + (ct.resource.cost) + '~' + (ct.resource.cost * 4 - 1) + '(low) 或 <' + ct.resource.cost + '(scarce) 才显形'}</div>
+            </div></div>{/if}
             <div class="ct-stage"><div class="ct-k">① 输入</div><div class="ct-v">{t.input}</div></div>
             <div class="ct-stage"><div class="ct-k">② 感知 Perceive <span class="faint">{t.timing.perceiveMs}ms</span></div><div class="ct-v">
               {#if t.perceive.active && t.perceive.perception}

@@ -51,6 +51,7 @@
         messages = [...messages, { role: 'her', text: r.utterance, at: new Date().toISOString() }];
         if (life) life.emotion = r.emotion;
         balance = r.balance ?? balance;
+        resourceBand = r.resource ?? resourceBand;
         if (r.voice === 'plain' && balance != null && balance <= 0) lowBalance = true;
       }
     } catch (e) {
@@ -61,6 +62,7 @@
     }
   }
   let lowBalance = false;
+  let resourceBand = '';
   let showRel = false;
 
   $: relAge = rel && rel.bornAt ? agoStr(rel.bornAt) : '';
@@ -113,6 +115,8 @@
 
   {#if lowBalance}
     <div class="banner">心意用尽了——她仍在、仍记得你，只是这会儿话说得朴素些。</div>
+  {:else if resourceBand === 'low' || resourceBand === 'scarce'}
+    <div class="banner soft">她这会儿心力有限，话会精炼些——但都在。</div>
   {/if}
 
   <div class="log" bind:this={log}>
@@ -151,6 +155,7 @@
   .presence .pmore { margin-left: auto; color: var(--faint); font-size: var(--fs-xs); }
 
   .banner { max-width: var(--maxw); margin: var(--s3) auto 0; padding: var(--s3) var(--gutter); background: var(--surface-2); border: 1px solid transparent; box-shadow: inset 0 0 0 1px var(--border-subtle); color: var(--muted); font-size: var(--fs-sm); text-align: center; border-radius: var(--r-sm); }
+  .banner.soft { background: transparent; box-shadow: none; opacity: 0.6; font-size: 12px; }
 
   .log { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; max-width: var(--maxw); width: 100%; margin: 0 auto; padding: 18px var(--gutter); display: flex; flex-direction: column; gap: 10px; }
   .bubble { max-width: 80%; padding: 10px 14px; border-radius: var(--r-lg); line-height: 1.55; white-space: pre-wrap; word-break: break-word; font-size: var(--fs-body); animation: rise var(--t-fade) ease both; }
