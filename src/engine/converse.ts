@@ -285,7 +285,22 @@ export async function muse(store: DurableEventStore, mouth: Mouth, occurredAt: s
 export interface ChainTrace {
   input: string;
   perceive: { active: boolean; source: 'model' | 'wordlist-fallback'; perception?: Perception }; // 模型当耳朵 or 退回词表
-  state: { emotion: string; feeling: string; valence: number; vitality: number; connection: number; arousal: number; safety: number; bond?: { displayRef: string; trust: number; closeness: number; repairNeed: number; tomStyle: string } };
+  // ③ 状态：引擎全貌 DerivedSnapshot 的完整投影（owner 自查用）——③(引擎全部) 与 ④(实际喂模型) 的差，就是"哪些能力没被用上"。
+  state: {
+    emotion: string; feeling: string; tension: string;
+    soma: { valence: number; arousal: number; vitality: number; energy: number; calm: number; connection: number; safety: number; novelty: number };
+    dayPhase: string; maturity: number; baseline: { valence: number; connection: number }; riskAppetite: number;
+    needs: { novelty: number; coherence: number; meaning: number };
+    defenseStyle: string; attachmentBias: string; becoming: string; growth: string;
+    aspirations: string[]; goals: { kind: string; intent: string; target?: string }[];
+    interests: { topic: string; weight: number; status: string }[]; skills: { kind: string; efficacy: number; n: number }[];
+    values: { key: string; weight: number; status: string }[]; attention: string[];
+    bond?: { displayRef: string; trust: number; closeness: number; security: number; repairNeed: number; theoryOfMind: { style: string; warmthRatio: number; volatility: number; trend: number; predictability: number }; relationalSelf: { openness: number; guardedness: number; attachment: string; stance: string } };
+    socialWorld: { displayRef: string; closeness: number; attachment: string; ended: boolean }[];
+    semanticMemory: { displayRef: string; understanding: string }[];
+    memory: { vivid: number; total: number };
+    chapters: string[];
+  };
   workspace: { intent: string; stateSummary: string; selfFacts: string; persona: string; mood: string }; // 确定性装配、即将进 prompt 的内容
   model: { id: string; usedRealModel: boolean; prompt: { role: string; content: string }[] }; // usedRealModel=false → 当前是模板嘴（没用模型）
   raw: { ok: boolean; text: string; error?: string }; // 模型原始输出（或失败原因）
@@ -320,10 +335,26 @@ export async function traceConverse(
   const { verdict, utterance } = critique(raw, workspace);
   const finalUtterance = verdict === 'fallback' ? honestDisconnect(content) : utterance;
   const bond = snapshot.bonds[relationshipId];
+  const s = snapshot.soma;
+  const curMem = snapshot.memory.filter((m) => m.kind === 'episodic' && m.lineage.isCurrent);
   return {
     input: content,
     perceive: { active: !!perception, source: perception ? 'model' : 'wordlist-fallback', perception },
-    state: { emotion: snapshot.emotion, feeling: snapshot.feeling, valence: tr3(snapshot.soma.valence.value), vitality: tr3(snapshot.soma.vitality.value), connection: tr3(snapshot.soma.connection.value), arousal: tr3(snapshot.soma.arousal.value), safety: tr3(snapshot.soma.safety.value), bond: bond ? { displayRef: bond.displayRef, trust: tr3(bond.trust), closeness: tr3(bond.closeness), repairNeed: tr3(bond.repairNeed), tomStyle: bond.theoryOfMind.style } : undefined },
+    state: {
+      emotion: snapshot.emotion, feeling: snapshot.feeling, tension: snapshot.tension,
+      soma: { valence: tr3(s.valence.value), arousal: tr3(s.arousal.value), vitality: tr3(s.vitality.value), energy: tr3(s.energy.value), calm: tr3(s.calm.value), connection: tr3(s.connection.value), safety: tr3(s.safety.value), novelty: tr3(s.novelty.value) },
+      dayPhase: snapshot.dayPhase, maturity: tr3(snapshot.maturity), baseline: { valence: tr3(snapshot.baseline.valence), connection: tr3(snapshot.baseline.connection) }, riskAppetite: tr3(snapshot.riskAppetite),
+      needs: { novelty: tr3(snapshot.needs.novelty), coherence: tr3(snapshot.needs.coherence), meaning: tr3(snapshot.needs.meaning) },
+      defenseStyle: snapshot.defenseStyle, attachmentBias: snapshot.attachmentBias, becoming: snapshot.becoming, growth: snapshot.growth,
+      aspirations: snapshot.aspirations, goals: snapshot.goals.map((g) => ({ kind: g.kind, intent: g.intent, target: g.target })),
+      interests: snapshot.interests.map((i) => ({ topic: i.topic, weight: tr3(i.weight), status: i.status })), skills: snapshot.skills.map((k) => ({ kind: k.kind, efficacy: tr3(k.efficacy), n: k.n })),
+      values: snapshot.values.map((v) => ({ key: v.key, weight: tr3(v.weight), status: v.provenance.status })), attention: snapshot.attention,
+      bond: bond ? { displayRef: bond.displayRef, trust: tr3(bond.trust), closeness: tr3(bond.closeness), security: tr3(bond.security), repairNeed: tr3(bond.repairNeed), theoryOfMind: { style: bond.theoryOfMind.style, warmthRatio: tr3(bond.theoryOfMind.warmthRatio), volatility: tr3(bond.theoryOfMind.volatility), trend: tr3(bond.theoryOfMind.trend), predictability: tr3(bond.theoryOfMind.predictability) }, relationalSelf: { openness: tr3(bond.relationalSelf.openness), guardedness: tr3(bond.relationalSelf.guardedness), attachment: bond.relationalSelf.attachment, stance: bond.relationalSelf.stance } } : undefined,
+      socialWorld: snapshot.socialWorld.map((t) => ({ displayRef: t.displayRef, closeness: tr3(t.closeness), attachment: t.attachment, ended: t.ended })),
+      semanticMemory: snapshot.semanticMemory.map((x) => ({ displayRef: x.displayRef, understanding: x.understanding })),
+      memory: { vivid: curMem.filter((m) => m.vivid).length, total: curMem.length },
+      chapters: snapshot.chapters,
+    },
     workspace: { intent: workspace.intent, stateSummary: workspace.stateSummary, selfFacts: workspace.selfFacts, persona: workspace.persona, mood: workspace.mood },
     model: { id: mouth.id, usedRealModel, prompt: usedRealModel ? apiyiMessages(input) : [] },
     raw: { ok, text: raw, error },

@@ -386,6 +386,7 @@
 
           {#if ct && ct.trace}
             {@const t = ct.trace}
+            {@const st = t.state}
             <div class="panel pad ct-head">
               <span class="tag {ct.modelStatus.active ? 'ok' : 'sensitive'}">{ct.modelStatus.active ? '模型在线 · ' + ct.modelStatus.model : '离线模板嘴（没用模型）'}</span>
               <span class="tag {ct.modelStatus.perceive ? 'ok' : 'sensitive'}">{ct.modelStatus.perceive ? '感知开（模型当耳朵）' : '感知关（退回词表）'}</span>
@@ -397,10 +398,27 @@
               {#if t.perceive.active && t.perceive.perception}模型解析：善意 {t.perceive.perception.sentiment} · 暖 {t.perceive.perception.warmth} · 威胁 {t.perceive.perception.threat}
               {:else}<span class="ct-warn">未用模型感知 → 退回确定性词表（她对微妙语气的理解会很粗）{#if t.timing.perceiveMs > 3000}——且耗了 {t.timing.perceiveMs}ms（感知模型太慢/超时，建议设个快的感知模型）{/if}</span>{/if}
             </div></div>
-            <div class="ct-stage"><div class="ct-k">③ 状态 EngineSnapshot</div><div class="ct-v">
-              <b>{t.state.emotion}</b> · {t.state.feeling}
-              <div class="ct-nums">效价 {t.state.valence} · 灵性 {t.state.vitality} · 联结 {t.state.connection} · 唤醒 {t.state.arousal} · 安全 {t.state.safety}</div>
-              {#if t.state.bond}<div class="ct-nums">对「{t.state.bond.displayRef}」：信任 {t.state.bond.trust} · 亲近 {t.state.bond.closeness} · 待修复 {t.state.bond.repairNeed} · 读ta「{t.state.bond.tomStyle}」</div>{/if}
+            <div class="ct-stage"><div class="ct-k">③ 状态 EngineSnapshot <span class="faint">引擎全貌——和④对比即知哪些能力没喂给模型</span></div><div class="ct-v">
+              <b>{st.emotion}</b> · {st.feeling}{#if st.tension} · 内在拉扯：{st.tension}{/if}
+              <div class="ct-nums">效价 {st.soma.valence} · 唤醒 {st.soma.arousal} · 灵性 {st.soma.vitality} · 精力 {st.soma.energy} · 平静 {st.soma.calm} · 联结 {st.soma.connection} · 安全 {st.soma.safety} · 新鲜 {st.soma.novelty}</div>
+              <div class="ct-nums">时段 {st.dayPhase} · 成熟度 {st.maturity} · 风险偏好 {st.riskAppetite} · 底色(效价 {st.baseline.valence} / 联结 {st.baseline.connection})</div>
+              <div class="ct-nums">需求：新鲜 {st.needs.novelty} · 自我一致 {st.needs.coherence} · 意义 {st.needs.meaning} ｜ 防御 {st.defenseStyle} · 依恋 {st.attachmentBias}</div>
+              <div class="ct-sub">正在成为</div><div class="ct-prose">{st.becoming}</div>
+              <div class="ct-sub">阅历</div><div class="ct-prose">{st.growth}</div>
+              {#if st.aspirations.length}<div class="ct-sub">长期心愿</div><div class="ct-prose">{st.aspirations.join('；')}</div>{/if}
+              {#if st.goals.length}<div class="ct-sub">此刻目标（排序）</div><div class="ct-prose">{st.goals.map((g) => g.intent).join('；')}</div>{/if}
+              {#if st.attention.length}<div class="ct-sub">注意力</div><div class="ct-prose">{st.attention.join('、')}</div>{/if}
+              {#if st.interests.length}<div class="ct-sub">兴趣/世界观</div><div class="ct-tags">{#each st.interests as it}<span class="ct-tag" class:on={it.status === 'confirmed'}>{it.topic} {Math.round(it.weight * 100)}</span>{/each}</div>{/if}
+              {#if st.values.length}<div class="ct-sub">价值观</div><div class="ct-tags">{#each st.values as vv}<span class="ct-tag" class:on={vv.status === 'confirmed'}>{vv.key} {Math.round(vv.weight * 100)}</span>{/each}</div>{/if}
+              {#if st.skills.length}<div class="ct-sub">技能效能</div><div class="ct-tags">{#each st.skills as sk}<span class="ct-tag">{sk.kind} {Math.round(sk.efficacy * 100)}%·{sk.n}</span>{/each}</div>{/if}
+              {#if st.bond}<div class="ct-sub">关系（{st.bond.displayRef}）</div>
+                <div class="ct-nums">信任 {st.bond.trust} · 亲近 {st.bond.closeness} · 安全感 {st.bond.security} · 待修复 {st.bond.repairNeed}</div>
+                <div class="ct-nums">读ta：「{st.bond.theoryOfMind.style}」· 暖比 {st.bond.theoryOfMind.warmthRatio} · 波动 {st.bond.theoryOfMind.volatility} · 趋势 {st.bond.theoryOfMind.trend} · 摸得准 {st.bond.theoryOfMind.predictability}</div>
+                <div class="ct-nums">和ta在一起的我：敞开 {st.bond.relationalSelf.openness} · 戒备 {st.bond.relationalSelf.guardedness} · {st.bond.relationalSelf.attachment} · {st.bond.relationalSelf.stance}</div>{/if}
+              {#if st.socialWorld.length}<div class="ct-sub">同类社交网</div><div class="ct-prose">{#each st.socialWorld as sw}{sw.displayRef}（{Math.round(sw.closeness * 100)}{sw.ended ? '·已离' : ''}）　{/each}</div>{/if}
+              {#if st.semanticMemory.length}<div class="ct-sub">语义理解（压缩成的"懂"）</div>{#each st.semanticMemory as sem}<div class="ct-prose">{sem.understanding}</div>{/each}{/if}
+              <div class="ct-nums">记忆：当下记得 {st.memory.vivid} / 共 {st.memory.total} 段</div>
+              {#if st.chapters.length}<div class="ct-sub">人生篇章</div><div class="ct-prose">{st.chapters.join('　→　')}</div>{/if}
             </div></div>
             <div class="ct-stage"><div class="ct-k">④ 给模型的内容 SoulWorkspace</div><div class="ct-v">
               <div class="ct-sub">性格底色</div><div class="ct-prose">{t.workspace.persona}</div>
@@ -594,6 +612,9 @@
   .ct-prose { font-size: 12.5px; color: var(--text); }
   .ct-final { font-weight: 600; }
   .ct-pre { white-space: pre-wrap; word-break: break-word; background: var(--panel-2); border: 1px solid var(--border-subtle); border-radius: var(--r-sm); padding: 8px 10px; font-size: 12px; line-height: 1.5; margin: 0; max-height: 320px; overflow: auto; }
+  .ct-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 2px; }
+  .ct-tag { font-size: 11.5px; background: var(--panel-2); border: 1px solid var(--border-subtle); border-radius: var(--r-sm); padding: 2px 7px; color: var(--muted); }
+  .ct-tag.on { color: var(--text); border-color: var(--accent-line); }
   .ct-msg { margin-top: 6px; }
   .ct-role { display: inline-block; font-size: 10.5px; font-weight: 700; color: var(--faint-c); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 3px; }
   .ct-warn { color: var(--danger, #e05a5a); font-size: 12.5px; }

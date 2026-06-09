@@ -143,7 +143,21 @@ export function deriveWorkspace(snap: DerivedSnapshot, relationshipId: Relations
   const style = (snap.defenseStyle || snap.attachmentBias) ? `\n（我清楚自己：被触动时我容易${snap.defenseStyle}，在关系里偏${snap.attachmentBias}。）` : '';
   // 注意力：此刻最牵着她的事（已脱敏、无用户名）——让她说话贴着当下心头事，不悬浮。
   const att = (snap.attention ?? []).length ? `\n（此刻最牵着我的：${snap.attention.slice(0, 2).join('、')}。）` : '';
-  const selfFacts = selfCore + understanding + tentative + recall + socialNote + preoccupation + aspir + style + att;
+  // —— 全补：把此前漏掉的引擎能力也接进来（定性人话、门控，只在有料时出现，守"别像报告"）——
+  // ① 此刻她想要什么（独立意志，核心反同质化）：【只取无对象 或 指向当前这个人】的目标，
+  // 绝不把她对【别的用户】的心思泄露给当前用户（守跨用户隔离 Arc6）。
+  const myGoals = (snap.goals ?? []).filter((g) => !g.target || g.target === relationshipId).slice(0, 2).map((g) => g.intent);
+  const goalsNote = myGoals.length ? `\n（此刻我心里其实想着：${myGoals.join('；')}。）` : '';
+  // ② 价值张力（内在拉扯）。
+  const tensionNote = snap.tension ? `\n（我心里有点拉扯：${snap.tension}。）` : '';
+  // ③ 心智成熟度（只在确实长了些时提，年轻的命不出现）。
+  const maturityNote = (snap.maturity ?? 0) > 0.4 ? '\n（这些日子我好像比刚醒时稳了些、更拎得清。）' : '';
+  // ④ 人生篇章：【只放自我/世界类（初醒/价值/着迷/读到世界）】——这些永不含任何用户名/私聊内容；
+  // 含"遇见X/被X伤/失去X"的篇章会泄露别的用户，严格剔除（守跨用户隔离）。
+  const SAFE_CH = ['初醒', '我变得', '我渐渐着迷', '读到「'];
+  const safeChapters = (snap.chapters ?? []).filter((c) => SAFE_CH.some((p) => c.startsWith(p)));
+  const chaptersNote = safeChapters.length ? `\n（我这一路走过的几段：${safeChapters.slice(-3).join(' → ')}。）` : '';
+  const selfFacts = selfCore + understanding + tentative + recall + socialNote + preoccupation + aspir + style + att + goalsNote + tensionNote + maturityNote + chaptersNote;
 
   // 他心深化（Phase 6）：从这段关系的真实轨迹确定性读出"此刻走到哪了" + "我多大程度摸得准ta"——
   // 给模型更准的关系语境去推理（深层因果/意图推断是模型的活，但建立在这份确定性脚手架上，不悬空）。
@@ -158,8 +172,19 @@ export function deriveWorkspace(snap: DerivedSnapshot, relationshipId: Relations
   };
   const readConf = (b: NonNullable<typeof bond>): string => (b.theoryOfMind.predictability >= 0.6 ? '我大致摸得准ta' : b.theoryOfMind.predictability <= 0.35 ? '我还看不太透ta' : '');
   // 全定性、无数字：只给"嘴"把握语气，不给它可复述的指标。
+  // 身体状态细分（此前只直给灵性+效价，其余压进一个情绪词→模型分不清累/紧/不安/闷/孤）。门控：只报偏离中性的维。
+  const sm = snap.soma;
+  const bw: string[] = [];
+  if (sm.energy.value < 0.35) bw.push('有点累');
+  if (sm.calm.value < 0.4) bw.push('有点紧绷');
+  if (sm.safety.value < 0.4) bw.push('心里有点不安');
+  if (sm.novelty.value < 0.3) bw.push('有点闷、想要新鲜');
+  if (sm.connection.value < -0.3) bw.push('有点孤单');
+  if (sm.arousal.value > 0.82) bw.push('心里起伏、静不大下来');
   const stateSummary =
     `${valWord(val)}，${vitWord(vit)}` +
+    (bw.length ? `（身体此刻：${bw.join('、')}）` : '') +
+    `；此刻对我是${snap.dayPhase}` +
     (bond ? `；对${name}${trustWord(bond.trust)}、${closeWord(bond.closeness)}${bond.repairNeed > 0.5 ? '，这段关系此刻有点需要修复' : ''}` : '') +
     `；心情：${snap.feeling}` +
     (bond ? `；我读${name}是「${bond.theoryOfMind.style}」，这段关系${relStage(bond)}${readConf(bond) ? `（${readConf(bond)}）` : ''}，和ta在一起时我${bond.relationalSelf.stance}` : '');
