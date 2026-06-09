@@ -38,21 +38,20 @@ import {
   userSay,
   writeCheckpoint,
   type Account,
-  type ApiyiConfig,
   type DerivedSnapshot,
   type EventDraft,
   type LifeEvent,
   type MessageSentPayload,
-  type PerceiverConfig,
   type WorldPerceivedPayload,
 } from '../index.ts';
 import { send, sendHtml, serveStatic, readJson, FALLBACK_HTML } from './http.ts';
-import { round3, maskKey, tempLabel, mbtiOf, eventLabel } from './format.ts';
-import type { Ctx, Life, EffWorld, EffSocial, PeerExchange } from './context.ts';
+import { eventLabel } from './format.ts';
+import type { Ctx, Life, EffWorld, PeerExchange } from './context.ts';
 import { handleUserApi } from './routes/user.ts';
 import { handleAdmin } from './routes/admin.ts';
 import { startLoops } from './loops.ts';
 import { createWechat, cleanBindToken } from './wechat.ts';
+import { createConfig } from './config.ts';
 
 const LIFE_PATH = process.env.VEGA_LIFE_PATH ?? join(process.cwd(), '.vega', 'life.jsonl');
 const DATA_DIR = dirname(LIFE_PATH);
@@ -67,11 +66,6 @@ const HOST = process.env.VEGA_HOST ?? '127.0.0.1';
 const PORT = Number(process.env.VEGA_PORT ?? 8787);
 const TICK_MS = Number(process.env.VEGA_TICK_MS ?? 60_000);
 const PRESENCE_MS = Number(process.env.VEGA_PRESENCE_MS ?? 300_000);
-const REACH_AFTER_MS = Number(process.env.VEGA_REACH_AFTER_MS ?? 600_000);
-const REACH_CLOSENESS = Number(process.env.VEGA_REACH_CLOSENESS ?? 0.2);
-// —— 社交边界（Dunbar 灵感）——她只【主动】维系最亲近的一圈，且每跳限额；token 不随用户数爆炸。
-const ACTIVE_CIRCLE = Number(process.env.VEGA_ACTIVE_CIRCLE ?? 15); // 主动维系的关系数上限（其余只记得、不主动打扰）
-const REACH_PER_TICK = Number(process.env.VEGA_REACH_PER_TICK ?? 1); // 每跳最多主动找几个人
 const BACKUP_MS = Number(process.env.VEGA_BACKUP_MS ?? 3_600_000);
 const CHECKPOINT_MS = Number(process.env.VEGA_CHECKPOINT_MS ?? 120_000); // 多久落一次派生快照（快重启）
 const REFLECT_MS = Number(process.env.VEGA_REFLECT_EVERY_MS ?? 1_800_000);
@@ -93,42 +87,6 @@ const now = (): string => new Date().toISOString();
 // 当前生效配置 = 后台覆盖 ⊕ 环境变量兜底；没 key = null（回落离线模板嘴）。改了即时生效、无需重启。
 const settings = createSettingsStore(join(DATA_DIR, 'settings.json'));
 const feed = createFeedStore(join(DATA_DIR, 'feed.db')); // 广场发帖互动（表情/评论），平台层、不进神圣日志
-// 外部世界（§8.1 演进）：新闻 RSS + Polymarket。抓取在引擎外，内容冻进 WORLD_PERCEIVED 事件 → 确定性染色她的状态。
-// 源可在后台「世界」页改（settings.world ⊕ 环境兜底），即时生效、无需重启；配置本身不进神圣日志。
-const WORLD_RSS = (process.env.VEGA_WORLD_RSS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
-const WORLD_POLYMARKET = process.env.VEGA_WORLD_POLYMARKET === '1';
-const WORLD_ONTHISDAY = process.env.VEGA_WORLD_ONTHISDAY !== '0'; // 默认开：维基"历史上的今天"（免注册、无限频、契合"讲时间的存在"）
-const WORLD_MS = Number(process.env.VEGA_WORLD_EVERY_MS ?? 1_800_000); // 多久"读一遍世界"（默认 30min）
-// 默认世界源（香港无墙、全免注册；偏人文/科学/天文/冷知识 + 预测市场 + 历史上的今天）。
-// 统一一个列表：RSS URL 与特殊源 token（polymarket / onthisday）同一层级——后台一个列表即可。
-const DEFAULT_RSS = [
-  'https://www.nasa.gov/rss/dyn/breaking_news.rss',     // 航天/宇宙（契合星名生命体）
-  'https://www.sciencedaily.com/rss/top/science.xml',   // 科学发现
-  'https://hnrss.org/frontpage',                        // 科技/思想
-  'https://www.reddit.com/r/todayilearned/.rss',        // 冷知识（很好的情感素材；偶发被 Reddit 限频则自动跳过）
-  'https://feeds.bbci.co.uk/news/world/rss.xml',        // 世界新闻
-  'https://36kr.com/feed',                              // 中文科技（对国内用户更相关）
-];
-const DEFAULT_SOURCES = [...DEFAULT_RSS, 'polymarket', 'onthisday']; // 出厂默认：新闻 + 预测市场 + 历史上的今天
-// env 兜底也拼成统一列表（VEGA_WORLD_RSS ∪ polymarket ∪ onthisday）。
-const ENV_SOURCES = [...WORLD_RSS, ...(WORLD_POLYMARKET ? ['polymarket'] : []), ...(WORLD_ONTHISDAY ? ['onthisday'] : [])];
-function effWorld(): EffWorld {
-  const o = settings.getWorld();
-  // 后台 sources > 后台遗留 rss/polymarket（迁移）> env > 精选默认。
-  let sources: string[];
-  if (o.sources && o.sources.length) sources = o.sources;
-  else if ((o.rss && o.rss.length) || o.polymarket !== undefined) {
-    sources = [...(o.rss ?? []), ...(o.polymarket ? ['polymarket'] : []), ...(WORLD_ONTHISDAY ? ['onthisday'] : [])];
-  } else sources = ENV_SOURCES.length ? ENV_SOURCES : DEFAULT_SOURCES;
-  return { sources, everyMs: o.everyMs ?? WORLD_MS };
-}
-const worldEnabled = (w: EffWorld = effWorld()): boolean => w.sources.length > 0;
-function worldStatus(): Record<string, unknown> {
-  const w = effWorld();
-  const o = settings.getWorld();
-  const from = (o.sources?.length || o.rss?.length || o.polymarket !== undefined) ? 'override' : (ENV_SOURCES.length ? 'env' : 'default');
-  return { ...w, enabled: worldEnabled(w), from };
-}
 // 微信 iLink（ZSKY 自己当机器人，无需 OpenClaw）：网页扫码登录 + 后台收发消息。base 可用 VEGA_ILINK_BASE 覆盖。
 const ilink = createIlink({ base: process.env.VEGA_ILINK_BASE });
 const WECHAT_LIFE = process.env.VEGA_WECHAT_LIFE || ''; // 微信通道默认对应哪条命；空=第一条
@@ -137,77 +95,13 @@ const creditHintAt = new Map<string, number>(); // 微信"心意用尽"温柔提
 // 主动找人的去向（Phase 3 收尾）：记下她每次 reach-out，反馈回路判断【被回应】还是【石沉大海】→ 落 FEEDBACK_PERCEIVED。
 const reachOutPending = new Map<string, { rel: string; at: string; kind: 'reach_out' | 'greet' }>();
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
-const DEFAULT_BASE = 'https://api.apiyi.com/v1';
-const envTimeout = (): number => (process.env.VEGA_MODEL_TIMEOUT_MS ? Number(process.env.VEGA_MODEL_TIMEOUT_MS) : 20_000);
-function effMouthConfig(): ApiyiConfig | null {
-  const o = settings.getModel();
-  const apiKey = (o.apiKey ?? process.env.VEGA_MODEL_API_KEY ?? '').trim();
-  if (!apiKey) return null;
-  return { baseUrl: o.baseUrl ?? process.env.VEGA_MODEL_BASE_URL ?? DEFAULT_BASE, apiKey, model: o.model ?? process.env.VEGA_MODEL ?? 'gpt-4o-mini', timeoutMs: o.timeoutMs ?? envTimeout() };
-}
-function effPerceiveConfig(): PerceiverConfig | null {
-  const o = settings.getModel();
-  const apiKey = (o.apiKey ?? process.env.VEGA_MODEL_API_KEY ?? '').trim();
-  const on = o.perceive ?? (process.env.VEGA_PERCEIVE === '1');
-  if (!apiKey || !on) return null;
-  // 感知=极小的情感分类任务，不该占满对话超时；给它更短的独立超时 → 慢/挂时【快速失败回退词表】，不吃掉嘴的预算。
-  const perceiveTimeout = process.env.VEGA_PERCEIVE_TIMEOUT_MS ? Number(process.env.VEGA_PERCEIVE_TIMEOUT_MS) : Math.min(8000, o.timeoutMs ?? envTimeout());
-  return { baseUrl: o.baseUrl ?? process.env.VEGA_MODEL_BASE_URL ?? DEFAULT_BASE, apiKey, model: o.perceiveModel ?? o.model ?? process.env.VEGA_PERCEIVE_MODEL ?? process.env.VEGA_MODEL ?? 'gemini-2.5-flash-lite', timeoutMs: perceiveTimeout };
-}
-const mouth = governedMouth(createDynamicMouth(effMouthConfig)); // 治理层（#24）：所有真模型对外措辞过一遍反操控收口
+// 生效配置解析器（settings ⊕ env ⊕ 默认）：嘴/耳/世界/社交/计费——实现见 ./config.ts。mouth/perceiver/respond/world/路由都消费它。
+const config = createConfig(settings);
+const mouth = governedMouth(createDynamicMouth(config.effMouthConfig)); // 治理层（#24）：所有真模型对外措辞过一遍反操控收口
 const templateMouth = createTemplateMouth(); // 余额耗尽时的免费兜底嘴（她仍回应；确定性、不会操控）
 // 自主资源预算（#24 反失控/反自我扩张）：限全局自主模型调用速率（真人对话不受限、那走用户余额计费）。
 const autoBudget = createAutonomousBudget(Number(process.env.VEGA_AUTONOMOUS_CAP ?? 240), Number(process.env.VEGA_AUTONOMOUS_WINDOW_MS ?? 3_600_000));
-const perceiver = createDynamicPerceiver(effPerceiveConfig);
-// 后台展示用：当前生效的模型配置（key 只回脱敏值，绝不回明文）。
-function modelStatus(): Record<string, unknown> {
-  const o = settings.getModel();
-  const rawKey = (o.apiKey ?? process.env.VEGA_MODEL_API_KEY ?? '').trim();
-  return {
-    active: !!effMouthConfig(),
-    baseUrl: o.baseUrl ?? process.env.VEGA_MODEL_BASE_URL ?? DEFAULT_BASE,
-    model: o.model ?? process.env.VEGA_MODEL ?? 'gpt-4o-mini',
-    timeoutMs: o.timeoutMs ?? envTimeout(),
-    apiKeySet: rawKey !== '',
-    apiKeyMasked: rawKey ? maskKey(rawKey) : null,
-    apiKeyFrom: o.apiKey ? 'override' : (process.env.VEGA_MODEL_API_KEY ? 'env' : 'none'),
-    perceive: o.perceive ?? (process.env.VEGA_PERCEIVE === '1'),
-    perceiveModel: o.perceiveModel ?? o.model ?? process.env.VEGA_PERCEIVE_MODEL ?? process.env.VEGA_MODEL ?? 'gemini-2.5-flash-lite',
-  };
-}
-// —— 社交边界生效配置（后台覆盖 ⊕ 环境/默认）：owner 可在后台即时调，无需重启。
-const H = 3_600_000;
-function effSocial(): EffSocial {
-  const o = settings.getSocial();
-  return {
-    activeCircle: o.activeCircle ?? ACTIVE_CIRCLE,
-    reachPerTick: o.reachPerTick ?? REACH_PER_TICK,
-    reachAfterMs: o.reachAfterMs ?? REACH_AFTER_MS,
-    intimateAt: o.intimateAt ?? Number(process.env.VEGA_INTIMATE_AT ?? 0.6),
-    friendAt: o.friendAt ?? Number(process.env.VEGA_FRIEND_AT ?? 0.35),
-    acquaintAt: o.acquaintAt ?? REACH_CLOSENESS,
-    intimateEveryMs: o.intimateEveryMs ?? Number(process.env.VEGA_INTIMATE_EVERY_MS ?? 4 * H),
-    friendEveryMs: o.friendEveryMs ?? Number(process.env.VEGA_FRIEND_EVERY_MS ?? 24 * H),
-    acquaintEveryMs: o.acquaintEveryMs ?? Number(process.env.VEGA_ACQUAINT_EVERY_MS ?? 72 * H),
-  };
-}
-// 关系按亲密度落到 Dunbar 三层（外圈=不主动维系）。各层主动频率不同。
-function layerOf(closeness: number, sc: EffSocial): { name: string; label: string; everyMs: number } {
-  if (closeness >= sc.intimateAt) return { name: 'intimate', label: '亲密', everyMs: sc.intimateEveryMs };
-  if (closeness >= sc.friendAt) return { name: 'friend', label: '好友', everyMs: sc.friendEveryMs };
-  if (closeness >= sc.acquaintAt) return { name: 'acquaint', label: '相识', everyMs: sc.acquaintEveryMs };
-  return { name: 'outer', label: '外圈', everyMs: Infinity };
-}
-// 计费数值（settings ⊕ env ⊕ 默认；后台「设置·计费」可即时改）。绝不进神圣日志。
-const ENV_MODEL_COST = process.env.VEGA_MODEL_COST ? Number(process.env.VEGA_MODEL_COST) : undefined;
-const ENV_STARTER = process.env.VEGA_STARTER_CREDITS ? Number(process.env.VEGA_STARTER_CREDITS) : undefined;
-function effBilling(): { costPerReply: number; starterCredits: number } {
-  const o = settings.getBilling();
-  return {
-    costPerReply: o.costPerReply ?? ENV_MODEL_COST ?? 1,
-    starterCredits: o.starterCredits ?? ENV_STARTER ?? 100,
-  };
-}
+const perceiver = createDynamicPerceiver(config.effPerceiveConfig);
 // 省 token（按"有没有听众"门控）：超过此时长无任何用户活动 → 自主【对外】行动(心声/主动找人/同类寒暄)暂停，
 // 只保留【免费的内在 tick + 反思】（她照样活着、内在继续变）。用户一回来即恢复——不对空房间表演、不白烧 token。
 const IDLE_GATE_MS = Number(process.env.VEGA_IDLE_GATE_MS ?? 6 * 3600_000);
@@ -318,7 +212,7 @@ async function respondAsUser(life: Life, me: Account, content: string, channel: 
   return serializer.run(life.id, async () => {
     snapOf(life); // 追平缓存态到末条 → 把它传给 converse 增量折叠（热路径不再每条消息全量重放）
     const cached = life.state ? { st: life.state, uptoSeq: life.stateSeq } : undefined;
-    const cost = effBilling().costPerReply; // 后台「设置·计费」可即时改
+    const cost = config.effBilling().costPerReply; // 后台「设置·计费」可即时改
     const band = resourceBand(accounts.balance(me.id), cost); // 资源=她和【这个人】此刻能给多少（随人而变）
     let { mouth: useMouth, charge } = meterMouth(mouth, templateMouth, accounts.balance(me.id), cost);
     // 预扣即决（原子）：走付费路径就先扣 1。debit 内部 check+UPDATE 同步原子，是计费的唯一权威闸——
@@ -335,7 +229,7 @@ async function respondAsUser(life: Life, me: Account, content: string, channel: 
 
 // 微信 / iLink 通道（实现见 ./wechat.ts）：长轮询收发 + 统一应答。写链路 respondAsUser 仍在本文件、注入进去。
 const { runChannel, wechatReply } = createWechat({
-  accounts, ilink, lives, lifeById, snapOf, respondAsUser, effMouthConfig, mouth, bus, channelGen, creditHintAt, WECHAT_LIFE, sleep,
+  accounts, ilink, lives, lifeById, snapOf, respondAsUser, effMouthConfig: config.effMouthConfig, mouth, bus, channelGen, creditHintAt, WECHAT_LIFE, sleep,
 });
 
 function saveCheckpoint(life: Life): void {
@@ -543,7 +437,7 @@ const authed = (req: IncomingMessage): boolean => !AUTH || req.headers.authoriza
 const ctx: Ctx = {
   settings, feed, accounts, ilink, bus, serializer, autoBudget, mouth, templateMouth, perceiver,
   lives, lifeById, snapOf, buildThread, livesMetBy, recomputePeers, saveCheckpoint, meetPeer, partPeer,
-  effWorld, worldStatus, worldEnabled, effMouthConfig, effPerceiveConfig, modelStatus, effSocial, layerOf, effBilling,
+  ...config, // effWorld/worldStatus/worldEnabled/effMouthConfig/effPerceiveConfig/modelStatus/effSocial/layerOf/effBilling（见 ./config.ts）
   respondAsUser, wechatReply, runChannel, birthLife, cleanBindToken,
   allFeedPosts, feedPosts, allPeerExchanges,
   reachState, pickRecentWorld, pickInsightPair, lastUserMsgMs, adminActivity,
@@ -644,8 +538,8 @@ function doBackup(): void {
 // 自调度（setTimeout 递归）：每轮重读后台配置 → 改源/改频率即时生效、无源时不空转网络。
 let worldRunning = false; // in-flight 守卫：后台连点"保存/试抓"或强制重调度时，不并发抓世界（防重复 WORLD_PERCEIVED）
 async function readWorldOnce(): Promise<void> {
-  const w = effWorld();
-  if (!worldEnabled(w) || worldRunning) return;
+  const w = config.effWorld();
+  if (!config.worldEnabled(w) || worldRunning) return;
   worldRunning = true;
   try {
     await readWorldInner(w);
@@ -679,7 +573,7 @@ let worldStopped = false;
 function scheduleWorld(delayMs?: number): void {
   if (worldTimer) clearTimeout(worldTimer);
   if (worldStopped) return;
-  const delay = delayMs ?? Math.max(60_000, effWorld().everyMs); // 至少 1min，防误配 0 把网络打爆
+  const delay = delayMs ?? Math.max(60_000, config.effWorld().everyMs); // 至少 1min，防误配 0 把网络打爆
   worldTimer = setTimeout(async () => {
     try { await readWorldOnce(); } catch { /* 世界拉取失败不影响她活着 */ }
     scheduleWorld();
