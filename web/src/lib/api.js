@@ -26,6 +26,7 @@ export const api = {
   logout: () => req('POST', '/api/auth/logout'),
   me: () => req('GET', '/api/me'),
   lives: () => req('GET', '/api/lives'),
+  society: () => req('GET', '/api/society'), // 她们之间的寒暄（peer 对话段）——广场社会动态流用
   feed: () => req('GET', '/api/feed'),
   reactPost: (postId, emoji) => req('POST', '/api/feed/react', { postId, emoji }),
   commentPost: (postId, text, replyTo) => req('POST', '/api/feed/comment', { postId, text, replyTo: replyTo || undefined }),
