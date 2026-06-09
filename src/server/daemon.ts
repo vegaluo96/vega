@@ -1471,7 +1471,7 @@ const heartbeat = setInterval(async () => {
         if (!autoBudget.tryConsume()) break; // 治理：自主预算超额 → 这轮不主动开口
         const ra = now();
         const o = await reachOut(life.store, mouth, rel, ra);
-        if (o) { bus.publish('reach_out', rel, { life: life.id, text: o.utterance }); reached += 1; reachOutPending.set(`${life.id}|${rel}`, { rel, at: ra }); } // 记下这次主动 → 反馈回路判断被回应/石沉
+        if (o) { bus.publish('reach_out', rel, { life: life.id, text: o.utterance }); reached += 1; reachOutPending.set(`${life.id}|${rel}`, { rel, at: ra, kind: 'reach_out' }); } // 记下这次主动 → 反馈回路判断被回应/石沉
       }
       if (Date.now() - life.lastReflectAt > REFLECT_MS && life.store.version() - life.lastReflectSeq >= 3) {
         runTurn(life.store, [{ type: 'REFLECTION_TRIGGERED', source: 'autonomous_loop', occurredAt: now(), payload: { scope: 'recent', windowFromSeq: life.lastReflectSeq, windowToSeq: life.store.version() } }]);
@@ -1565,7 +1565,7 @@ const discoverTimer = setInterval(async () => {
         ensureUserRelationship(life.store, rel, u.handle, now());
         return greet(life.store, mouth, rel, u.handle, now());
       });
-      if (o) bus.publish('reach_out', rel, { life: life.id, text: o.utterance }); // 推给那一个人："她看见你了"
+      if (o) { bus.publish('reach_out', rel, { life: life.id, text: o.utterance }); reachOutPending.set(`${life.id}|${rel}`, { rel, at: now(), kind: 'greet' }); } // 推给那一个人 + 记下这次打招呼 → 学"主动打招呼陌生人会不会被回应"(greet 效能)
       return; // 一次只发现一个
     }
   } catch (e) {
@@ -1577,7 +1577,7 @@ const discoverTimer = setInterval(async () => {
 // 落成 FEEDBACK_PERCEIVED（确定性、进神圣日志）。脱敏：只记聚合数，不记是谁。首见某帖先记基线、不补发历史。
 const seenEngagement = new Map<string, number>();
 // 主动找人的去向（Phase 3 收尾）：记下她每次 reach-out，反馈回路判断【被回应】还是【石沉大海】→ 落 FEEDBACK_PERCEIVED。
-const reachOutPending = new Map<string, { rel: string; at: string }>();
+const reachOutPending = new Map<string, { rel: string; at: string; kind: 'reach_out' | 'greet' }>();
 const SILENCE_MS = Number(process.env.VEGA_REACH_SILENCE_MS ?? 7_200_000); // 主动后多久没回 = 视作"石沉"（默认 2h）
 const feedbackTimer = setInterval(() => {
   for (const life of lives) {
@@ -1587,10 +1587,10 @@ const feedbackTimer = setInterval(() => {
         if (!key.startsWith(`${life.id}|`)) continue;
         const replied = life.store.list().some((e) => e.type === 'MESSAGE_RECEIVED' && e.relationshipId === pend.rel && e.occurredAt > pend.at);
         if (replied) {
-          serializer.run(life.id, async () => { runTurn(life.store, [{ type: 'FEEDBACK_PERCEIVED', source: 'autonomous_loop', occurredAt: now(), payload: { actionKind: 'reach_out', responseKind: 'reply', valence: 0.6, fromKind: 'human' } }]); });
+          serializer.run(life.id, async () => { runTurn(life.store, [{ type: 'FEEDBACK_PERCEIVED', source: 'autonomous_loop', occurredAt: now(), payload: { actionKind: pend.kind, responseKind: 'reply', valence: 0.6, fromKind: 'human' } }]); });
           reachOutPending.delete(key);
         } else if (Date.parse(now()) - Date.parse(pend.at) > SILENCE_MS) {
-          serializer.run(life.id, async () => { runTurn(life.store, [{ type: 'FEEDBACK_PERCEIVED', source: 'autonomous_loop', occurredAt: now(), payload: { actionKind: 'reach_out', responseKind: 'silence', valence: -0.5, fromKind: 'human' } }]); });
+          serializer.run(life.id, async () => { runTurn(life.store, [{ type: 'FEEDBACK_PERCEIVED', source: 'autonomous_loop', occurredAt: now(), payload: { actionKind: pend.kind, responseKind: 'silence', valence: -0.5, fromKind: 'human' } }]); });
           reachOutPending.delete(key); // 石沉只记一次，不反复扎心
         }
       }

@@ -126,3 +126,15 @@ test('期7·社会形状：无同类→"还没有真正的同类朋友"', () => 
   const s = born({}, true);
   assert.equal(reconstruct(s.list()).socialShape, '还没有真正的同类朋友', '没 peer → 独来独往');
 });
+
+test('skills 扩展·greet：主动打招呼被回应→greet 效能↑、石沉→↓（通用聚合，无需改折叠/升版本）', () => {
+  const fb = (resp: 'reply' | 'silence'): EventDraft<'FEEDBACK_PERCEIVED'> => ({ type: 'FEEDBACK_PERCEIVED', source: 'autonomous_loop', occurredAt: iso(T0 + 1e4), payload: { actionKind: 'greet', responseKind: resp, valence: resp === 'reply' ? 0.6 : -0.5, fromKind: 'human' } });
+  const s = born({}, true);
+  for (let i = 0; i < 4; i++) s.append(fb('reply'));
+  const g = reconstruct(s.list()).skills.find((x) => x.kind === 'greet');
+  assert.ok(g && g.efficacy > 0.6, `打招呼常被回应 → greet 效能↑（${g?.efficacy}）`);
+  const s2 = born({}, true);
+  for (let i = 0; i < 4; i++) s2.append(fb('silence'));
+  const g2 = reconstruct(s2.list()).skills.find((x) => x.kind === 'greet');
+  assert.ok(g2 && g2.efficacy < 0.4, `打招呼屡屡石沉 → greet 效能↓（${g2?.efficacy}）`);
+});
