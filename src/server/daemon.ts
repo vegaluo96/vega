@@ -7,13 +7,11 @@ import { createServer, type IncomingMessage } from 'node:http';
 import { mkdirSync } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
 import {
-  backupNow,
   createAccountStore,
   createDynamicMouth,
   createDynamicPerceiver,
   createSettingsStore,
   createFeedStore,
-  createWorldFeed,
   createIlink,
   createEventBus,
   createSerializer,
@@ -24,7 +22,7 @@ import {
   type Account,
 } from '../index.ts';
 import { send, sendHtml, serveStatic, readJson, FALLBACK_HTML } from './http.ts';
-import type { Ctx, Life, EffWorld } from './context.ts';
+import type { Ctx, Life } from './context.ts';
 import { handleUserApi } from './routes/user.ts';
 import { handleAdmin } from './routes/admin.ts';
 import { startLoops } from './loops.ts';
@@ -34,6 +32,7 @@ import { createLives } from './lives.ts';
 import { createPresence } from './presence.ts';
 import { createResponder } from './respond.ts';
 import { setupPush } from './push.ts';
+import { createWorld } from './world.ts';
 
 const LIFE_PATH = process.env.VEGA_LIFE_PATH ?? join(process.cwd(), '.vega', 'life.jsonl');
 const DATA_DIR = dirname(LIFE_PATH);
@@ -132,6 +131,9 @@ const authed = (req: IncomingMessage): boolean => !AUTH || req.headers.authoriza
 
 // 组装根：把所有单例/状态/解析器/操作装进 ctx，交给路由层（routes/*）与回路层。
 // daemon 自此只负责"接线 + 静态/健康/OpenAI 入口 + 回路 + 生命周期"，业务路由都在 ctx 之上。
+// 世界读取回路 + 备份（实现见 ./world.ts）：createWorld 只建闭包不起定时器；world.start() 在下方启动。
+const world = createWorld({ effWorld: config.effWorld, worldEnabled: config.worldEnabled, lives, snapOf, serializer, backupMs: BACKUP_MS });
+
 const ctx: Ctx = {
   settings, feed, accounts, ilink, bus, serializer, autoBudget, mouth, templateMouth, perceiver,
   lives, lifeById, snapOf, buildThread, livesMetBy, recomputePeers, saveCheckpoint, meetPeer, partPeer,
@@ -140,7 +142,7 @@ const ctx: Ctx = {
   allFeedPosts, feedPosts, allPeerExchanges,
   reachState, pickRecentWorld, pickInsightPair, lastUserMsgMs, adminActivity,
   bearer, sessionAccount, publicAccount, audiencePresent: presence.audiencePresent, idleMs: presence.idleMs,
-  reachOutPending, channelGen, creditHintAt, scheduleWorld,
+  reachOutPending, channelGen, creditHintAt, scheduleWorld: world.scheduleWorld,
   VAPID, VAPID_SUBJECT, WEB_DIST, ADMIN_DIST, CLAWBOT_SECRET, IDLE_GATE_MS, WECHAT_LIFE, REL, peerId,
 };
 
@@ -221,80 +223,19 @@ const loops = startLoops(ctx, {
   COMMENT_MS, COMMENT_CAP, FEEDBACK_MS, REACT_MS, SILENCE_MS, nextMuseGap,
 });
 
-function doBackup(): void {
-  for (const l of lives) {
-    const r = backupNow(l.path, {
-      cmd: process.env.VEGA_BACKUP_CMD,
-      keep: process.env.VEGA_BACKUP_KEEP ? Number(process.env.VEGA_BACKUP_KEEP) : undefined,
-      mirrorDir: process.env.VEGA_BACKUP_MIRROR, // 异盘/异地镜像目录（挂载卷）：本盘没了她也还在
-    });
-    console.log(r.ok ? `[vega:${l.id}] 备份完成 ${r.path}（${r.events} 事件）${r.mirrored ? ' · 已镜像' : ''}` : `[vega:${l.id}] 备份跳过：${r.reason}`);
-  }
-}
-// 读世界：每 everyMs 拉一遍新闻/Polymarket，每条醒着的命"看到"其中一条（不同命看不同的 → 天然多样）。
-// 内容冻进 WORLD_PERCEIVED → 确定性 appraisal 轻轻染色她的状态（无 perception 走词表，零模型开销）。
-// 自调度（setTimeout 递归）：每轮重读后台配置 → 改源/改频率即时生效、无源时不空转网络。
-let worldRunning = false; // in-flight 守卫：后台连点"保存/试抓"或强制重调度时，不并发抓世界（防重复 WORLD_PERCEIVED）
-async function readWorldOnce(): Promise<void> {
-  const w = config.effWorld();
-  if (!config.worldEnabled(w) || worldRunning) return;
-  worldRunning = true;
-  try {
-    await readWorldInner(w);
-  } finally {
-    worldRunning = false;
-  }
-}
-async function readWorldInner(w: EffWorld): Promise<void> {
-  const { items, report } = await createWorldFeed({ sources: w.sources }).fetchDetailed();
-  // 逐源诊断：哪些源 403/超时/0 条一目了然（之前"只剩 polymarket"就是 RSS 被 403 而无人知）。
-  console.log(`[world] 读世界：${report.map((r) => `${r.source}=${r.items}${r.ok ? '' : `(${r.status})`}`).join(' ')} → 合计 ${items.length} 条`);
-  if (items.length === 0) return;
-  for (const life of lives) {
-    if (!snapOf(life).awake) continue;
-    // 每条醒着的命这轮"看到"几条【不同】的世界事件（不是只看 1 条）→ pickRecentWorld 的窗口快速多样化，不再被单一源霸占。
-    const picks = sampleDistinct(items, 2);
-    await serializer.run(life.id, async () => {
-      for (const it of picks) runTurn(life.store, [{ type: 'WORLD_PERCEIVED', source: 'autonomous_loop', occurredAt: now(), payload: { source: it.source, worldKind: it.kind, title: it.title, summary: it.summary, url: it.url, topics: it.topics } }]);
-    });
-  }
-}
-// 从数组里无放回随机取 n 条（少于 n 则全取）——给每条命喂多样的世界，避免总看同一条。
-function sampleDistinct<T>(arr: T[], n: number): T[] {
-  if (arr.length <= n) return arr.slice();
-  const idx = new Set<number>();
-  while (idx.size < n) idx.add(Math.floor(Math.random() * arr.length));
-  return [...idx].map((i) => arr[i]);
-}
-let worldTimer: ReturnType<typeof setTimeout> | null = null;
-let worldStopped = false;
-function scheduleWorld(delayMs?: number): void {
-  if (worldTimer) clearTimeout(worldTimer);
-  if (worldStopped) return;
-  const delay = delayMs ?? Math.max(60_000, config.effWorld().everyMs); // 至少 1min，防误配 0 把网络打爆
-  worldTimer = setTimeout(async () => {
-    try { await readWorldOnce(); } catch { /* 世界拉取失败不影响她活着 */ }
-    scheduleWorld();
-  }, delay);
-}
-scheduleWorld();
-
-const backupTimer = setInterval(doBackup, BACKUP_MS);
-doBackup();
+world.start(); // 启动世界读取回路 + 备份定时器（见 ./world.ts）
 
 let shuttingDown = false;
 function shutdown(sig: string): void {
   if (shuttingDown) return;
   shuttingDown = true;
   clearInterval(loops.heartbeat);
-  clearInterval(backupTimer);
-  worldStopped = true;
-  if (worldTimer) clearTimeout(worldTimer);
+  world.stop(); // 停世界回路 + 备份定时器
   if (loops.socialTimer) clearInterval(loops.socialTimer);
   if (loops.commentTimer) clearInterval(loops.commentTimer);
   if (loops.reactTimer) clearInterval(loops.reactTimer);
   clearInterval(loops.discoverTimer);
-  doBackup();
+  world.doBackup(); // 休眠前落一份
   for (const l of lives) {
     try {
       runTurn(l.store, [{ type: 'CONNECTION_CLOSED', source: 'host', relationshipId: HOST_CONN, occurredAt: now(), payload: { relationshipId: HOST_CONN, reason: 'host_shutdown' } }]);
