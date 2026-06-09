@@ -50,6 +50,30 @@
     catch (e) { convoMsg = '✗ ' + e.message; }
   }
 
+  // 用户详情（点用户表下钻）：余额/充值历史/遇见过哪些命/微信通道。
+  let userDetail = null, userErr = '';
+  async function openUser(id) {
+    userDetail = null; userErr = '';
+    try { userDetail = await api.user(id); } catch (e) { userErr = e.message; }
+  }
+  // 原始事件日志（生命详情里按需展开）：append-only ground truth，"从日志确定性重建"的真相源。
+  let lifeEvents = null, eventsOpen = false, eventsLoading = false;
+  async function toggleEvents() {
+    eventsOpen = !eventsOpen;
+    if (eventsOpen && !lifeEvents) {
+      eventsLoading = true;
+      try { lifeEvents = await api.lifeEvents(curLife, 200); } catch (e) { lifeEvents = { rows: [], error: e.message }; } finally { eventsLoading = false; }
+    }
+  }
+  // 封/解封后刷新表与详情（不走共享 block()，避免它的 load() 把详情清空）。
+  async function blockUser(id, unblock) {
+    await api.block(id, unblock);
+    try { data = { rows: await api.users() }; } catch {}
+    await openUser(id);
+  }
+  // 世界事件流（世界页）：跨命读到的真实世界。
+  let worldFeed = [];
+
   async function load() {
     error = '';
     try {
@@ -60,8 +84,8 @@
       }
       else if (tab === 'activity') data = { rows: await api.activity() };
       else if (tab === 'recharges') data = { rows: await api.recharges() };
-      else if (tab === 'users') data = { rows: await api.users() };
-      else if (tab === 'life') data = { life: await api.life(curLife), well: await api.wellbeing(curLife) };
+      else if (tab === 'users') { data = { rows: await api.users() }; userDetail = null; userErr = ''; }
+      else if (tab === 'life') { data = { life: await api.life(curLife), well: await api.wellbeing(curLife) }; lifeEvents = null; eventsOpen = false; }
       else if (tab === 'model') {
         const m = await api.modelConfig();
         data = { model: m };
@@ -83,6 +107,7 @@
         data = { world: w };
         wform = { sources: (w.sources || []).join('\n'), everyMin: Math.max(1, Math.round((w.everyMs || 1800000) / 60000)) };
         worldMsg = ''; worldTestMsg = '';
+        try { worldFeed = (await api.worldFeed(80)).rows ?? []; } catch { worldFeed = []; }
       }
       lastLoaded = Date.now();
     } catch (e) {
@@ -346,21 +371,21 @@
       {/if}
 
       {#if tab === 'users' && data.rows}
-        <AdminSection title="用户" subtitle="{data.rows.length} 个账号">
+        <AdminSection title="用户" subtitle="{data.rows.length} 个账号 · 点昵称看详情">
           <div class="panel">
             <table class="tbl">
               <thead><tr><th>昵称</th><th>邮箱</th><th>角色</th><th>心意</th><th>状态</th><th></th></tr></thead>
               <tbody>
                 {#each data.rows as u}
-                  <tr>
-                    <td><b>{u.handle}</b></td>
+                  <tr class="click" class:on={userDetail && userDetail.id === u.id} on:click={() => openUser(u.id)}>
+                    <td><b class="ulink">{u.handle}</b></td>
                     <td class="dim">{u.email}</td>
                     <td><span class="tag">{u.role}</span></td>
                     <td class="mono">{u.balance}</td>
                     <td>{#if u.status === 'blocked'}<span class="tag sensitive">已封禁</span>{:else}<span class="dim">正常</span>{/if}</td>
                     <td class="right">
-                      {#if u.status === 'blocked'}<button class="abtn abtn-ghost abtn-sm" on:click={() => block(u.id, true)}>解封</button>
-                      {:else}<button class="abtn abtn-danger abtn-sm" on:click={() => block(u.id, false)}>封禁</button>{/if}
+                      {#if u.status === 'blocked'}<button class="abtn abtn-ghost abtn-sm" on:click|stopPropagation={() => block(u.id, true)}>解封</button>
+                      {:else}<button class="abtn abtn-danger abtn-sm" on:click|stopPropagation={() => block(u.id, false)}>封禁</button>{/if}
                     </td>
                   </tr>
                 {/each}
@@ -368,6 +393,36 @@
             </table>
           </div>
         </AdminSection>
+
+        {#if userErr}<p class="err panel-err">{userErr}</p>{/if}
+        {#if userDetail}
+          {@const ud = userDetail}
+          <AdminSection title="用户详情 · {ud.handle}" subtitle="{ud.email} · {ud.role} · 注册 {bj(ud.createdAt)}">
+            <span slot="action" class="tag {ud.status === 'blocked' ? 'sensitive' : 'ok'}">{ud.status === 'blocked' ? '已封禁' : '正常'}</span>
+            <div class="panel pad observe">
+              <div class="hgrid">
+                <div class="hcell"><span class="hk">余额</span><span class="hv">{ud.balance} 心意</span><span class="hsub">最近活跃 {ago(Date.parse(ud.lastActiveAt))}</span></div>
+                <div class="hcell"><span class="hk">遇见过</span><span class="hv">{ud.livesMet.length} 条命</span><span class="hsub">{ud.livesMet.length ? ud.livesMet.map((m) => m.life).slice(0, 4).join(' · ') : '还没认识谁'}</span></div>
+                <div class="hcell"><span class="hk">待审批充值</span><span class="hv">{ud.pendingRecharges.reduce((s, p) => s + p.amount, 0)} 心意</span><span class="hsub">{ud.pendingRecharges.length} 笔待批</span></div>
+                <div class="hcell"><span class="hk">微信通道</span><span class="hv">{ud.wechat ? '已绑定' : '未绑定'}</span><span class="hsub">{ud.wechat ? '生命体 ' + ud.wechat.lifeId : '无微信入口'}</span></div>
+              </div>
+              {#if ud.livesMet.length}
+                <div class="obs-row"><span class="ol">关系</span><span class="tags">{#each ud.livesMet as m}<span class="tag2" class:on={!m.ended}>{m.life} 亲近{Math.round(m.closeness * 100)} · {m.attachment}{m.ended ? ' · 已离' : ''}</span>{/each}</span></div>
+              {/if}
+              {#if ud.pendingRecharges.length || ud.recentRecharges.length}
+                <div class="obs-row"><span class="ol">充值</span><span class="aspir">
+                  {#each ud.pendingRecharges as p}<span class="rg-chip pend">{p.amount} 待批 · {bj(p.requestedAt)}</span>{/each}
+                  {#each ud.recentRecharges as r}<span class="rg-chip {r.status}">{r.amount} {r.status === 'approved' ? '已批' : '已拒'} · {bj(r.decidedAt)}</span>{/each}
+                </span></div>
+              {:else}<p class="dim" style="margin:0">还没有充值记录。</p>{/if}
+              <div class="mrow">
+                {#if ud.status === 'blocked'}<button class="abtn abtn-ghost abtn-sm" on:click={() => blockUser(ud.id, true)}>解封</button>
+                {:else}<button class="abtn abtn-danger abtn-sm" on:click={() => blockUser(ud.id, false)}>封禁</button>{/if}
+                <button class="abtn abtn-ghost abtn-sm" on:click={() => { userDetail = null; }}>收起</button>
+              </div>
+            </div>
+          </AdminSection>
+        {/if}
       {/if}
 
       {#if tab === 'model' && data.model}
@@ -444,6 +499,20 @@
             {#if worldMsg}<p class="msg" class:bad={worldMsg.startsWith('✗')}>{worldMsg}</p>{/if}
             {#if worldTestMsg}<p class="msg" class:bad={worldTestMsg.startsWith('✗')}>{worldTestMsg}</p>{/if}
             <p class="hint">抓取在<b>引擎外</b>跑、零依赖：抓到的标题/摘要会冻进 <code>WORLD_PERCEIVED</code> 事件（ground truth），她对世界的反应才能确定性重放。换源/换频率<b>不改她记得什么</b>，配置也不进神圣日志。特殊源：<code>polymarket</code>＝预测市场赔率、<code>onthisday</code>＝维基"历史上的今天"。清单留空＝她只过站内生活。当前来源：{w.from === 'override' ? '后台配置' : w.from === 'env' ? '环境变量' : '默认'}。</p>
+          </div>
+        </AdminSection>
+
+        <AdminSection title="世界事件流" subtitle="她们【真的读到了】什么——跨命的 WORLD_PERCEIVED，墙钟倒序。证明世界源真的进了她的生活。">
+          <div class="panel">
+            {#each worldFeed as e}
+              <div class="wf">
+                <span class="wf-at mono faint">{bj(e.at)}</span>
+                <span class="wf-life">{e.life}</span>
+                <span class="wf-src tag {e.kind === 'market' ? 'ok' : ''}">{e.source}</span>
+                <span class="wf-title">{e.title}{#if e.topics && e.topics.length}<span class="wf-topics dim"> · {e.topics.join('/')}</span>{/if}</span>
+              </div>
+            {/each}
+            {#if worldFeed.length === 0}<p class="dim empty">还没读到世界（没配源、或还没抓到）。配好源点「试抓一次」。</p>{/if}
           </div>
         </AdminSection>
       {/if}
@@ -626,6 +695,30 @@
             </div>
           </AdminSection>
         {/if}
+
+        <AdminSection title="原始事件日志" subtitle="append-only 真相源——「从日志确定性重建」的那本账。倒序，私聊正文按角色遮罩。">
+          <span slot="action"><button class="abtn abtn-ghost abtn-sm" on:click={toggleEvents}>{eventsOpen ? '收起' : '展开查看'}</button></span>
+          {#if eventsOpen}
+            <div class="panel">
+              {#if eventsLoading}<p class="dim empty">加载中…</p>
+              {:else if lifeEvents && lifeEvents.error}<p class="err panel-err">{lifeEvents.error}</p>
+              {:else if lifeEvents}
+                <div class="el-head dim">共 {lifeEvents.total} 个事件（version {lifeEvents.version}）· 显示最近 {lifeEvents.rows.length}</div>
+                {#each lifeEvents.rows as e}
+                  <div class="elog">
+                    <span class="el-seq mono faint">#{e.seq}</span>
+                    <span class="el-at mono faint">{bj(e.at)}</span>
+                    <span class="el-label">{e.label}</span>
+                    <span class="el-type mono dim">{e.type}</span>
+                    <span class="el-src dim">{e.source}</span>
+                    <span class="el-content">{e.content}</span>
+                  </div>
+                {/each}
+                {#if lifeEvents.rows.length === 0}<p class="dim empty">还没有事件。</p>{/if}
+              {/if}
+            </div>
+          {/if}
+        </AdminSection>
       {/if}
     </div>
   </div>
@@ -796,6 +889,31 @@
   .bubble.user { background: var(--panel-2); border: 1px solid var(--border-subtle); border-bottom-left-radius: 3px; }
   .bubble.her { background: var(--accent-weak); border: 1px solid var(--accent-line); border-bottom-right-radius: 3px; }
   .btime { display: block; font-size: 10px; margin-bottom: 3px; }
+
+  /* —— 用户详情 —— */
+  .ulink { color: var(--accent); }
+  .tbl tr.click.on td { background: var(--accent-weak); }
+  .rg-chip { display: inline-block; font-size: 11.5px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border-subtle); color: var(--muted); margin: 0 6px 6px 0; }
+  .rg-chip.pend { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 40%, transparent); }
+  .rg-chip.approved { color: var(--success); border-color: color-mix(in srgb, var(--success) 40%, transparent); }
+  .rg-chip.rejected { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
+
+  /* —— 世界事件流 —— */
+  .wf { display: grid; grid-template-columns: 124px 78px 110px 1fr; gap: 12px; padding: 9px 14px; border-bottom: 1px solid var(--border-subtle); font-size: 12.5px; align-items: center; }
+  .wf:last-child { border-bottom: 0; }
+  .wf-life { font-weight: 600; }
+  .wf-src { justify-self: start; font-size: 10.5px; }
+  .wf-title { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wf-topics { font-size: 11.5px; }
+
+  /* —— 原始事件日志 —— */
+  .el-head { padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 11.5px; }
+  .elog { display: grid; grid-template-columns: 52px 124px 92px 150px 92px 1fr; gap: 10px; padding: 7px 14px; border-bottom: 1px solid var(--border-subtle); font-size: 12px; align-items: center; }
+  .elog:last-child { border-bottom: 0; }
+  .el-label { color: var(--accent); }
+  .el-type { font-size: 10.5px; }
+  .el-src { font-size: 11px; }
+  .el-content { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   /* —— 平板/手机降级：侧栏转顶部，表格可横向滚动 —— */
   @media (max-width: 760px) {

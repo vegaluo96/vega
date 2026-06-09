@@ -37,6 +37,9 @@ export const api = {
   health: () => req('GET', '/admin/health'),
   relations: (id) => req('GET', `/admin/lives/${id}/relations`),
   thread: (id, rel) => req('GET', `/admin/lives/${id}/thread?rel=${encodeURIComponent(rel)}`),
+  user: (id) => req('GET', `/admin/users/${encodeURIComponent(id)}`),
+  lifeEvents: (id, limit = 120) => req('GET', `/admin/lives/${encodeURIComponent(id)}/events?limit=${limit}`),
+  worldFeed: (limit = 80) => req('GET', `/admin/world-feed?limit=${limit}`),
 };
 export const setSession = (t) => session.set(t || '');
 export const clearSession = () => session.set('');

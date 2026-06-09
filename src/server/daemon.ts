@@ -1310,11 +1310,44 @@ const server = createServer(async (req, res) => {
       if (req.method === 'GET' && path === '/admin/users') {
         return send(res, 200, accounts.listUsers().map((u) => ({ id: u.id, handle: u.handle, email: owner ? u.email : '〔遮罩〕', role: u.role, status: u.status, balance: u.balance, lastActiveAt: u.lastActiveAt, createdAt: u.createdAt })));
       }
+      // —— 用户详情（点用户表下钻）：余额/充值历史/遇见过哪些命（含亲疏）/微信通道/状态。email 仅 owner。——
+      if (req.method === 'GET' && path.startsWith('/admin/users/') && path !== '/admin/users/block') {
+        const uid = decodeURIComponent(path.slice('/admin/users/'.length));
+        const ac = accounts.getAccount(uid);
+        if (!ac) return send(res, 404, { error: 'no such user' });
+        const rel = accounts.relIdFor(uid);
+        const met = lives
+          .filter((l) => l.store.list().some((e) => e.type === 'RELATIONSHIP_OPENED' && e.relationshipId === rel))
+          .map((l) => { const b = snapOf(l).bonds[rel]; return { life: l.id, closeness: round3(b?.closeness ?? 0), trust: round3(b?.trust ?? 0), attachment: b?.relationalSelf.attachment ?? '—', ended: Boolean(b?.ended) }; })
+          .sort((a, b) => b.closeness - a.closeness);
+        const wc = accounts.channelFor(uid);
+        return send(res, 200, {
+          id: ac.id, handle: ac.handle, email: owner ? ac.email : '〔遮罩〕', role: ac.role, status: ac.status,
+          emailVerified: ac.emailVerified, createdAt: ac.createdAt, lastActiveAt: ac.lastActiveAt,
+          balance: accounts.balance(uid),
+          pendingRecharges: accounts.pendingRechargesFor(uid),
+          recentRecharges: accounts.recentRechargeResults(uid, 10),
+          livesMet: met,
+          wechat: wc ? { lifeId: wc.lifeId } : (accounts.wechatBindingFor(uid) ?? null),
+        });
+      }
       if (req.method === 'GET' && path === '/admin/recharges') return send(res, 200, accounts.pendingRecharges());
       if (req.method === 'POST' && path === '/admin/recharges') {
         const b = await readJson(req);
         const ok = accounts.decideRecharge(Number(b.id), Boolean(b.approve), acct.email);
         return send(res, ok ? 200 : 400, ok ? { ok: true } : { error: 'no such pending request' });
+      }
+      // —— 世界事件流：她们读到的【真实世界】（跨命的 WORLD_PERCEIVED），按墙钟倒序。世界内容公开，owner+steward 都看。——
+      if (req.method === 'GET' && path === '/admin/world-feed') {
+        const lim = Math.min(200, Math.max(1, Number(new URLSearchParams(url.split('?')[1] ?? '').get('limit') ?? 80)));
+        const rows: Array<Record<string, unknown>> = [];
+        for (const l of lives) for (const e of l.store.list()) {
+          if (e.type !== 'WORLD_PERCEIVED') continue;
+          const p = e.payload as WorldPerceivedPayload;
+          rows.push({ life: l.id, at: e.recordedAt, source: p.source, kind: p.worldKind, title: p.title, summary: p.summary, url: p.url, topics: p.topics ?? [] });
+        }
+        rows.sort((a, b) => (String(a.at) < String(b.at) ? 1 : -1));
+        return send(res, 200, { rows: rows.slice(0, lim) });
       }
       // 健康时间线（§11.3）：她的灵性/效价/精力/联结随真实时间的曲线（owner+steward 都看，纯她的健康）。
       if (req.method === 'GET' && path.startsWith('/admin/lives/') && path.endsWith('/wellbeing')) {
@@ -1354,6 +1387,27 @@ const server = createServer(async (req, res) => {
           else if (e.type === 'MESSAGE_SENT') { const p = e.payload as { relationshipId?: string; utterance?: string }; if (p.relationshipId === rel) msgs.push({ who: 'her', text: String(p.utterance ?? ''), at: e.occurredAt }); }
         }
         return send(res, 200, { lifeId: l.id, rel, messages: msgs.slice(-200) });
+      }
+      // —— 原始事件日志（append-only ground truth）：直接看落库的 LifeEvent 序列——"从日志确定性重建"的真相源。
+      // 私聊正文(u_*) steward 遮罩、owner 可见；其余事件公开。倒序、可调 limit。——
+      if (req.method === 'GET' && path.startsWith('/admin/lives/') && path.endsWith('/events')) {
+        const l = lifeById(path.slice('/admin/lives/'.length, -'/events'.length));
+        if (!l) return send(res, 404, { error: 'no such life' });
+        const lim = Math.min(500, Math.max(1, Number(new URLSearchParams(url.split('?')[1] ?? '').get('limit') ?? 120)));
+        const all = l.store.list();
+        const rows = all.slice(-lim).map((e) => {
+          const rel = e.relationshipId ?? '';
+          const priv = rel.startsWith('u_');
+          const p = e.payload as unknown as Record<string, unknown>;
+          let content = '';
+          if (e.type === 'MESSAGE_RECEIVED') content = priv && !owner ? '〔私聊·遮罩〕' : String(p.content ?? '');
+          else if (e.type === 'MESSAGE_SENT') content = priv && !owner ? '〔私聊·遮罩〕' : String(p.utterance ?? '');
+          else if (e.type === 'WORLD_PERCEIVED') content = String(p.title ?? '');
+          else if (e.type === 'REFLECTION_TRIGGERED') content = String(p.scope ?? '');
+          else if (e.type === 'RELATIONSHIP_OPENED' || e.type === 'RELATIONSHIP_ENDED') content = String(p.displayRef ?? p.reason ?? '');
+          return { seq: e.seq, type: e.type, label: eventLabel(e), source: e.source, rel, at: e.recordedAt, occurredAt: e.occurredAt, content };
+        }).reverse();
+        return send(res, 200, { lifeId: l.id, total: all.length, version: l.store.version(), rows });
       }
       // Observatory：某条命的内在深观（§22）。她的状态(soma/价值/气质/社交网)owner+steward 都看；
       // 含用户痕迹的(narrative/innerLife/chapters/记忆) 仅 owner——steward 受限(§11.2)。
