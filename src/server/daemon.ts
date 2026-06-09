@@ -13,6 +13,7 @@ import {
   captureCheckpoint,
   checkpointOf,
   converse,
+  traceConverse,
   createAccountStore,
   createFileEventStore,
   createDynamicMouth,
@@ -1212,6 +1213,19 @@ const server = createServer(async (req, res) => {
           }
         }
         return send(res, 405, { error: 'method not allowed' });
+      }
+
+      // —— 链路检查（仅 owner，只读，绝不写日志）：给一条测试消息，逐段看回路A每个环节的真实情况，方便自查
+      // "模型到底跑没跑通、状态有没有真传进 prompt"。用当前配置的真嘴+感知器，反映线上真实行为。
+      if (path === '/admin/chain-trace' && req.method === 'POST') {
+        if (!owner) return send(res, 403, { error: '仅 owner 可用链路检查' });
+        const b = await readJson(req);
+        const life = (typeof b.lifeId === 'string' && lifeById(b.lifeId)) || lives[0];
+        if (!life) return send(res, 200, { error: '还没有生命体' });
+        const message = String(b.message ?? '').trim() || '你好，最近怎么样？';
+        const relId = typeof b.relId === 'string' && b.relId.trim() ? b.relId.trim() : 'r_trace'; // 默认临时关系；传真 relId 看具体关系（仍只读不提交）
+        const trace = await traceConverse(life.store, mouth, relId, message, now(), perceiver);
+        return send(res, 200, { lifeId: life.id, relId, modelStatus: modelStatus(), trace });
       }
 
       // —— 生成生命体（仅 owner）：运行时接生一条新命，立即生效、无需重启；落盘名册重启也在。

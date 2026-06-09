@@ -40,7 +40,7 @@ export {
   type SoulStatePatch,
   type PatchSource,
 } from './engine/invariant-checker.ts';
-export { converse, reachOut, muse, reflectInsight, greet, commentOnPost, PUBLIC_SQUARE, type ConverseResult, type OutreachResult, type CommentContext, type CachedState } from './engine/converse.ts';
+export { converse, traceConverse, reachOut, muse, reflectInsight, greet, commentOnPost, PUBLIC_SQUARE, type ConverseResult, type OutreachResult, type CommentContext, type CachedState, type ChainTrace } from './engine/converse.ts';
 export { makeTick, runAutonomousTick } from './engine/autonomous-loop.ts';
 export { peerExchange, pickSocialPair, type Participant, type PeerTurn, type SocialPair } from './engine/society.ts';
 export { ARCHETYPES, archetypeFor, innateSeedFor, genesisPayloadFor, type Archetype } from './engine/seeds.ts';

@@ -13,7 +13,7 @@
   let lastLoaded = 0;
 
   const TABS = [['overview', '总览'], ['activity', '活动流'], ['recharges', '充值'], ['users', '用户']];
-  const TAB_LABEL = { overview: '总览', activity: '活动流', recharges: '充值审批', users: '用户', life: '生命详情', birth: '接生生命体', model: '模型配置', social: '社交边界', world: '世界源' };
+  const TAB_LABEL = { overview: '总览', activity: '活动流', recharges: '充值审批', users: '用户', life: '生命详情', birth: '接生生命体', model: '模型配置', social: '社交边界', world: '世界源', chain: '链路检查' };
 
   // 模型配置（仅 owner）表单状态
   let mform = { baseUrl: '', model: '', apiKey: '', timeoutMs: 20000, perceive: false, perceiveModel: '' };
@@ -24,6 +24,13 @@
   let wform = { sources: '', everyMin: 30 }; let worldMsg = '', worldTestMsg = '', savingWorld = false, testingWorld = false;
   // 生成新生命体（仅 owner）：出生即冻结种子、不可改写、永生
   let newLifeId = '', birthMsg = '', birthing = false;
+  // 链路检查（仅 owner，只读）：给一条测试消息，逐段看回路A每个环节——感知/状态/给模型的prompt/模型原话/critic/最终。
+  let ctLifeId = '', ctRelId = '', ctMsg = '你好，最近怎么样？', ctRunning = false, ctErr = '', ct = null;
+  async function runChainTrace() {
+    ctRunning = true; ctErr = ''; ct = null;
+    try { ct = await api.chainTrace({ lifeId: ctLifeId.trim(), relId: ctRelId.trim(), message: ctMsg }); }
+    catch (e) { ctErr = e.message; } finally { ctRunning = false; }
+  }
 
   async function load() {
     error = '';
@@ -162,6 +169,7 @@
       {#if role === 'owner'}<button class="navi" class:on={tab === 'model'} on:click={() => go('model')}>模型</button>{/if}
       {#if role === 'owner'}<button class="navi" class:on={tab === 'social'} on:click={() => go('social')}>社交</button>{/if}
       {#if role === 'owner'}<button class="navi" class:on={tab === 'world'} on:click={() => go('world')}>世界</button>{/if}
+      {#if role === 'owner'}<button class="navi" class:on={tab === 'chain'} on:click={() => go('chain')}>链路</button>{/if}
     </nav>
     <button class="navi logout" on:click={clearSession}>登出</button>
   </aside>
@@ -362,6 +370,61 @@
         </AdminSection>
       {/if}
 
+      {#if tab === 'chain'}
+        <AdminSection title="链路检查" subtitle="给一条测试消息，逐段看回路A每个环节的真实情况——感知→状态→给模型的内容→模型原话→裁决→最终。只读，绝不写她的记忆。">
+          <div class="panel pad mform">
+            <div class="frow">
+              <label class="fld"><span class="flab">生命体 ID（留空＝第一条）</span><input class="ainput" bind:value={ctLifeId} placeholder="如 sirius" /></label>
+              <label class="fld"><span class="flab">关系 ID（留空＝临时 r_trace）</span><input class="ainput" bind:value={ctRelId} placeholder="留空即可" /></label>
+            </div>
+            <label class="fld"><span class="flab">测试消息（模拟用户说的话）</span>
+              <textarea class="ainput wta" rows="2" bind:value={ctMsg}></textarea></label>
+            <div class="mrow"><button class="abtn" on:click={runChainTrace} disabled={ctRunning}>{ctRunning ? '检查中…' : '运行链路检查'}</button></div>
+            {#if ctErr}<p class="msg bad">✗ {ctErr}</p>{/if}
+            <p class="hint">用<b>当前配置的真嘴+感知器</b>跑一遍（会真调一次模型，反映线上真实行为），但<b>不写日志</b>。看 <code>usedRealModel</code> 即知"到底用没用模型"；看「给模型的内容」即知"那身状态有没有真传进 prompt"。</p>
+          </div>
+
+          {#if ct && ct.trace}
+            {@const t = ct.trace}
+            <div class="panel pad ct-head">
+              <span class="tag {ct.modelStatus.active ? 'ok' : 'sensitive'}">{ct.modelStatus.active ? '模型在线 · ' + ct.modelStatus.model : '离线模板嘴（没用模型）'}</span>
+              <span class="tag {ct.modelStatus.perceive ? 'ok' : 'sensitive'}">{ct.modelStatus.perceive ? '感知开（模型当耳朵）' : '感知关（退回词表）'}</span>
+              <span class="faint">命 {ct.lifeId} · 关系 {ct.relId} · 只读</span>
+            </div>
+
+            <div class="ct-stage"><div class="ct-k">① 输入</div><div class="ct-v">{t.input}</div></div>
+            <div class="ct-stage"><div class="ct-k">② 感知 Perceive</div><div class="ct-v">
+              {#if t.perceive.active && t.perceive.perception}模型解析：善意 {t.perceive.perception.sentiment} · 暖 {t.perceive.perception.warmth} · 威胁 {t.perceive.perception.threat}
+              {:else}<span class="ct-warn">未用模型感知 → 退回确定性词表（她对微妙语气的理解会很粗）</span>{/if}
+            </div></div>
+            <div class="ct-stage"><div class="ct-k">③ 状态 EngineSnapshot</div><div class="ct-v">
+              <b>{t.state.emotion}</b> · {t.state.feeling}
+              <div class="ct-nums">效价 {t.state.valence} · 灵性 {t.state.vitality} · 联结 {t.state.connection} · 唤醒 {t.state.arousal} · 安全 {t.state.safety}</div>
+              {#if t.state.bond}<div class="ct-nums">对「{t.state.bond.displayRef}」：信任 {t.state.bond.trust} · 亲近 {t.state.bond.closeness} · 待修复 {t.state.bond.repairNeed} · 读ta「{t.state.bond.tomStyle}」</div>{/if}
+            </div></div>
+            <div class="ct-stage"><div class="ct-k">④ 给模型的内容 SoulWorkspace</div><div class="ct-v">
+              <div class="ct-sub">性格底色</div><div class="ct-prose">{t.workspace.persona}</div>
+              <div class="ct-sub">当下倾向 intent</div><div class="ct-prose">{t.workspace.intent}</div>
+              <div class="ct-sub">状态摘要</div><div class="ct-prose">{t.workspace.stateSummary}</div>
+              <div class="ct-sub">自我事实 selfFacts（grounding）</div><pre class="ct-pre">{t.workspace.selfFacts}</pre>
+            </div></div>
+            <div class="ct-stage"><div class="ct-k">⑤ 模型 ModelGateway {#if t.model.usedRealModel}<span class="tag ok">用了真模型 · {t.model.id}</span>{:else}<span class="tag sensitive">模板嘴 · 没用模型</span>{/if}</div><div class="ct-v">
+              {#if t.model.prompt.length}
+                <div class="ct-sub">真正发给模型的 prompt（{t.model.prompt.length} 条）</div>
+                {#each t.model.prompt as msg}<div class="ct-msg"><span class="ct-role">{msg.role}</span><pre class="ct-pre">{msg.content}</pre></div>{/each}
+              {:else}<span class="ct-warn">模板嘴无 prompt（确定性套话，引擎那身状态没经过模型）</span>{/if}
+            </div></div>
+            <div class="ct-stage"><div class="ct-k">⑥ 模型原话 raw</div><div class="ct-v">
+              {#if t.raw.error}<span class="ct-warn">调用失败：{t.raw.error}</span>{:else}<pre class="ct-pre">{t.raw.text || '(空响应)'}</pre>{/if}
+            </div></div>
+            <div class="ct-stage"><div class="ct-k">⑦ Critic 裁决 → 最终对外</div><div class="ct-v">
+              <span class="tag {t.critic.verdict === 'accepted' ? 'ok' : 'sensitive'}">{t.critic.verdict === 'accepted' ? '采纳模型输出' : 'fallback（毙了/超时 → 占位）'}</span>
+              <div class="ct-prose ct-final">{t.critic.finalUtterance}</div>
+            </div></div>
+          {/if}
+        </AdminSection>
+      {/if}
+
       {#if tab === 'life' && data.life}
         {@const v = data.life}
         <button class="abtn abtn-ghost abtn-sm back" on:click={() => go('overview')}>‹ 返回观测台</button>
@@ -519,6 +582,20 @@
   .somacell { display: inline-flex; align-items: baseline; gap: 6px; background: var(--panel-2); border: 1px solid var(--border-subtle); border-radius: var(--r-sm); padding: 5px 10px; }
   .sk { font-size: 11px; color: var(--faint-c); }
   .sv { font-size: 12.5px; }
+
+  /* 链路检查 */
+  .ct-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+  .ct-stage { background: var(--panel); border: 1px solid var(--border); border-radius: var(--r-md); padding: 12px 14px; margin-top: 10px; }
+  .ct-k { font-size: 12px; font-weight: 700; color: var(--accent); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .ct-v { font-size: 13px; }
+  .ct-nums { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .ct-sub { font-size: 11px; color: var(--faint-c); font-weight: 600; margin: 8px 0 3px; }
+  .ct-prose { font-size: 12.5px; color: var(--text); }
+  .ct-final { font-weight: 600; }
+  .ct-pre { white-space: pre-wrap; word-break: break-word; background: var(--panel-2); border: 1px solid var(--border-subtle); border-radius: var(--r-sm); padding: 8px 10px; font-size: 12px; line-height: 1.5; margin: 0; max-height: 320px; overflow: auto; }
+  .ct-msg { margin-top: 6px; }
+  .ct-role { display: inline-block; font-size: 10.5px; font-weight: 700; color: var(--faint-c); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 3px; }
+  .ct-warn { color: var(--danger, #e05a5a); font-size: 12.5px; }
 
   /* 灵魂内观 */
   .becoming { color: var(--accent, #6aa9ff); font-size: 13px; margin-top: 6px; }

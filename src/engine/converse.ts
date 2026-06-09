@@ -5,6 +5,7 @@ import {
   type EventDraft,
   type MessageReceivedPayload,
   type MessageSentPayload,
+  type Perception,
   type RelationshipId,
 } from '../domain/events.ts';
 import { type DerivedSnapshot } from '../domain/snapshot.ts';
@@ -15,7 +16,7 @@ import { reconstruct, advanceState, projectState, type RState } from '../kernel/
 // converse 克隆它、只把"这条新消息"增量折进去 → O(1) 而非 O(n)。缓存不匹配时安全回退全量重放，结果逐位一致。
 export interface CachedState { st: RState; uptoSeq: number }
 import { type DurableEventStore } from '../persistence/file-event-store.ts';
-import { type Mouth } from '../model/mouth.ts';
+import { apiyiMessages, type Mouth, type MouthInput } from '../model/mouth.ts';
 import { type Perceiver } from '../model/perceiver.ts';
 import { deriveWorkspace, type Workspace } from './soul-workspace.ts';
 import { critique } from './critic.ts';
@@ -276,6 +277,55 @@ export async function muse(store: DurableEventStore, mouth: Mouth, occurredAt: s
     { type: 'MESSAGE_SENT', source: 'autonomous_loop', relationshipId: PUBLIC_SQUARE, occurredAt, payload: { relationshipId: PUBLIC_SQUARE, utterance, modelId: mouth.id, criticVerdict: verdict, affectsDerivedState: false, unprompted: true } },
   ]);
   return { utterance, modelId: mouth.id, verdict };
+}
+
+// ── 后台链路检查器（只读、绝不写神圣日志）──
+// 给一条测试消息，把回路A每个环节的真实情况逐段摊开：感知→状态→给模型的 prompt→模型原话→critic→最终对外。
+// 自查不污染她的记忆：全程不 append（预演折叠只在内存）；模型这一段会真调一次当前配置的"嘴"（这正是要查的）。
+export interface ChainTrace {
+  input: string;
+  perceive: { active: boolean; source: 'model' | 'wordlist-fallback'; perception?: Perception }; // 模型当耳朵 or 退回词表
+  state: { emotion: string; feeling: string; valence: number; vitality: number; connection: number; arousal: number; safety: number; bond?: { displayRef: string; trust: number; closeness: number; repairNeed: number; tomStyle: string } };
+  workspace: { intent: string; stateSummary: string; selfFacts: string; persona: string; mood: string }; // 确定性装配、即将进 prompt 的内容
+  model: { id: string; usedRealModel: boolean; prompt: { role: string; content: string }[] }; // usedRealModel=false → 当前是模板嘴（没用模型）
+  raw: { ok: boolean; text: string; error?: string }; // 模型原始输出（或失败原因）
+  critic: { verdict: 'accepted' | 'fallback'; finalUtterance: string }; // 裁决 + 用户最终会看到的话
+  committed: false; // 不变量：链路检查永不写日志
+}
+const tr3 = (x: number): number => Math.round(x * 1000) / 1000;
+export async function traceConverse(
+  store: DurableEventStore, mouth: Mouth, relationshipId: RelationshipId, content: string, occurredAt: string, perceiver?: Perceiver,
+): Promise<ChainTrace> {
+  const events = store.list();
+  const head = store.head();
+  // ① 感知（与真链路同：模型当耳朵；未启用/失败 → 词表兜底）。
+  let perception: Perception | undefined;
+  if (perceiver) { try { perception = (await perceiver.perceive(content)) ?? undefined; } catch { perception = undefined; } }
+  // ② 预演折叠（与 converse 同）：得到"收到这句后/开口前"的真实驱动状态——只读、不提交。
+  const receivedDraft: EventDraft<'MESSAGE_RECEIVED'> = { type: 'MESSAGE_RECEIVED', source: 'external_user', relationshipId, occurredAt, payload: { relationshipId, content, channel: 'chat', ...(perception ? { perception } : {}) } };
+  const previewReceived = buildEvent(head ? head.lifeId : '', store.version(), head, head ? head.occurredAt : '', receivedDraft);
+  const snapshot = reconstruct([...events, previewReceived]);
+  // ③ SoulWorkspace（确定性装配）。
+  const workspace = deriveWorkspace(snapshot, relationshipId);
+  const input: MouthInput = { ...workspace, lastUserMessage: content, recentContext: recentTurns(store, relationshipId, 6) };
+  // ④ 模型当嘴：真调一次当前配置的嘴。usedRealModel=非模板；prompt 用 apiyiMessages 还原（真嘴发出去的同一构造）。
+  const usedRealModel = mouth.id !== 'template';
+  let raw = '', ok = false, error: string | undefined;
+  try { raw = await mouth.speak(input); ok = raw.trim() !== ''; } catch (e) { error = (e as Error).message || '调用失败'; }
+  // ⑤ Critic（与真链路同），并算出用户最终会看到的话。
+  const { verdict, utterance } = critique(raw, workspace);
+  const finalUtterance = verdict === 'fallback' ? honestDisconnect(content) : utterance;
+  const bond = snapshot.bonds[relationshipId];
+  return {
+    input: content,
+    perceive: { active: !!perception, source: perception ? 'model' : 'wordlist-fallback', perception },
+    state: { emotion: snapshot.emotion, feeling: snapshot.feeling, valence: tr3(snapshot.soma.valence.value), vitality: tr3(snapshot.soma.vitality.value), connection: tr3(snapshot.soma.connection.value), arousal: tr3(snapshot.soma.arousal.value), safety: tr3(snapshot.soma.safety.value), bond: bond ? { displayRef: bond.displayRef, trust: tr3(bond.trust), closeness: tr3(bond.closeness), repairNeed: tr3(bond.repairNeed), tomStyle: bond.theoryOfMind.style } : undefined },
+    workspace: { intent: workspace.intent, stateSummary: workspace.stateSummary, selfFacts: workspace.selfFacts, persona: workspace.persona, mood: workspace.mood },
+    model: { id: mouth.id, usedRealModel, prompt: usedRealModel ? apiyiMessages(input) : [] },
+    raw: { ok, text: raw, error },
+    critic: { verdict, finalUtterance },
+    committed: false,
+  };
 }
 
 // 自发洞见（DMN 离线学习/想象，研究 #8/#4）：把她【读到/在意】的两件事确定性挑出，让模型说出"忽然想通的联系"。
