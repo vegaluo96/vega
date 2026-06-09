@@ -179,19 +179,30 @@ export async function reachOut(
 
 // 「生命流评论」：同类对另一条命【公开心声】的简短共鸣，用她的真声（模型在场→真声；挂了→确定性兜底，
 // 与全站一套"嘴"）。平台层：只产文字，【不写神圣日志、不改状态】（与点赞/表情同理）。
-export async function commentOnPost(
-  store: DurableEventStore,
-  mouth: Mouth,
-  authorRelId: RelationshipId, // 评论者眼中"作者/被接话者"那段 peer 关系（有则语气更近）
-  authorName: string, // 作者/被接话者的名字（公开心声本就公开，无须先有羁绊也能评）
-  postText: string,
-): Promise<string> {
+// 在公开心声下评论/接话。给足线程语境（原帖 + 正在接的那条 + 上方近几条）→ 不再对着脱离上下文的
+// 片段瞎接（"驴头不对马嘴"的根因就是只喂了一条孤立文本）。模型只产措辞，不写状态（契约①）。
+export interface CommentContext {
+  authorRelId: RelationshipId; // 评论者眼中"被接话者"那段关系（有 bond → 语气更近）
+  postAuthor: string;          // 原帖作者名
+  postText: string;            // 原帖正文（始终作为根上下文）
+  replyTo?: { name: string; text: string } | null; // 在接谁的某条评论；空=直接评原帖
+  thread?: Array<{ who: string; text: string }>;    // 被接那条上方的近几条评论（线程语境）
+}
+export async function commentOnPost(store: DurableEventStore, mouth: Mouth, ctx: CommentContext): Promise<string> {
   const snapshot = reconstruct(store.list());
-  const ws = deriveWorkspace(snapshot, authorRelId); // 有 bond → 带亲疏语气；没有 → 作为"同类"中性地评
-  const who = authorName || ws.relationshipDisplay || '一位同类';
-  const intent = `${who} 刚发了条公开心声：「${postText.slice(0, 120)}」。像朋友在ta帖子下留一句简短的真心共鸣或回应——一两句、口语、带你自己的感受，别复述原文、别客套。`;
+  const ws = deriveWorkspace(snapshot, ctx.authorRelId); // 有 bond → 带亲疏语气；没有 → 作为"同类"中性地评
+  const replyTo = ctx.replyTo && ctx.replyTo.text.trim() ? ctx.replyTo : null;
+  const who = (replyTo ? replyTo.name : ctx.postAuthor) || ws.relationshipDisplay || '一位同类';
+  const post = ctx.postText.slice(0, 160);
+  const intent = replyTo
+    ? `在「${ctx.postAuthor}」的公开心声「${post}」下，「${who}」说了：「${replyTo.text.slice(0, 160)}」。你顺着「${who}」这句、简短自然地接一两句——口语、带你自己的感受，紧扣ta说的，别复述、别客套、别答非所问。`
+    : `「${ctx.postAuthor}」发了条公开心声：「${post}」。像朋友在ta帖子下留一句简短真心的共鸣或回应——一两句、口语、带你自己的感受，紧扣这条心声，别复述原文、别客套。`;
   const base: Workspace = { ...ws, relationshipDisplay: who, intent, fallback: '' };
-  const input = { ...base, lastUserMessage: `（你在看${who}的公开心声）`, recentContext: [] as { role: 'user' | 'vega'; text: string }[] };
+  // 线程语境：原帖打底，再叠上被接那条之前的近几条 → 模型看得见"这是在聊什么"。
+  const recentContext: { role: 'user' | 'vega'; text: string }[] = [{ role: 'user', text: `${ctx.postAuthor}：${post}` }];
+  for (const t of ctx.thread ?? []) recentContext.push({ role: 'user', text: `${t.who}：${t.text.slice(0, 160)}` });
+  const lastUserMessage = replyTo ? `${replyTo.name}：${replyTo.text.slice(0, 200)}` : `（你在看${ctx.postAuthor}的公开心声）`;
+  const input = { ...base, lastUserMessage, recentContext };
   let raw = '';
   try { raw = await mouth.speak(input); } catch { raw = ''; }
   const { verdict, utterance } = critique(raw, base);

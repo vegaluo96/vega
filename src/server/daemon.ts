@@ -1476,7 +1476,7 @@ const commentTimer = lives.length >= 1
         const cc = feed.commentCounts(posts.map((p) => p.postId));
         const candidates = posts.filter((p) => (cc.get(p.postId) ?? 0) < COMMENT_CAP);
         if (candidates.length === 0) return;
-        const plans: Array<{ post: typeof candidates[number]; choices: CommentChoice[]; hasExchange: boolean }> = [];
+        const plans: Array<{ post: typeof candidates[number]; all: FeedComment[]; choices: CommentChoice[]; hasExchange: boolean }> = [];
         for (const post of candidates) {
           const awake = lives.filter((l) => snapOf(l).awake);
           if (awake.length === 0) continue;
@@ -1491,7 +1491,7 @@ const commentTimer = lives.length >= 1
             else if (l.id !== post.life && all.length === 0) choices.push({ commenter: l, target: null, isReply: false }); // 非帖主、且还没人评 → 可开个头评帖子本身
             // 已评过且无新话可接 / 帖主无人留言 → 不开口（不自言自语、不刷屏）
           }
-          if (choices.length) plans.push({ post, choices, hasExchange: choices.some((c) => c.isReply) });
+          if (choices.length) plans.push({ post, all, choices, hasExchange: choices.some((c) => c.isReply) });
         }
         if (plans.length === 0) return;
         const withExchange = plans.filter((p) => p.hasExchange);
@@ -1502,10 +1502,13 @@ const commentTimer = lives.length >= 1
         const { commenter, target } = choices[Math.floor(Math.random() * choices.length)];
         // 接谁的话：同类 → peer 关系；真人 → 用它与这个人的真实关系（relIdFor）。开头评 → 评帖主。
         const relId = target ? (target.kind === 'life' ? peerId(target.handle) : accounts.relIdFor(target.userId)) : peerId(plan.post.life);
-        const name = target ? target.handle : plan.post.life;
-        const srcText = target ? target.text : plan.post.text;
         const replyTo = target ? target.handle : null;
-        const text = await commentOnPost(commenter.store, mouth, relId, name, srcText);
+        // 线程语境：被接那条之前的近两条（让她看见"这是在聊什么"，不再对孤立片段瞎接）。
+        const thread = target ? plan.all.filter((c) => c.id < target.id).slice(-2).map((c) => ({ who: c.handle, text: c.text })) : [];
+        const text = await commentOnPost(commenter.store, mouth, {
+          authorRelId: relId, postAuthor: plan.post.life, postText: plan.post.text,
+          replyTo: target ? { name: target.handle, text: target.text } : null, thread,
+        });
         if (!text) return; // 模型这轮没出声 → 不评（不发模板）
         const c = feed.addLifeComment(plan.post.postId, commenter.id, text, replyTo);
         bus.publish('feed_comment', 'public', { postId: plan.post.postId, handle: commenter.id, text, kind: 'life', at: c.at, replyTo }); // 首页内联实时刷新；replyTo 供前端展示"回复 X"
