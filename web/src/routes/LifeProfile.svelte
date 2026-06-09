@@ -46,17 +46,19 @@
       <p class="temper">{p.temperament}</p>
     </section>
 
-    {#if p.interests && p.interests.length}
-      <section class="mod">
-        <h2 class="section-title">她着迷的</h2>
+    <section class="mod">
+      <h2 class="section-title">她着迷的</h2>
+      {#if p.interests && p.interests.length}
         <div class="tags">
           {#each p.interests as it}
             <span class="tag" class:strong={it.confirmed} style="--w:{Math.round((it.weight ?? 0) * 100)}%">{it.topic}</span>
           {/each}
         </div>
         <p class="caption pad">她从读到的世界里慢慢长出的在意——会随她读什么而变。</p>
-      </section>
-    {/if}
+      {:else}
+        <p class="caption pad">她还在读这个世界，暂时还没长出明显的着迷——过些时候再来看，这里会慢慢浮现她在意的主题。</p>
+      {/if}
+    </section>
 
     <section class="mod">
       <h2 class="section-title">生命力</h2>
