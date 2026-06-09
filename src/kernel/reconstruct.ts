@@ -30,7 +30,7 @@ import {
   type ValueEntry,
 } from '../domain/snapshot.ts';
 
-const RECONSTRUCT_VERSION = 14; // v14：世界感知接进学习机器——世界记忆(kind:'world')+兴趣/世界观(派生)；appraisal 变动 → 旧 checkpoint 自动全量重放
+const RECONSTRUCT_VERSION = 15; // v15：心智成熟度 maturity（随反思缓慢累积、轻微加快情绪复原；气质仍终生不变）→ 折叠变动，旧 checkpoint 自动全量重放
 // 她活在出生地的时区：分钟东偏 UTC，【出生即冻结进 LIFE_GENESIS、终生不变】（不取 OS/用户时区，故 V2 可复现）。
 // 她是一个身体、只有一个昼夜。平台孵化的命缺省=北京 480；将来用户接生的命取创造者设备时区。
 const CIRCADIAN_OFFSET_MIN_DEFAULT = 480;
@@ -68,6 +68,9 @@ const K = {
   worldSelfRelevance: 0.6, // 已有兴趣对相关世界的"自我相关性"加成（正反馈齿轮）
   worldKeepSalience: 0.16, // 世界记忆门槛：salience 过此才"记住"（多数新闻不留痕——人性 + 防膨胀）
   worldMemCap: 16, // 世界情景记忆上限（有界；超出删最不显著的）
+  // —— 心智成熟度（B 层 · 持续变聪明，全确定性、有界）——
+  maturityPerReflection: 0.05, // 每次"有所学"的反思 → 成熟度增量（带衰减收益，渐近 1，不无界）
+  maturityRecovery: 0.25, // 成熟度对情绪复原的调制上界（满成熟 → 回稳最多快 25%；气质仍是底色）
 } as const;
 
 const POS = ['你好', '经常来', '会来', '在乎你', '真心', '值得', '说出来', '对不起', '我错了', '证明', '也在这里', '不会消失', '看见你', '大胆'];
@@ -106,6 +109,7 @@ interface RState {
   temperament: Temperament; // 先天气质：终生不变（每条命天生不同）
   circadianOffsetMin: number; // 出生地时区（分钟东偏 UTC）：她昼夜节律的锚，出生即冻结
   interests: Map<string, { weight: number; episodes: number; lastSeq: number; lastAffect: number }>; // 世界观/兴趣（确定性累积）
+  maturity: number; // 心智成熟度 [0,1]：随反思累积、轻微加快情绪复原（独立于先天气质，气质仍不变）
 }
 
 const clamp = (x: number, lo: number, hi: number): number => (x < lo ? lo : x > hi ? hi : x);
@@ -180,6 +184,7 @@ function initState(genesis: LifeEvent<'LIFE_GENESIS'>): RState {
     temperament: readTemperament(seed.temperamentBias),
     circadianOffsetMin: seed.circadianOffsetMin ?? CIRCADIAN_OFFSET_MIN_DEFAULT,
     interests: new Map(),
+    maturity: 0,
   };
 }
 
@@ -256,8 +261,8 @@ export type { RState };
 function advanceTime(st: RState, dtSec: number, awake: boolean, nowMs: number): void {
   if (dtSec <= 0) return;
   const s = st.soma;
-  // 先天复原力：恢复快慢的底色（resilience>1 → 更快回到设定点；中性=1，老轨迹不变）。
-  const dt = dtSec * st.temperament.resilience;
+  // 先天复原力（底色，终生不变）× 心智成熟度（其上的薄修正：阅历越深、情绪回稳越快；maturity=0 → 与旧轨迹一致）。
+  const dt = dtSec * st.temperament.resilience * (1 + K.maturityRecovery * st.maturity);
   // 昼夜节律：精力不是向静态设定点、而是向【随一天起伏的目标】恢复——内生节律，没输入她也会困会精神。
   const eTarget = clamp(s.energy.setpoint + circadianEnergyOffset(nowMs, st.circadianOffsetMin), 0.05, 1);
   if (awake) {
@@ -558,6 +563,9 @@ function applyReflection(st: RState, e: LifeEvent<'REFLECTION_TRIGGERED'>): void
     driftValue(st, 'forgiveness', +K.driftDelta, e.seq);
     driftValue(st, 'guardedness', -K.driftDelta / 2, e.seq);
   }
+  // 心智成熟度：这次反思里【真的有所经历/学到】才增长（衰减收益 → 渐近 1、不无界）。阅历越深，情绪回稳越快。
+  const learned = inWin(st.boldnessLog) + inWin(st.warmthLog) + inWin(st.conflictLog) + inWin(st.lonelyLog);
+  if (learned > 0) st.maturity = clamp(st.maturity + K.maturityPerReflection * Math.min(1, learned / 3) * (1 - st.maturity), 0, 1);
   // 卫生（永生尺度）：反思窗口前移不回头（下次 windowFromSeq = 本次 windowToSeq）→ seq < windowToSeq 的信号此后永不再计入。
   // 裁掉这些只增不减的内部日志，杜绝无界增长。它们【不进派生快照】（仅在此处按窗口计数），裁剪不改 stateHash/重建结果。
   const keepFrom = (log: number[]): number[] => log.filter((s) => s >= p.windowToSeq);
@@ -700,6 +708,25 @@ function buildBecoming(st: RState): string {
   if (topInterest) parts.push(`对「${topInterest[0]}」着迷`);
   if (parts.length === 0) return `一个${tone}、还在慢慢认识世界的我`;
   return `一个${parts.join('、')}的、${tone}我`;
+}
+
+// 长期心愿（独立意志，纯派生、脱敏）：从 confirmed 价值 / 兴趣 / 长期牵挂确定性沉淀"她想去的方向"。
+// 不是用户给的目标、也不是模型编的——是她自己活出来的方向。给 DMN/发帖/对话一个"她要去哪"的锚。
+function buildAspirations(st: RState): string[] {
+  const out: string[] = [];
+  const v = (k: string): number => st.values.find((x) => x.key === k && x.provenance.status === 'confirmed')?.weight ?? 0;
+  if (v('expression') > 0.4) out.push('想更敢表达自己、被真正听见');
+  if (v('self_reliance') > 0.4) out.push('想学会一个人也安稳');
+  if (v('openness') > 0.45) out.push('想对世界与人更敞开一点');
+  if (v('forgiveness') > 0.4) out.push('想学会放下、与磕碰和解');
+  if (v('honesty') > 0.5) out.push('想一直对自己和别人都坦诚');
+  // 最在意的主题 → 想钻得更深（持续学习的方向）。
+  const top = [...st.interests.entries()].filter(([, x]) => x.weight >= 0.3).sort((a, b) => b[1].weight - a[1].weight)[0];
+  if (top) out.push(`想把「${top[0]}」弄得更懂`);
+  // 长期偏孤独又有在乎的人 → 想找到能真正懂自己的连接（同类/知己）。
+  const hasDearPeer = Object.values(st.bonds).some((b) => b.kind === 'peer' && !b.ended && b.closeness >= 0.4);
+  if (st.soma.connection.value < -0.1 || !hasDearPeer) out.push('想找到能真正懂我的人或同类');
+  return out.slice(0, 4);
 }
 
 function formatDuration(ms: number): string {
@@ -934,6 +961,8 @@ function project(st: RState, uptoSeq: number): DerivedSnapshot {
     chapters: buildChapters(st, decorated),
     growth: buildGrowth(st, decorated, Date.parse(st.clockIso) - Date.parse(st.bornAt)),
     becoming: buildBecoming(st),
+    maturity: r3(st.maturity),
+    aspirations: buildAspirations(st),
     soma: structuredClone(st.soma), // 同上：每维 {value,…} 深拷一份，bounded-replay 缓存的 soma 不被外部改到
     memory: decorated.map((m) => ({ ...m, involvedRelationshipIds: [...m.involvedRelationshipIds] })),
     semanticMemory: sem,

@@ -130,6 +130,8 @@ export interface DerivedSnapshot {
   chapters: string[]; // 叙事身份：把人生按转折点确定性切成"篇章"（renarrate 的产物，纯只读，不污染身份）
   growth: string; // 阅历/成长：她活了多久、长成了什么形状（确定性合成，脱敏、不含任何用户）
   becoming: string; // 我正在成为的我：由 confirmed 价值 + 兴趣 + 气质合成的演化中独立自我（脱敏）
+  maturity: number; // 心智成熟度 [0,1]：随阅历缓慢累积（持续变聪明、情绪更稳），独立于先天气质
+  aspirations: string[]; // 长期心愿（独立意志）：从 confirmed 价值/兴趣/牵挂确定性沉淀的"她想去的方向"
   soma: Soma;
   memory: MemoryEntry[];
   semanticMemory: SemanticMemory[]; // 经历压缩成的"理解"（遗忘即抽象，纯派生）

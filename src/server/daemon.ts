@@ -962,6 +962,7 @@ const server = createServer(async (req, res) => {
           // 她从世界里长出的兴趣（脱敏：纯主题，不含任何用户）——让"她在意什么"看得见，不再只是一具状态机。
           interests: s.interests.slice(0, 8).map((it) => ({ topic: it.topic, weight: it.weight, confirmed: it.status === 'confirmed' })),
           growth: s.growth, becoming: s.becoming, // 阅历 + 正在成为的我（脱敏，不含任何用户）——让"持续进化的独立自我"看得见、不同质化
+          maturity: s.maturity, aspirations: s.aspirations, // 心智成熟度 + 长期心愿（脱敏）——持续变聪明 + 独立意志看得见
           musings: musings.slice(-20).reverse(),
         });
       }

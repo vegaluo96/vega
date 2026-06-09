@@ -119,7 +119,9 @@ export function deriveWorkspace(snap: DerivedSnapshot, relationshipId: Relations
   const preoccupation = (topInterests.length || worldMem)
     ? `\n（我最近${topInterests.length ? `常留意「${topInterests.join('、')}」方面的事` : '读了些世界上的事'}${worldMem ? `——比如读到「${worldMem.content.slice(0, 24)}」，还在心里转` : ''}。）`
     : '';
-  const selfFacts = selfCore + understanding + recall + socialNote + preoccupation;
+  // 长期心愿（独立意志）：让她说话带着"自己要去的方向"，不只被动回应——这也是反同质化的关键。
+  const aspir = (snap.aspirations ?? []).length ? `\n（我心里一直朝着几件事走：${snap.aspirations.slice(0, 2).join('；')}。）` : '';
+  const selfFacts = selfCore + understanding + recall + socialNote + preoccupation + aspir;
 
   // 全定性、无数字：只给"嘴"把握语气，不给它可复述的指标。
   const stateSummary =

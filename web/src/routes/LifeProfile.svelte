@@ -51,6 +51,17 @@
       <section class="mod">
         <h2 class="section-title">此生至今</h2>
         <p class="temper">{p.growth}</p>
+        {#if p.maturity > 0.02}<div class="meter mt"><span class="track"><span class="fill" style="width:{Math.round((p.maturity ?? 0) * 100)}%"></span></span></div><p class="faint">心智随阅历渐渐成熟——情绪比从前更稳。</p>{/if}
+      </section>
+    {/if}
+
+    {#if p.aspirations && p.aspirations.length}
+      <section class="mod">
+        <h2 class="section-title">她想去的方向</h2>
+        <ul class="aspir">
+          {#each p.aspirations as a}<li>{a}</li>{/each}
+        </ul>
+        <p class="caption pad">不是谁给的任务——是她自己活出来的心愿。</p>
       </section>
     {/if}
 
@@ -130,6 +141,9 @@
   .faint { color: var(--muted); font-size: var(--fs-sm); margin: 10px 0 0; }
 
   .temper { color: var(--text); line-height: 1.7; font-size: var(--fs-body); margin: 0; }
+  .mt { margin-top: 12px; }
+  .aspir { margin: 0; padding-left: 1.1em; }
+  .aspir li { color: var(--text); line-height: 1.7; font-size: var(--fs-body); }
 
   /* 兴趣标签：confirmed（稳定）的更醒目，weight 越高底色越实 */
   .tags { display: flex; flex-wrap: wrap; gap: var(--s2); }
