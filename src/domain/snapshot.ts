@@ -16,6 +16,7 @@ export interface Soma {
   calm: SomaVar; // [0,1] 平静↔紧张
   connection: SomaVar; // [-1,1] 联结↔孤独
   safety: SomaVar; // [0,1] 安全↔威胁
+  novelty: SomaVar; // [0,1] 信息新鲜度：新/异输入推高，随时间衰减 → 低=无聊→想探索（与其他维解耦，只驱动欲望/注意力）
 }
 
 export interface MemoryEntry {
@@ -137,6 +138,9 @@ export interface DerivedSnapshot {
   aspirations: string[]; // 长期心愿（独立意志）：从 confirmed 价值/兴趣/牵挂确定性沉淀的"她想去的方向"
   defenseStyle: string; // 防御机制（由冻结气质+价值派生）：受伤/受威胁时的固定反应——退缩/变硬/幽默岔开/讨好
   attachmentBias: string; // 先天依恋底色（由冻结气质派生）：安全/焦虑/回避——偏置她如何读关系、多快敢亲近
+  riskAppetite: number; // 风险偏好 [0,1]：由情绪/安全/驱力派生——情绪好/安全/驱力高→更敢（影响主动开口、探索、表达坦率）
+  attention: string[]; // 注意力/显著性场：此刻最牵引她的几件事（危险/新奇/未了目标/重要关系/创伤/最强欲望）
+  needs: { novelty: number; coherence: number; meaning: number }; // 内在需求当前水平（低=有缺口→生欲望），脱敏
   soma: Soma;
   memory: MemoryEntry[];
   semanticMemory: SemanticMemory[]; // 经历压缩成的"理解"（遗忘即抽象，纯派生）

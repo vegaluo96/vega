@@ -93,6 +93,10 @@ export function deriveWorkspace(snap: DerivedSnapshot, relationshipId: Relations
   } else {
     intent = '平静、如实';
   }
+  // 情绪→决策（风险偏好）：心气足→敢主动/坦率；偏低→稳着来、别冒进。不只改语气、改的是"敢不敢"。
+  const risk = snap.riskAppetite ?? 0.5;
+  if (risk >= 0.62) intent += '；此刻你心气足，可以更主动、更坦率一点';
+  else if (risk <= 0.38) intent += '；此刻你想稳着来，别急着冒进';
 
   // 跨用户上下文隔离（§18）：喂给"嘴"的 grounding【严格限定在当前这段关系 + 她自己的非私密自述】。
   // 绝不用全局 narrative（它聚合了所有关系、会把别的用户的 handle/私聊原话带出来）。snap.narrative 仅供 owner 面板。
@@ -129,7 +133,9 @@ export function deriveWorkspace(snap: DerivedSnapshot, relationshipId: Relations
   const aspir = (snap.aspirations ?? []).length ? `\n（我心里一直朝着几件事走：${snap.aspirations.slice(0, 2).join('；')}。）` : '';
   // 防御机制 + 依恋底色：她对自己的"受伤时怎么反应、在关系里什么底色"的自知（让性格在分寸里显出来，不千篇一律）。
   const style = (snap.defenseStyle || snap.attachmentBias) ? `\n（我清楚自己：被触动时我容易${snap.defenseStyle}，在关系里偏${snap.attachmentBias}。）` : '';
-  const selfFacts = selfCore + understanding + recall + socialNote + preoccupation + aspir + style;
+  // 注意力：此刻最牵着她的事（已脱敏、无用户名）——让她说话贴着当下心头事，不悬浮。
+  const att = (snap.attention ?? []).length ? `\n（此刻最牵着我的：${snap.attention.slice(0, 2).join('、')}。）` : '';
+  const selfFacts = selfCore + understanding + recall + socialNote + preoccupation + aspir + style + att;
 
   // 全定性、无数字：只给"嘴"把握语气，不给它可复述的指标。
   const stateSummary =

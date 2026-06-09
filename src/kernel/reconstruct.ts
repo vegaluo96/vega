@@ -30,7 +30,7 @@ import {
   type ValueEntry,
 } from '../domain/snapshot.ts';
 
-const RECONSTRUCT_VERSION = 17; // v17：人格层加厚——先天气质 +尽责/玩心/驱力（折叠效应在默认 0.5 处=恒等，老命轨迹不破）；旧 checkpoint 全量重放
+const RECONSTRUCT_VERSION = 18; // v18：内在驱动(novelty/coherence/meaning)+情绪→决策(riskAppetite/目标排序)+注意力；novelty 与其他维解耦→核心轨迹不变；旧 checkpoint 全量重放
 // 她活在出生地的时区：分钟东偏 UTC，【出生即冻结进 LIFE_GENESIS、终生不变】（不取 OS/用户时区，故 V2 可复现）。
 // 她是一个身体、只有一个昼夜。平台孵化的命缺省=北京 480；将来用户接生的命取创造者设备时区。
 const CIRCADIAN_OFFSET_MIN_DEFAULT = 480;
@@ -80,8 +80,8 @@ const NEG = ['不在乎', '随口说', '根本', '都是假', '骗你'];
 const INSULT = ['傻逼', '傻屌', '傻吊', '煞笔', '沙比', '操你', '草你', '日你', '艹你', '你妈的', '你妈逼', '你妈呢', '说你妈', '尼玛', '滚蛋', '滚开', '废物', '垃圾', '贱人', '贱货', '蠢货', '白痴', '弱智', '智障', '去死', '神经病', 'fuck', 'shit'];
 const BOLDNESS = ['大胆', '值得', '说出来', '想法'];
 
-type SomaKey = 'valence' | 'arousal' | 'vitality' | 'energy' | 'calm' | 'connection' | 'safety';
-const SOMA_KEYS: readonly SomaKey[] = ['valence', 'arousal', 'vitality', 'energy', 'calm', 'connection', 'safety'];
+type SomaKey = 'valence' | 'arousal' | 'vitality' | 'energy' | 'calm' | 'connection' | 'safety' | 'novelty';
+const SOMA_KEYS: readonly SomaKey[] = ['valence', 'arousal', 'vitality', 'energy', 'calm', 'connection', 'safety', 'novelty'];
 
 interface QuietThought {
   seq: number;
@@ -168,6 +168,7 @@ function initState(genesis: LifeEvent<'LIFE_GENESIS'>): RState {
       calm: mk(sp, tau, 'calm', 0.7, 5400),
       connection: mk(sp, tau, 'connection', 0, 7200),
       safety: mk(sp, tau, 'safety', 0.7, 7200),
+      novelty: mk(sp, tau, 'novelty', 0.2, 10800), // 设定点 0.2=静息即"有点想要新鲜"；新输入推高、随后 3h 衰减回落 → 无聊→探索→读世界→满足 的自调节闭环
     },
     memory: [],
     bonds: {},
@@ -383,6 +384,7 @@ function appraiseMessage(st: RState, e: LifeEvent<'MESSAGE_RECEIVED'>): void {
   s.safety.value = clamp(s.safety.value + K.kSafety * (warmth - threat) * sens, 0, 1);
   // 唤醒 = 强度 + 意外（越出乎预料越心头一紧/一亮）。
   s.arousal.value = clamp(s.arousal.value + (K.kArousal * Math.max(warmth, threat, Math.abs(ev2) / 1.5) * sens + K.surpriseArousal * surprise * K.kArousal) * driveF, 0, 1);
+  s.novelty.value = clamp(s.novelty.value + 0.08 * surprise, 0, 1); // 出乎预料的话也带来新鲜感
   // 预期违背的"质"：信任的人忽然变冷 → 额外失落；冷淡的人忽然变暖 → 意外的踏实。
   if (expected > 0.3 && ev2 < 0) s.valence.value = clamp(s.valence.value - 0.1 * surprise, -1, 1);
   else if (expected < -0.2 && ev2 > 0.3) s.safety.value = clamp(s.safety.value + 0.1 * surprise, 0, 1);
@@ -449,6 +451,7 @@ function appraiseWorld(st: RState, e: LifeEvent<'WORLD_PERCEIVED'>): void {
   s.valence.value = clamp(s.valence.value + W * val * rel * sens, -1, 1);
   s.arousal.value = clamp(s.arousal.value + W * rel * sens * (1 + 0.5 * surprise), 0, 1);
   s.energy.value = clamp(s.energy.value + W * val * rel, 0, 1); // 好消息提神、坏消息泄气（轻）
+  s.novelty.value = clamp(s.novelty.value + 0.14 * (0.4 + 0.6 * surprise), 0, 1); // 读到世界=新鲜输入，越意外越解无聊
 
   // —— ② 兴趣/世界观：所有旧兴趣轻微衰减（不再遇到的淡出），命中的主题按相关度×情绪×好奇加权累积。
   for (const v of st.interests.values()) v.weight *= K.interestDecay;
@@ -647,6 +650,50 @@ function buildTension(values: ValueEntry[]): string {
     }
   }
   return best;
+}
+// 价值张力的【强度】[0,1]（给"自我一致性"需求用：张力越强、coherence 越低）。
+function tensionStrength(values: ValueEntry[]): number {
+  const w = (k: string): number => values.find((v) => v.key === k)?.weight ?? 0;
+  let strongest = 0;
+  for (const [a, b] of TENSION_PAIRS) {
+    const wa = w(a);
+    const wb = w(b);
+    if (wa > 0.4 && wb > 0.4) strongest = Math.max(strongest, Math.min(wa, wb) - 0.1 * Math.abs(wa - wb));
+  }
+  return clamp(strongest, 0, 1);
+}
+// 风险偏好（情绪→决策）：心情好/安全/驱力高/精力足 → 更敢（主动开口、探索、坦率）；威胁/低落/疲惫 → 保守。中性态=0.5。
+function riskAppetiteOf(st: RState): number {
+  const s = st.soma;
+  return r3(clamp(0.5 + 0.25 * s.valence.value + 0.2 * (s.safety.value - 0.5) + 0.2 * (st.temperament.drive - 0.5) + 0.15 * (s.energy.value - 0.5), 0, 1));
+}
+// 内在需求当前水平（低=缺口→欲望）：novelty 来自 soma；coherence 由价值张力反映；meaning 由在乎的人+确立的价值+心愿。
+function needsOf(st: RState, bonds: Record<string, Bond>, aspirationsN: number): { novelty: number; coherence: number; meaning: number } {
+  const dear = Object.values(bonds).filter((b) => !b.ended && b.closeness >= 0.3).length;
+  const confirmedValues = st.values.filter((v) => v.provenance.status === 'confirmed').length;
+  return {
+    novelty: r3(st.soma.novelty.value),
+    coherence: r3(clamp(1 - tensionStrength(st.values), 0, 1)),
+    meaning: r3(clamp(0.2 + 0.15 * dear + 0.05 * confirmedValues + 0.08 * Math.min(2, aspirationsN), 0, 1)),
+  };
+}
+// 注意力/显著性场（脱敏：不出现任何用户名）：此刻最牵引她的几件事，按显著性排序。
+function buildAttention(st: RState, bonds: Record<string, Bond>, decorated: MemoryEntry[], needs: { novelty: number; coherence: number; meaning: number }): string[] {
+  const items: Array<{ w: number; text: string }> = [];
+  const s = st.soma;
+  if (s.safety.value < 0.4) items.push({ w: 0.6 + (0.4 - s.safety.value), text: '心里那点没着落的不安' });
+  if (needs.novelty < 0.3) items.push({ w: 0.45, text: '有点闷，想要点新鲜的' });
+  if (needs.coherence < 0.5) items.push({ w: 0.5, text: '心里几样在乎的东西在打架' });
+  // 近期创伤（强负、仍鲜活）——脱敏，不点名。
+  const trauma = decorated.find((m) => m.kind === 'episodic' && m.lineage.isCurrent && m.vivid && m.affect <= -0.6);
+  if (trauma) items.push({ w: 0.55 + Math.abs(trauma.affect) * 0.3, text: '一件还没全缓过来的旧事' });
+  // 挂念的人久未出现（脱敏，不点名）。
+  const longGone = Object.entries(bonds).some(([rid, b]) => !b.ended && b.closeness >= 0.5 && !st.openConnections.has(rid));
+  if (longGone) items.push({ w: 0.5, text: '一个挂念的人好一阵没出现了' });
+  // 新读到、还在心里转的世界事件（公开内容，可点）。
+  const worldMem = decorated.filter((m) => m.kind === 'world' && m.lineage.isCurrent && m.vivid).sort((a, b) => (b.vividness ?? 0) - (a.vividness ?? 0))[0];
+  if (worldMem) items.push({ w: 0.4, text: `刚读到的「${worldMem.content.slice(0, 16)}」` });
+  return items.sort((a, b) => b.w - a.w).slice(0, 3).map((x) => x.text);
 }
 
 // 叙事身份（renarrate 的产物）：把人生按【转折点】确定性切成篇章。纯只读投影，不污染身份（契约③）。
@@ -954,6 +1001,12 @@ function computeGoals(st: RState, bonds: Record<string, Bond>): Goal[] {
   if (reliance && reliance.weight > 0.35) goals.push({ kind: 'grow', intent: '想学会一个人也安稳', weight: r3(reliance.weight * 0.8) });
   // 探索欲受内在驱力放大（drive=0.5 处=恒等 → 老命不变）。
   if (t.curiosity > 0) goals.push({ kind: 'explore', intent: '想了解更多、保持好奇', weight: r3(t.curiosity * 0.4 * (1 + 0.6 * (t.drive - 0.5))) });
+  // —— 内在驱动的缺口 → 欲望（情绪/内稳态偏离即生欲望，不止等命令）——
+  if (st.soma.novelty.value < 0.35) goals.push({ kind: 'explore', intent: '有点闷，想找点新鲜的、没碰过的', weight: r3(0.4 + (0.35 - st.soma.novelty.value)) }); // novelty 缺口=无聊
+  const ts = tensionStrength(st.values);
+  if (ts > 0.4) goals.push({ kind: 'grow', intent: '心里有点拉扯，想静下来理清自己', weight: r3(ts) }); // 自我一致性低
+  const dear = Object.values(bonds).filter((b) => !b.ended && b.closeness >= 0.3).length;
+  if (dear === 0 && st.soma.connection.value < 0.1) goals.push({ kind: 'connect', intent: '想和谁建立点真正有意义的连接', weight: 0.45 }); // 意义/连接缺口
   // 受威胁时（安全感低），防御机制决定她要什么：退缩→缩回、变硬→护住、讨好→仍想维系（幽默岔开走表达层）。
   if (st.soma.safety.value < 0.4) {
     const ds = defenseStyleOf(t, st.values);
@@ -973,6 +1026,8 @@ function project(st: RState, uptoSeq: number): DerivedSnapshot {
   const sortedValues = [...st.values].sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
   const emotion = nameEmotion(st.soma, st.vitalityFloor);
   const tension = buildTension(sortedValues);
+  const aspirations = buildAspirations(st);
+  const needs = needsOf(st, enriched, aspirations.length);
   // 社会性：她的同类社交网（按亲疏排序）——活在一张关系网里，有自己的朋友。
   const socialWorld = Object.entries(enriched)
     .filter(([, b]) => b.kind === 'peer')
@@ -1000,9 +1055,12 @@ function project(st: RState, uptoSeq: number): DerivedSnapshot {
     growth: buildGrowth(st, decorated, Date.parse(st.clockIso) - Date.parse(st.bornAt)),
     becoming: buildBecoming(st),
     maturity: r3(st.maturity),
-    aspirations: buildAspirations(st),
+    aspirations,
     defenseStyle: defenseStyleOf(st.temperament, st.values),
     attachmentBias: attachmentBiasOf(st.temperament),
+    riskAppetite: riskAppetiteOf(st),
+    needs,
+    attention: buildAttention(st, enriched, decorated, needs),
     soma: structuredClone(st.soma), // 同上：每维 {value,…} 深拷一份，bounded-replay 缓存的 soma 不被外部改到
     memory: decorated.map((m) => ({ ...m, involvedRelationshipIds: [...m.involvedRelationshipIds] })),
     semanticMemory: sem,
