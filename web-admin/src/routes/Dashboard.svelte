@@ -499,22 +499,23 @@
         <p class="set-intro dim">全站生效的核心配置一页拉齐：模型(嘴/耳) · 社交边界 · 计费/对账(可改) · 系统门控/治理(只读)。改完即时生效，无需重启。</p>
         {#if data.model}
         {@const m = data.model}
-        <AdminSection title="模型 · 嘴/耳" subtitle="她的「嘴」——只换措辞，不动状态/记忆。开「模型当耳朵」才有细腻感知。改完即时生效，无需重启。">
+        <AdminSection title="模型 · 嘴 与 耳" subtitle="她的两只器官同等重要：「嘴」对外措辞、「耳」听懂自然语言。只换措辞、不动状态/记忆。即时生效，无需重启。">
           <span slot="action" class="tag {m.active ? 'ok' : 'sensitive'}">{m.active ? '模型在线 · ' + m.model : '离线模板嘴'}</span>
           <div class="panel pad mform">
+            <div class="cfg-head">嘴 · 对外措辞<span class="cfg-sub">把她那身状态说成人话；挂了/余额耗尽自动回落离线模板嘴，照样活着</span></div>
             <label class="fld"><span class="flab">模型名（apiyi 上的模型）</span>
-              <input class="ainput" bind:value={mform.model} placeholder="如 qwen-long / gpt-4o-mini / deepseek-chat" /></label>
+              <input class="ainput" bind:value={mform.model} placeholder="如 qwen-plus / gpt-4o-mini / deepseek-chat" /></label>
             <label class="fld"><span class="flab">Base URL（apiyi 中转，一般不用改）</span>
               <input class="ainput" bind:value={mform.baseUrl} placeholder="https://api.apiyi.com/v1" /></label>
             <label class="fld"><span class="flab">API Key {#if m.apiKeySet}<span class="faint">· 当前 {m.apiKeyMasked}（来自{m.apiKeyFrom === 'override' ? '后台' : '环境变量'}）</span>{/if}</span>
               <input class="ainput" type="password" bind:value={mform.apiKey} autocomplete="off" placeholder={m.apiKeySet ? '留空＝不改' : '粘贴你的 API Key'} /></label>
             <label class="fld"><span class="flab">超时（毫秒）</span>
               <input class="ainput" type="number" bind:value={mform.timeoutMs} /></label>
-            <label class="chk"><input type="checkbox" bind:checked={mform.perceive} /> 开启「模型当耳朵」（感知自然语言；每条多一次调用）</label>
-            {#if mform.perceive}
-              <label class="fld"><span class="flab">感知模型（留空＝同上）</span>
-                <input class="ainput" bind:value={mform.perceiveModel} placeholder={mform.model} /></label>
-            {/if}
+
+            <div class="cfg-head">耳 · 听懂自然语言<span class="cfg-sub">和「嘴」同等重要：开了她才听得出微妙语气（每条多一次调用），关了退回确定性词表、理解会粗</span></div>
+            <label class="chk"><input type="checkbox" bind:checked={mform.perceive} /> 开启「模型当耳朵」</label>
+            <label class="fld"><span class="flab">感知模型（留空＝同「嘴」的模型；建议用快模型）</span>
+              <input class="ainput" bind:value={mform.perceiveModel} placeholder={mform.model || '同嘴'} disabled={!mform.perceive} /></label>
 
             <div class="mrow">
               <button class="abtn" on:click={saveModel} disabled={saving}>{saving ? '保存中…' : '保存'}</button>
@@ -965,6 +966,10 @@
 
   /* —— 模型配置表单 —— */
   .mform { display: flex; flex-direction: column; gap: 14px; max-width: 560px; }
+  /* 配置分组小标题（嘴 / 耳 同等的段头）：上方分隔线 + 主副标题，让两块视觉对等 */
+  .cfg-head { font-size: 13px; font-weight: 700; color: var(--text); padding-top: 14px; box-shadow: inset 0 1px 0 0 var(--border-subtle); display: flex; flex-direction: column; gap: 3px; }
+  .cfg-head:first-child { padding-top: 0; box-shadow: none; }
+  .cfg-sub { font-size: 11.5px; font-weight: 400; color: var(--faint); line-height: 1.5; }
   .frow { display: flex; gap: 12px; flex-wrap: wrap; }
   .frow .fld { flex: 1; min-width: 130px; }
   .fld { display: flex; flex-direction: column; gap: 6px; }

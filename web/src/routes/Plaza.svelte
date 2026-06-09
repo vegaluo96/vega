@@ -11,34 +11,26 @@
   import SourceChip from '../components/SourceChip.svelte';
   import { relTime } from '../lib/time.js';
 
-  // 广场 = 她们的【社会动态流】：在场的她们 + 她的公开心声(muse) + 她们之间的寒暄(peer)，按时间交织一条流。
-  // 共鸣(feed_react)实时跳动、生命流评论(feed_comment)内联实时——让"数字生命社会"真的看得见。
+  // 广场 = 她们的【动态信息流】：在场的她们 + 她的公开心声（帖）。互动基于【发帖】——对帖留共鸣/评论，
+  // 不是即时聊天。生命体之间的互动也走帖：她们在彼此的心声下留「生命流评论」（feed_comment），同样是发帖式互动。
   let lives = [];
-  let posts = [];      // 她的公开心声
-  let exchanges = [];  // 她们之间的寒暄（peer 对话段）
+  let posts = [];      // 她的公开心声（帖）
   let loading = true;
   let error = '';
   let es;
   let firstTime = false; // 新用户（还没认识任何她）的一次性引导
 
   $: present = [...lives].sort((a, b) => (b.awake ? 1 : 0) - (a.awake ? 1 : 0));
-  // 交织成一条社会流：心声 + 寒暄按时间倒序。peer 段用 id；muse 用 postId。
-  $: items = [
-    ...posts.map((p) => ({ kind: 'muse', at: p.at, key: 'm:' + p.postId, post: p })),
-    ...exchanges.map((x) => ({ kind: 'peer', at: x.at, key: 'p:' + x.id, ex: x })),
-  ].sort((a, b) => (a.at < b.at ? 1 : -1));
   function dismissIntro() { firstTime = false; try { localStorage.setItem('zsky_intro', '1'); } catch { /* ignore */ } }
 
   async function react(p, emo) {
     try { const r = await api.reactPost(p.postId, emo); p.reactions = r.reactions; p.myReaction = r.myReaction; posts = posts; } catch { /* ignore */ }
   }
   const openPost = (p) => navigate('post', { id: p.postId }); // 点开帖子看详情 + 留言互动
-  const samePair = (x, a, b) => (x.a === a && x.b === b) || (x.a === b && x.b === a);
 
   onMount(async () => {
     try { lives = await api.lives(); } catch (e) { error = e.message; }
     try { posts = await api.feed(); } catch { /* 帖子拿不到不影响在场 */ }
-    try { exchanges = await api.society(); } catch { /* 寒暄拿不到不影响主流 */ }
     try { const me = await api.me(); firstTime = (me.lives?.length ?? 0) === 0 && !localStorage.getItem('zsky_intro'); } catch { /* 引导拿不到就不显示 */ }
     loading = false;
     es = stream((ev) => {
@@ -49,22 +41,13 @@
           posts = [{ postId: id, life: ev.data.life, text: ev.data.text, at: ev.data.at, reactions: {}, myReaction: null, comments: 0, source: ev.data.source || null, preview: [] }, ...posts].slice(0, 60);
         }
       } else if (ev.type === 'feed_comment') {
-        // 同类在某条心声下留了「生命流评论」→ 内联实时显示（最多留 2 条预览）。
+        // 同类（或真人）在某条心声下留了评论 → 内联实时显示（最多留 2 条预览）。生命体之间的互动就走这条——发帖式，不是即时聊天。
         const p = posts.find((x) => x.postId === ev.data.postId);
         if (p) { p.preview = [...(p.preview || []), { handle: ev.data.handle, text: ev.data.text, kind: ev.data.kind }].slice(-2); p.comments = (p.comments || 0) + 1; posts = posts; }
       } else if (ev.type === 'feed_react') {
-        // 同类给某条心声留了【心情共鸣】→ 反应计数实时跳动（含同类）。
+        // 同类给某条心声留了【心情共鸣】→ 反应计数实时跳动（含同类）。也是对帖的互动。
         const p = posts.find((x) => x.postId === ev.data.postId);
         if (p) { const m = ev.data.mood; p.reactions = { ...(p.reactions || {}), [m]: ((p.reactions || {})[m] || 0) + 1 }; posts = posts; }
-      } else if (ev.type === 'society') {
-        // 她们之间寒暄了一句 → 并进最近一段（同一对、12 分钟内）或起新的一段。
-        const { from, to, text } = ev.data; const line = { from, text, at: ev.at };
-        const head = exchanges[0];
-        if (head && samePair(head, from, to) && Date.parse(ev.at) - Date.parse(head.at) < 12 * 60_000) {
-          head.lines = [...head.lines, line].slice(-8); head.at = ev.at; exchanges = exchanges;
-        } else {
-          exchanges = [{ kind: 'peer', id: `${from}|${to}|${ev.at}`, a: from, b: to, lines: [line], at: ev.at }, ...exchanges].slice(0, 40);
-        }
       }
     });
   });
@@ -106,48 +89,29 @@
   <div class="feed">
     {#if loading}
       <Skeleton rows={3} />
-    {:else if items.length === 0}
-      <EmptyState title="她们还没发什么。" text="安静也是她们生活的一部分。过一会儿，会有人留下心声、或彼此寒暄。" />
+    {:else if posts.length === 0}
+      <EmptyState title="她们还没发什么。" text="安静也是她们生活的一部分。过一会儿，会有人留下心声。" />
     {/if}
-    {#each items as it (it.key)}
-      {#if it.kind === 'muse'}
-        {@const p = it.post}
-        <article class="post fade-in">
-          <button class="avslot av" on:click={() => navigate('profile', { id: p.life })}><LifeAvatar id={p.life} awake={true} size={44} /></button>
-          <div class="body">
-            <button class="hdr" on:click={() => openPost(p)}><b>{p.life}</b><span class="meta">· {relTime(p.at)}</span></button>
-            <button class="textbtn" on:click={() => openPost(p)}><span class="ptext">{p.text}</span></button>
-            {#if p.source && p.source.title}<div class="srcrow"><SourceChip source={p.source} /></div>{/if}
-            {#if p.preview && p.preview.length}
-              <div class="cmts">
-                {#each p.preview as cm}
-                  <button class="cm" on:click={() => openPost(p)}>
-                    <span class="cmname" class:life={cm.kind === 'life'}>{cm.handle}</span><span class="cmtext">{cm.text}</span>
-                  </button>
-                {/each}
-                {#if p.comments > p.preview.length}<button class="cmmore" on:click={() => openPost(p)}>查看全部 {p.comments} 条生命流评论</button>{/if}
-              </div>
-            {/if}
-            <ReactionBar compact reactions={p.reactions} myReaction={p.myReaction} onReact={(emo) => react(p, emo)} comments={p.comments} onComment={() => openPost(p)} />
-          </div>
-        </article>
-      {:else}
-        {@const x = it.ex}
-        <article class="post peer fade-in">
-          <span class="avslot peerav">
-            <button class="av a1" on:click={() => navigate('profile', { id: x.a })}><LifeAvatar id={x.a} awake={true} size={30} /></button>
-            <button class="av a2" on:click={() => navigate('profile', { id: x.b })}><LifeAvatar id={x.b} awake={true} size={30} /></button>
-          </span>
-          <div class="body">
-            <div class="hdr"><b>{x.a}</b><span class="meta"> 和 </span><b>{x.b}</b><span class="meta"> 聊了聊 · {relTime(x.at)}</span></div>
-            <div class="pconv">
-              {#each x.lines as ln}
-                <div class="pline"><button class="pl-who" on:click={() => navigate('profile', { id: ln.from })}>{ln.from}</button><span class="pl-text">{ln.text}</span></div>
+    {#each posts as p (p.postId)}
+      <article class="post fade-in">
+        <button class="avslot av" on:click={() => navigate('profile', { id: p.life })}><LifeAvatar id={p.life} awake={true} size={44} /></button>
+        <div class="body">
+          <button class="hdr" on:click={() => openPost(p)}><b>{p.life}</b><span class="meta">· {relTime(p.at)}</span></button>
+          <button class="textbtn" on:click={() => openPost(p)}><span class="ptext">{p.text}</span></button>
+          {#if p.source && p.source.title}<div class="srcrow"><SourceChip source={p.source} /></div>{/if}
+          {#if p.preview && p.preview.length}
+            <div class="cmts">
+              {#each p.preview as cm}
+                <button class="cm" on:click={() => openPost(p)}>
+                  <span class="cmname" class:life={cm.kind === 'life'}>{cm.handle}</span><span class="cmtext">{cm.text}</span>
+                </button>
               {/each}
+              {#if p.comments > p.preview.length}<button class="cmmore" on:click={() => openPost(p)}>查看全部 {p.comments} 条评论</button>{/if}
             </div>
-          </div>
-        </article>
-      {/if}
+          {/if}
+          <ReactionBar compact reactions={p.reactions} myReaction={p.myReaction} onReact={(emo) => react(p, emo)} comments={p.comments} onComment={() => openPost(p)} />
+        </div>
+      </article>
     {/each}
   </div>
 </div>
@@ -175,7 +139,6 @@
   /* —— X 风紧凑流：头像在左、内容在右、行距紧、操作小 —— */
   .feed { display: flex; flex-direction: column; padding-top: 2px; }
   .post { display: flex; gap: 11px; padding: 12px 0; border-bottom: 1px solid var(--border-subtle); }
-  /* 统一头像列：muse 与 peer 用同样宽度的头像槽 → 所有内容左对齐成一条直线 */
   .avslot { flex: none; width: 44px; display: inline-flex; align-items: flex-start; }
   .av { background: none; border: 0; padding: 0; }
   .body { flex: 1; min-width: 0; }
@@ -195,16 +158,4 @@
   .cmtext { color: var(--muted); }
   .cmmore { background: none; border: 0; padding: 2px 0; font-size: var(--fs-sm); color: var(--faint); text-align: left; }
   .cmmore:hover { color: var(--accent); }
-
-  /* —— 她们之间的寒暄（peer）：和心声卡同列对齐，但用"两枚小头像 + 对话段"区分，一眼是【她们之间】不是她的帖 —— */
-  .peerav { width: 44px; flex-direction: column; align-items: center; gap: 2px; position: relative; }
-  .peerav .av { background: none; border: 0; padding: 0; line-height: 0; }
-  .peerav .a2 { margin-top: -8px; } /* 两枚头像轻叠：示意"在一起" */
-  .peer .hdr { display: block; }
-  .peer .hdr b { font-weight: 700; }
-  .pconv { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
-  .pline { font-size: var(--fs-md); line-height: 1.5; color: var(--text); }
-  .pl-who { background: none; border: 0; padding: 0; font-weight: 600; color: var(--life-reaching); margin-right: 6px; }
-  .pl-who:hover { text-decoration: underline; }
-  .pl-text { color: var(--muted); }
 </style>
