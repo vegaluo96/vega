@@ -4,6 +4,8 @@
 
 约定：用户态需会话令牌（`Authorization: Bearer <token>`，登录获取）；管理态需 `owner`/`steward` 角色；集成态需 `VEGA_CLAWBOT_SECRET`。
 
+安全：所有响应带统一安全头（CSP/nosniff/X-Frame/Referrer/Permissions，HSTS 按 `VEGA_TLS`）；写端点限流（POST 60/min/IP、注册 5/h/IP）、登录失败按 (IP+email) 指数退避，超限 → `429`；服务端错误对外只回通用 `internal error`（不泄内部）。详见 [operations → 安全基线](operations.md)。
+
 ## 用户态 `/api/*`
 
 **身份**
@@ -11,7 +13,7 @@
 - `GET /api/me` → `{account, balance, lives:[{id}], following:[lifeId], wechat, wechatChannel, pendingRecharge}`（`following`=我关注的生命体 id）
 
 **生命与对话**
-- `GET /api/lives` → 生命画廊（脱敏 vibe）：`[{id, awake, emotion, feeling, dayPhase, temperament, mbti, tension, vitality, interests:[{topic,confirmed}]}]`
+- `GET /api/lives` → 生命画廊（脱敏 vibe）：`[{id, awake, emotion, feeling, dayPhase, temperament, mbti, tension, vitality, ageDays, interests:[{topic,confirmed}]}]`（`ageDays`=发现页"新诞生"筛选用）
 - `GET /api/lives/:id` → 她的**公开主页**（严格脱敏，绝无他人痕迹）：`{id, awake, willingToWake, emotion, feeling, dayPhase, temperament, mbti, tension, ageDays, vitality, becoming, growth, maturity, maturityFacets, sleepPressure, socialShape, attachmentBias, defenseStyle, aspirations[], interests:[{topic,weight,confirmed,phase}], skills[], peers[], following, followers, musings[]}`（`following`=我有没有关注她 · `followers`=关注她的用户数，仅展示）
 - `GET /api/lives/:id/me` → **我与她**（仅你这段关系）：`{life, met, relationship:{closeness,attachment,style,understanding,bornAt}, history[], balance}`
 - `POST /api/lives/:id/say {content}` → `{utterance, verdict, emotion, balance, voice:'plain'|'rich', resource}`

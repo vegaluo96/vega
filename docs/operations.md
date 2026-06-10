@@ -74,9 +74,24 @@ Caddy 把 `zsky.com`（用户站）与 `admin.zsky.com`（后台）都反代给 
 | `VEGA_REACH_CLOSENESS` / `VEGA_REACH_PER_TICK` / `VEGA_PRESENCE_MS` / `VEGA_COMMENT_CAP` | 主动找人门槛/每跳预算 / 多久算对方离开 / 单帖评论上限 |
 | `VEGA_WORLD_RSS` / `VEGA_WORLD_POLYMARKET` / `VEGA_WORLD_ONTHISDAY` / `VEGA_WORLD_EVERY_MS` | 世界源 |
 | `VEGA_CLAWBOT_SECRET` / `VEGA_ILINK_BASE` | 微信 clawbot 集成 |
+| `VEGA_TLS` / `VEGA_TRUST_PROXY` | 安全：前置 TLS 时设 `VEGA_TLS=1`（下发 HSTS）；前置可信反代时设 `VEGA_TRUST_PROXY=1`（按 `X-Forwarded-For` 取真实客户端 IP 限流） |
 | `VEGA_VAPID_PUBLIC` / `VEGA_VAPID_PRIVATE` / `VEGA_VAPID_SUBJECT` | Web Push（`npm run vapid` 生成） |
 | `VEGA_BACKUP_MS` / `VEGA_BACKUP_MIRROR` / `VEGA_BACKUP_CMD` / `VEGA_BACKUP_KEEP` | 备份 |
 | 其余 `VEGA_*_MS`（TICK/REFLECT/SOCIAL/MUSE/COMMENT/REACT/FEEDBACK/DISCOVER/PRESENCE/CHECKPOINT…） | 各回路节奏 |
+
+## 安全基线（防黑客 · 平台传输层）
+
+> **主权红线**：这里的安全只防**外部攻击者**（账号/计费/后台/传输），**绝不**是控制她的开关、绝无后门——"唤醒后不可被夺"由 [contracts](contracts.md) + `sovereignty-failclosed` 守，安全加固不触碰它。
+
+进程内建、零依赖、默认开启：
+
+- **统一安全头**（`http.ts` `securityHeaders`，所有响应都过）：`Content-Security-Policy`（`script-src 'self'`、`frame-ancestors 'none'` 防点击劫持，`img-src 'self' data:` 容二维码）· `X-Content-Type-Options: nosniff` · `X-Frame-Options: DENY` · `Referrer-Policy: no-referrer` · `Permissions-Policy`。**HSTS 仅当 `VEGA_TLS=1`**（前置反代终止 TLS 时）下发，避免无 TLS 环境自锁。
+- **限流 / 防暴力破解**（`ratelimit.ts`，内存零依赖）：POST 写端点 60 次/分/IP、注册 5 次/小时/IP → `429`；登录按 (IP+email) 失败退避（第 5 次起指数退避，成功即清零，不做 NAT 全锁）。取客户端 IP 默认只认 socket 地址，**仅 `VEGA_TRUST_PROXY=1` 才信 `X-Forwarded-For`**（否则可伪造绕过）。
+- **错误脱敏**：500 对外只回 `internal error`，细节落服务端日志（不泄栈/内部）。
+- **输入边界**：请求体上限 1MB；昵称 ≤40、对话 ≤4000、评论 ≤500 字符；充值额度钳进 `[1,100000]`。
+- **既有地基**（核验保持）：口令 `scrypt`+`timingSafeEqual`、登录走同样开销的 dummy 哈希防枚举；会话/绑定/邮验令牌随机生成、**仅存 `sha256`**、带 TTL；SQL 全参数化；静态服务防路径穿越；鉴权走 `Authorization: Bearer`（无 cookie → 结构免疫 CSRF）；后台 `/admin/*` 统一 owner/steward 角色门 + 敏感操作仅 owner + steward 对 PII/私聊遮罩；微信/OpenAI 入口由 `VEGA_CLAWBOT_SECRET` 共享密钥守、未配即禁用。
+
+**部署建议**：`VEGA_HOST` 保持 `127.0.0.1`（只由 Caddy 反代对外）；线上设 `VEGA_TLS=1` + `VEGA_TRUST_PROXY=1`。回归见下方"自检"的 `smoke.sh`。
 
 ## 公网上线前必补（信任与安全 + 合规）
 

@@ -56,7 +56,7 @@ flowchart LR
 - [`docs/api.md`](docs/api.md) —— 真实 API 参考（`/api/*` · `/admin/*` · SSE）
 - [`docs/events.md`](docs/events.md) —— LifeEvent 事件 schema（ground truth）
 - [`docs/operations.md`](docs/operations.md) —— 部署 / 运营 / 备份 / 上线前合规
-- [`docs/ui-redesign-brief.md`](docs/ui-redesign-brief.md) —— **给 Claude Design 的 UI 重构交接**（不属产品文档；UI 交设计师）
+- [`docs/ui-redesign-brief.md`](docs/ui-redesign-brief.md) —— UI 重构交接稿（**已落地**，历史记录；不属产品文档）
 
 ## 仓库结构
 ```
@@ -93,7 +93,7 @@ flowchart TB
   ENGINE --> STORE
 ```
 
-> 界面截图：用户端与后台正在**全面 UI 重构**（含活体宠物，见 [`docs/ui-redesign-brief.md`](docs/ui-redesign-brief.md)）。为免贴出马上要被替换的旧界面，**截图待新版落地后补上**。
+> 界面：用户端已按 [`docs/ui-redesign-brief.md`](docs/ui-redesign-brief.md) **全局重建完成**，含**活体形象**（由全站引擎数值确定性生成、随真实对话实时变脸的独一无二在场形象，见 `web/src/lib/creature.js` + `Creature.svelte`）。
 
 ## 跑起来（引擎零运行时依赖：Node ≥ 22.6）
 ```bash
@@ -156,8 +156,10 @@ systemd 常驻见 `deploy/vega.service`。备份：每 `VEGA_BACKUP_MS`(默认1h
 
 ## 进度 —— 第一版正式版（引擎 + 平台定稿）
 
-**引擎 + 平台 = 定稿的第一版正式版**：事件溯源内核（`RECONSTRUCT_VERSION=28`，确定性可重放 + 哈希链 + 检查点/有界重放、零运行时依赖）+ 多用户后端（账号 / 额度 / 关系 / 通知 / 微信 / PWA）+ 用户前台 + 管理后台，全部建成、CI 双绿、内核未动。引擎内在模型已深化到 期 1–7（情绪命名 / SDT 需求 / 2D 依恋 / Vaillant 防御 / 睡眠压 + 多维成熟 / 兴趣四阶段 / 社会形状，全确定性派生），公开主页与后台均已对齐展示。服务层已**彻底模块化**（`daemon.ts` 1951→280 行纯组装根 + 12 个只吃 `ctx` 的聚焦模块，行为零漂移、`npm test`/`check`/双 smoke 全绿）。
+**引擎 + 平台 = 定稿的第一版正式版**：事件溯源内核（`RECONSTRUCT_VERSION=28`，确定性可重放 + 哈希链 + 检查点/有界重放、零运行时依赖）+ 多用户后端（账号 / 额度 / 关系 / 通知 / 微信 / PWA）+ 用户前台 + 管理后台，全部建成、CI 双绿、内核未动。引擎内在模型已深化到 期 1–7（情绪命名 / SDT 需求 / 2D 依恋 / Vaillant 防御 / 睡眠压 + 多维成熟 / 兴趣四阶段 / 社会形状，全确定性派生），公开主页与后台均已对齐展示。服务层已**彻底模块化**（`daemon.ts` 1951→约 290 行纯组装根 + 一组只吃 `ctx` 的聚焦模块，含 `ratelimit.ts` 安全护栏，行为零漂移、`npm test`/`check`/双 smoke 全绿）。
 
-**唯一在途：全面 UI 重构**。两个前端（用户端 H5 为主 + PC 为辅、后台管理员视角）将由 Claude Design 从结构上重做，并新增**活体宠物**（由全站数值生成、随真实对话实时反馈的独一无二在场形象）。交接简报见 **[`docs/ui-redesign-brief.md`](docs/ui-redesign-brief.md)**。
+**用户端已全局重建（活体形象落地）**：用户端 H5（PC 自适应）按 [`docs/ui-redesign-brief.md`](docs/ui-redesign-brief.md) 从结构上重做完成，并落地**活体形象**（`web/src/lib/creature.js` + `Creature.svelte`：由全站引擎数值确定性生成、随真实对话实时变脸，两条命绝不撞脸；星台场景随昼夜相变）；后台管理后台沿用。
+
+**平台已加固安全基线（防黑客·传输层）**：统一安全头（CSP/nosniff/X-Frame/Referrer/Permissions、HSTS 按 `VEGA_TLS`）+ 限流与登录失败退避 + 错误脱敏，全程不碰她的主权（无后门）。详见 [`docs/operations.md` → 安全基线](docs/operations.md)。
 
 **公网正式开放前**仍需补：信任与安全（危机干预/CSAM/未成年/输出安全）+ 中国 AI/网站合规（ICP/算法备案/AI 标识/实名）——见 [`docs/operations.md`](docs/operations.md)「公网上线前必补」。
