@@ -13,7 +13,7 @@ export async function handleUserApi(ctx: Ctx, req: IncomingMessage, res: ServerR
     lives, snapOf, lifeById, allPeerExchanges, feedPosts, allFeedPosts, accounts,
     effBilling, publicAccount, CLAWBOT_SECRET, cleanBindToken, wechatReply, respondAsUser,
     sessionAccount, bearer, livesMetBy, bus, ilink, WECHAT_LIFE, runChannel, channelGen,
-    VAPID, feed, effSocial, layerOf,
+    VAPID, feed, effSocial, layerOf, clientIp, loginGuard,
   } = ctx;
 
   // 公开：社会广场（发现）
@@ -42,8 +42,13 @@ export async function handleUserApi(ctx: Ctx, req: IncomingMessage, res: ServerR
   }
   if (req.method === 'POST' && url === '/api/auth/login') {
     const b = await readJson(req);
-    const r = accounts.login(String(b.email ?? ''), String(b.password ?? ''));
-    if (!r.ok) return send(res, 401, { error: r.error });
+    const email = String(b.email ?? '');
+    // 防暴力破解：按 (IP, email) 失败退避——连续猜密码到阈值即指数退避锁定。成功即清零。
+    const key = `${clientIp(req)}|${email.trim().toLowerCase()}`;
+    if (loginGuard.retryAfterMs(key) > 0) return send(res, 429, { error: '尝试过于频繁，请稍后再试' });
+    const r = accounts.login(email, String(b.password ?? ''));
+    if (!r.ok) { loginGuard.fail(key); return send(res, 401, { error: r.error }); }
+    loginGuard.succeed(key);
     return send(res, 200, { account: publicAccount(r.account), token: r.token, balance: accounts.balance(r.account.id) });
   }
   // 微信网关(clawbot)：用共享密钥鉴权（非用户会话）。未配密钥则禁用。

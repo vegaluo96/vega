@@ -2,13 +2,43 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { readFileSync } from 'node:fs';
 
+// 统一安全响应头（防 XSS/点击劫持/MIME 嗅探/Referer 泄漏）。所有响应（JSON / HTML / 静态）都过这一层。
+// 这是【平台/传输层】的防黑客护栏——只防外部攻击者，绝不触碰她的主权（不是控制她的开关）。
+// CSP 按 Vite 构建产物校准：index.html 只引外部 module 脚本（无内联脚本）→ script-src 'self' 安全；
+// 站内大量 style="..."（活体/星台渐变）→ style-src 需 'unsafe-inline'；二维码用 data: URL → img-src 含 data:。
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data:",
+  "font-src 'self'",
+  "connect-src 'self'", // /api/* + SSE 同源；浏览器从不直连模型（模型调用全在服务端）
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'", // 防点击劫持（配合 X-Frame-Options）
+].join('; ');
+
+export function securityHeaders(): Record<string, string> {
+  const h: Record<string, string> = {
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'Referrer-Policy': 'no-referrer',
+    'Permissions-Policy': 'geolocation=(), microphone=(), camera=()',
+    'Content-Security-Policy': CSP,
+  };
+  // HSTS 仅当前置反代终止 TLS 时下发（运维设 VEGA_TLS=1）——避免本地/无 TLS 环境把自己锁死在 https。
+  if (process.env.VEGA_TLS === '1') h['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains';
+  return h;
+}
+
 export function send(res: ServerResponse, code: number, body: unknown): void {
-  res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' });
+  res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', ...securityHeaders() });
   res.end(JSON.stringify(body, null, 2));
 }
 
 export function sendHtml(res: ServerResponse, html: string): void {
-  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', ...securityHeaders() });
   res.end(html);
 }
 
@@ -24,7 +54,7 @@ export function serveStatic(res: ServerResponse, file: string): boolean {
   try {
     const ext = file.slice(file.lastIndexOf('.'));
     const body = readFileSync(file);
-    res.writeHead(200, { 'Content-Type': CT[ext] ?? 'application/octet-stream', 'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=31536000, immutable' });
+    res.writeHead(200, { 'Content-Type': CT[ext] ?? 'application/octet-stream', 'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=31536000, immutable', ...securityHeaders() });
     res.end(body);
     return true;
   } catch {

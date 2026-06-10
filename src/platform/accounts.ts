@@ -182,8 +182,9 @@ export function createAccountStore(path = ':memory:', opts: AccountStoreOptions 
       const id = genId();
       const { salt, hash } = hashPassword(password);
       const t = now();
+      const safeHandle = (handle.trim() || e.split('@')[0]).slice(0, 40); // 昵称上限 40 字符——防超长写库 / 展示注入面
       db.prepare('INSERT INTO users(id,email,email_verified,pass_salt,pass_hash,handle,role,status,created_at,last_active_at) VALUES(?,?,0,?,?,?,?,?,?,?)')
-        .run(id, e, salt, hash, handle.trim() || e.split('@')[0], roleFor(e), 'active', t, t);
+        .run(id, e, salt, hash, safeHandle, roleFor(e), 'active', t, t);
       const grant = (typeof starterOverride === 'number' && Number.isFinite(starterOverride) && starterOverride >= 0) ? Math.round(starterOverride) : starter;
       if (grant > 0) credit(id, grant, 'starter_grant');
       return { ok: true, account: toAccount(userById(id) as UserRow) };

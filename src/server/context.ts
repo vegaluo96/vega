@@ -9,6 +9,7 @@ import {
   type Account, type ApiyiConfig, type DerivedSnapshot, type DurableEventStore,
   type MessageSentPayload, type PerceiverConfig, type RState,
 } from '../index.ts';
+import type { LoginGuard } from './ratelimit.ts';
 
 // 一个生命体的运行时句柄：日志 + 缓存活态 + 各回路的"上次发生"墙钟 + 健康采样环。
 export interface Life {
@@ -100,6 +101,8 @@ export interface Ctx {
   bearer(req: IncomingMessage): string;
   sessionAccount(req: IncomingMessage): Account | null;
   publicAccount(a: Account): Record<string, unknown>;
+  clientIp(req: IncomingMessage): string; // 取客户端 IP（按 VEGA_TRUST_PROXY 决定信不信 XFF）——限流/登录退避用
+  loginGuard: LoginGuard; // 登录失败退避（防暴力破解）
 
   // —— 省 token 闲置门控（"有没有听众"）——
   audiencePresent(): boolean;

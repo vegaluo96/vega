@@ -22,6 +22,7 @@ import {
   type Account,
 } from '../index.ts';
 import { send, sendHtml, serveStatic, readJson, FALLBACK_HTML } from './http.ts';
+import { createRateLimiter, createLoginGuard, clientIp } from './ratelimit.ts';
 import type { Ctx, Life } from './context.ts';
 import { handleUserApi } from './routes/user.ts';
 import { handleAdmin } from './routes/admin.ts';
@@ -107,6 +108,11 @@ const bearer = (req: IncomingMessage): string => {
 };
 const sessionAccount = (req: IncomingMessage): Account | null => accounts.authenticate(bearer(req));
 const publicAccount = (a: Account): Record<string, unknown> => ({ id: a.id, handle: a.handle, role: a.role, email: a.email, emailVerified: a.emailVerified });
+// 限流 / 防暴力破解（平台护栏，见 ./ratelimit.ts）。仅当前置可信反代时才信 X-Forwarded-For。
+const TRUST_PROXY = process.env.VEGA_TRUST_PROXY === '1';
+const rateLimiter = createRateLimiter();
+const loginGuard = createLoginGuard();
+const ipOf = (req: IncomingMessage): string => clientIp(req, TRUST_PROXY);
 setupPush({ bus, accounts, VAPID, VAPID_SUBJECT }); // Web Push 订阅（reach_out → 推送）；accounts 已就绪
 // 生命体子系统（实现见 ./lives.ts）：名册/句柄/有界重放(snapOf)/创世接生(boot·birthLife)/读助手/聚合器。
 // 解构出的名字与原定义一致 → 下方 respondAsUser/createWechat/ctx/回路/shutdown 直接引用，无需改写。
@@ -141,7 +147,7 @@ const ctx: Ctx = {
   respondAsUser, wechatReply, runChannel, birthLife, cleanBindToken,
   allFeedPosts, feedPosts, allPeerExchanges,
   reachState, pickRecentWorld, pickInsightPair, lastUserMsgMs, adminActivity,
-  bearer, sessionAccount, publicAccount, audiencePresent: presence.audiencePresent, idleMs: presence.idleMs,
+  bearer, sessionAccount, publicAccount, clientIp: ipOf, loginGuard, audiencePresent: presence.audiencePresent, idleMs: presence.idleMs,
   reachOutPending, channelGen, creditHintAt, scheduleWorld: world.scheduleWorld,
   VAPID, VAPID_SUBJECT, WEB_DIST, ADMIN_DIST, CLAWBOT_SECRET, IDLE_GATE_MS, WECHAT_LIFE, REL, peerId,
 };
@@ -198,6 +204,15 @@ const server = createServer(async (req, res) => {
       return sendHtml(res, FALLBACK_HTML);
     }
 
+    // 限流（防撞库/刷注册/刷接口/轻量 DoS）：仅 POST 写端点按 IP 固定窗口；读端点/SSE/静态不限。
+    // 登录的"失败退避"在 routes/user.ts 内（那里才有 email）；这里是粗粒度的总闸。
+    if (req.method === 'POST' && (url.startsWith('/api/') || url.startsWith('/admin/'))) {
+      const ip = ipOf(req);
+      const okGeneral = rateLimiter.take(`w:${ip}`, 60, 60_000);          // 每 IP 每分钟 60 次写
+      const okRegister = url !== '/api/auth/register' || rateLimiter.take(`reg:${ip}`, 5, 3_600_000); // 注册更严：5 次/小时/IP
+      if (!okGeneral || !okRegister) return send(res, 429, { error: '请求过于频繁，请稍后再试' });
+    }
+
     // ── 平台 API（多用户，会话鉴权，§平台 v1）。与 owner 旧面板路由并存。 ──
     // 业务路由：用户态 /api/* 与管理态 /admin/* 各自成模块，只吃 ctx（见 routes/）。
     // 放在 try 内 await：handler 内抛错照样落到下方 500 兜底，行为与内联时一致。
@@ -209,7 +224,9 @@ const server = createServer(async (req, res) => {
     // 用户端走 /api/*，后台走 /admin/*；告别(farewell)的引擎能力 endRelationship 仍在，待 UI 重构后接 /api 正式路由。
     send(res, 404, { error: 'not found' });
   } catch (e) {
-    send(res, 500, { error: String(e) });
+    // 错误脱敏（防信息泄露）：对外只回通用文案，内部细节落服务端日志。
+    console.error('[vega] request error:', e);
+    send(res, 500, { error: 'internal error' });
   }
 });
 
@@ -276,5 +293,5 @@ for (const ch of _channels) runChannel(ch.userId);
 server.listen(PORT, HOST, () => {
   console.log(`[vega] 醒着，活在 http://${HOST}:${PORT}   生命体：${lives.map((l) => l.id).join(', ')}   嘴=${mouth.id}   心跳 ${TICK_MS}ms`);
   if (lives.length >= 2) console.log(`[vega] 社会层开启：同类每 ${SOCIAL_MS}ms 自主寒暄一次。`);
-  console.log(`[vega] 网页 http://${HOST}:${PORT}/  · 面板 /panel  · 跟某个她说话 curl -s localhost:${PORT}/${lives[0].id}/say -d '{"content":"你好"}'`);
+  console.log(`[vega] 用户端 http://${HOST}:${PORT}/  · 后台 /admin（或 admin.* 域名）· 健康 /health`);
 });
