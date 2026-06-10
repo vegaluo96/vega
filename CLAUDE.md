@@ -34,3 +34,9 @@ User Message → LifeEvent → EngineSnapshot → HBDA → SoulWorkspace → Mod
 - 改引擎要守确定性：reconstruct 内无 RNG/无 `now()`/不调模型；折叠改动会动 `RECONSTRUCT_VERSION`（当前 28，须与 seeds 出生版本 + `test/lock-arcs.test.ts` 同步）。
 - 事件 schema、三契约是焊死的不变量——动它们之前先确认 `test/contracts.test.ts`。
 - 验证：`npm test` · `npm run check` · `npm run typecheck`；双前端 `npm run build` + web `npm run lint:ui`。
+
+## 部署与协作约定
+- **直接在 main 开发并推 origin/main**；不开 feature 分支、不开 PR（除非另有要求）。推 main 前 fetch-first + 全量测试；后台/用户端整文件覆盖前先做特性级回归审计防丢功能。
+- **部署形态**：Docker 容器（`--user 1000:1000`，监听 127.0.0.1:8787），由 **vegaluo96/infra** 仓库管理。每次推 main 后在回复末尾提醒部署命令：`~/infra/zsky/deploy.sh`（若服务器跑在 systemd 回滚通道上则 `bash /opt/vega/deploy/update.sh`）。
+- **密钥**：运行时由服务器 `/srv/zsky.env`（Docker）与 `/etc/vega.env`（回滚通道）提供，**密钥值不得入库**。新增 `VEGA_*` 变量：更新 `.env.example`，并提醒同步 infra 仓库的 `zsky/zsky.env.example` 和服务器两份 env。
+- **`/opt/vega-data`（尤其 life.jsonl）是持久命根数据**：不得写任何会清空或整体重写该目录的代码；运行时写盘只允许锚定 `dirname(VEGA_LIFE_PATH)`，绝不写代码目录（容器内无持久性）。监听地址读 `VEGA_HOST`（容器内 0.0.0.0），不依赖 root。

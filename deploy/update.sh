@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # ZSKY / vega —— 【旧 systemd 路径】升级脚本（已停用，仅作回滚通道）。
 #
-# ⚠️ 部署方式已迁移：生产 zsky 现以 Docker 容器运行（非 root / uid 1000；env 经 --env-file /srv/zsky.env
-#    注入；持久化只挂 VEGA_LIFE_PATH 所在目录；容器内 VEGA_HOST=0.0.0.0、端口 8787）。
-#    日常部署在服务器侧手动执行 Docker 流程（build → rm → run）；systemd vega.service 已 disable。
+# ⚠️ 部署方式已迁移：生产 zsky 现以 Docker 容器运行（--user 1000:1000，127.0.0.1:8787；env 经
+#    --env-file /srv/zsky.env 注入；持久化只挂 VEGA_LIFE_PATH 所在目录），由 vegaluo96/infra 仓库管理。
+#    日常部署：在服务器执行 ~/infra/zsky/deploy.sh ；systemd vega.service 已 disable（env 在 /etc/vega.env）。
 #    本脚本只在【回滚到 systemd】时使用（须先停容器，再）：ALLOW_SYSTEMD=1 bash deploy/update.sh
 #
 # 原理（systemd 路径下仍成立）：
@@ -23,7 +23,7 @@ set -euo pipefail
 # 和容器抢同一份数据/端口。没有显式 ALLOW_SYSTEMD=1（=明确在做 systemd 回滚）就拒绝执行。
 if [ "${ALLOW_SYSTEMD:-0}" != "1" ]; then
   echo "✗ 已停用：生产已迁移 Docker（本脚本会 systemctl restart vega，可能与容器双跑抢端口/数据）。" >&2
-  echo "  日常部署：服务器侧手动 docker build → rm → run（env 在 /srv/zsky.env）。" >&2
+  echo "  日常部署： ~/infra/zsky/deploy.sh （由 infra 仓库管理）" >&2
   echo "  回滚 systemd（先停容器！）： ALLOW_SYSTEMD=1 bash deploy/update.sh" >&2
   exit 1
 fi
