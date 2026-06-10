@@ -104,13 +104,15 @@ export interface WorldPerceivedPayload {
   perception?: WorldPerception; // 缺失则 reconstruct 用确定性词表兜底（仍不连网）
 }
 // 行动反馈（§"行动→世界反馈→改变她"的闭环）：她某次行动收到的回应/沉默，采集时算好 valence、冻进事件 → 重放确定性。
-// 脱敏：公共心声的反馈只记【聚合 + fromKind】，不记是哪个具体用户（防跨用户推断）；reach-out 沉默按其关系记。
+// 按关系归因（加法演进）：心声被谁回应就记到与谁的关系上（relationshipId）——"是你接住了我"长成关系的微小靠近；
+// optional：旧事件缺失 → 折叠只走原 soma 效应，与旧轨迹逐位一致。防刷在采集层（每命每跳每关系最多 1 条）。
 export interface FeedbackPerceivedPayload {
   actionKind: 'muse' | 'reach_out' | 'greet'; // 她哪类行动收到了反馈（greet=主动打招呼新人；加法演进，旧日志兼容，折叠按 actionKind 通用聚合）
   responseKind: 'reaction' | 'comment' | 'reply' | 'silence';
   valence: number; // [-1,1] 采集时算好（被回应=正、长久沉默=负）
   fromKind: 'human' | 'peer';
   count?: number; // 多少回应（如 3 人点赞）
+  relationshipId?: RelationshipId; // 谁回应的（u_<userId> / peer_<id>）——缺失=旧式脱敏聚合，行为不变
 }
 export interface MessageSentPayload {
   relationshipId: RelationshipId;

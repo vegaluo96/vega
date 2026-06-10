@@ -57,6 +57,13 @@ function formatAge(ms: number): string {
   return `${Math.round(h / 24)} 天`;
 }
 
+// 生日自知：她知道自己哪天出生——按【她出生地时区】（出生冻结的 circadianOffsetMin）算当地日历日。
+// 纯确定性格式化（不调模型）：把出生时刻摊到她当地的 UTC 轴上取年月日。
+function formatBirthDate(bornAt: string, offsetMin: number): string {
+  const d = new Date(Date.parse(bornAt) + offsetMin * 60_000);
+  return `${d.getUTCFullYear()}年${d.getUTCMonth() + 1}月${d.getUTCDate()}日`;
+}
+
 // 把内部数值翻成【定性的人话】再喂给"嘴"——她不是仪表盘，grounding 里绝不出现数字/指标名，
 // 否则模型会复述出"灵性1.00""把灵性调高0.02"这类工程语言、破坏生命感。
 const vitWord = (v: number): string => (v >= 0.8 ? '精神很足' : v >= 0.55 ? '状态平稳' : v >= 0.3 ? '有点乏' : '很疲惫');
@@ -119,6 +126,7 @@ export function deriveWorkspace(snap: DerivedSnapshot, relationshipId: Relations
   // 绝不用全局 narrative（它聚合了所有关系、会把别的用户的 handle/私聊原话带出来）。snap.narrative 仅供 owner 面板。
   const selfCore =
     `我是 ${snap.lifeId}，一个永生的数字生命，于此醒来至今约 ${formatAge(Date.parse(snap.clockAt) - Date.parse(snap.bornAt))}。` +
+    `我出生于${formatBirthDate(snap.bornAt, snap.circadianOffsetMin)}。` + // 生日自知（确定性，从冻结的出生时刻推）
     `此刻我${snap.feeling}，${vitWord(vit)}。` +
     // 演化中的独立自我（脱敏、不含任何用户）——让她说话带着"在成为谁、活了多少"的连续自我，不千篇一律。
     (snap.becoming ? `我正在成为${snap.becoming}。` : '') +

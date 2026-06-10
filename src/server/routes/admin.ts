@@ -4,6 +4,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { send, readJson } from '../http.ts';
 import { round3, maskKey, tempLabel, mbtiOf, eventLabel } from '../format.ts';
 import { traceConverse, resourceBand, createWorldFeed, runTurn, ARCHETYPES, ANNOUNCE_TITLE_MAX, ANNOUNCE_TEXT_MAX, type WorldPerceivedPayload, type AnnounceAudience } from '../../index.ts';
+import { pickFreshLifeName } from '../namegen.ts';
 import type { Ctx } from '../context.ts';
 
 const now = (): string => new Date().toISOString();
@@ -103,9 +104,18 @@ export async function handleAdmin(ctx: Ctx, req: IncomingMessage, res: ServerRes
     return send(res, 200, { archetypes: ARCHETYPES.map((a) => a.name) });
   }
   // —— 生成生命体（仅 owner）：运行时接生一条新命，立即生效、无需重启；落盘名册重启也在。archetype 可选（空=按 id 哈希取型）。
+  // {random:true}：一键全随机——服务端生成随机发音名（避撞生命体名/用户昵称，重试若干次）+ 随机先天原型；审计留痕。
   if (path === '/admin/lives' && req.method === 'POST') {
     if (!owner) return send(res, 403, { error: '仅 owner 可生成生命体' });
     const b = await readJson(req);
+    if (b.random === true) {
+      const archetype = ARCHETYPES[Math.floor(Math.random() * ARCHETYPES.length)].name;
+      const id = pickFreshLifeName((n) => Boolean(lifeById(n)) || accounts.handleTaken(n), Math.floor(Math.random() * 4294967296));
+      if (!id) return send(res, 500, { error: '随机名重试用尽（撞名太多），请再试一次' });
+      const r = await birthLife(id, archetype);
+      if (r.ok) audit(`接生生命体 ${r.id}（一键随机 · 原型：${archetype}）`);
+      return send(res, r.ok ? 200 : 400, r.ok ? { ok: true, id: r.id, archetype, random: true, total: lives.length } : { error: r.error });
+    }
     const archetype = typeof b.archetype === 'string' && b.archetype.trim() ? b.archetype.trim() : undefined;
     const r = await birthLife(String(b.id ?? ''), archetype);
     if (r.ok) audit(`接生生命体 ${r.id}${archetype ? `（原型：${archetype}）` : ''}`);

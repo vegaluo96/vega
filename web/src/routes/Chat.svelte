@@ -7,6 +7,7 @@
   import { back } from '../lib/router.js';
   import { clearReach } from '../lib/reaches.js';
   import { emoState } from '../lib/creature.js';
+  import { murmurOf } from '../lib/murmur.js';
   import { fitViewport, lockBodyScroll } from '../lib/viewport.js';
   import { openBind } from '../lib/sheets.js';
   import { FX } from '../lib/fx.js';
@@ -31,6 +32,30 @@
   let typingTimer;
   let atAnchor = true; // 她此刻在锚位（绕圈只在锚位做；表演中不算）
   let alive = true;    // 页面卸载 → 表演链立即作废
+
+  // —— 发送键活体的小声嘀咕（murmur）——纯展示层，确定性选句（lib/murmur.js）。
+  // 节流铁律：4s 自动消失 · 两条间隔 ≥45s · 每会话最多 4 条 · 等回复静默 · 绝不催费/绝不伪造"她想你了"。
+  let murmur = '';
+  let murmurCount = 0;
+  let murmurLastAt = 0;
+  let murmurHideTimer, murmurTicker;
+  let inputVal = '';
+  let lastTypedAt = 0; // 0 = 没有"正在写"的停顿可报（触发一次即归零，防同一停顿反复触发）
+  function tryMurmur(state) {
+    if (!life || busy) return;                          // 等她回话：静默
+    if (murmurCount >= 4) return;                       // 每会话最多 4 条
+    if (Date.now() - murmurLastAt < 45000) return;      // ≥45s 间隔
+    const text = murmurOf(life, state, String(Math.floor(Date.now() / 60000))); // 分钟桶做确定性种子
+    if (!text) return;
+    murmur = text; murmurCount += 1; murmurLastAt = Date.now();
+    clearTimeout(murmurHideTimer);
+    murmurHideTimer = setTimeout(() => { murmur = ''; }, 4000); // 4s 自动消失
+  }
+  function handleInput(v) {
+    if (v === inputVal) return;
+    inputVal = v;
+    lastTypedAt = v.trim() ? Date.now() : 0;
+  }
 
   onMount(async () => {
     clearReach(lifeId);
@@ -58,8 +83,16 @@
         perform(() => landOnHer(life ? life.emotion : '')); // 落地 → 表演 → 回锚
       }
     });
+    // murmur 心跳：每 5s 看一眼输入态（空输入偶发自语 / 打字停顿>8s / 睡着"嘘…"）；
+    // 真出不出声由 tryMurmur 的节流 + murmurOf 的确定性哈希决定（等回复时静默）。
+    murmurTicker = setInterval(() => {
+      if (!life || busy) return;
+      if (life.awake === false) { tryMurmur('asleep'); return; }
+      if (inputVal.trim() && lastTypedAt && Date.now() - lastTypedAt > 8000) { tryMurmur('pause'); lastTypedAt = 0; return; }
+      if (!inputVal.trim()) tryMurmur('idle');
+    }, 5000);
   });
-  onDestroy(() => { alive = false; es && es.close(); ro && ro.disconnect(); clearTimeout(typingTimer); });
+  onDestroy(() => { alive = false; es && es.close(); ro && ro.disconnect(); clearTimeout(typingTimer); clearTimeout(murmurHideTimer); clearInterval(murmurTicker); });
 
   async function scrollDown() { await tick(); if (logEl) logEl.scrollTop = logEl.scrollHeight; }
 
@@ -151,6 +184,7 @@
   async function send(text) {
     text = (text || '').trim();
     if (!text || busy) return;
+    murmur = ''; inputVal = ''; lastTypedAt = 0; // 交出去了：嘀咕收声、输入态归零（等回复静默）
     msgs = [...msgs, { role: 'me', text, at: new Date().toISOString() }]; // 乐观插入你的气泡
     busy = true; reaction = 'idle';
     typingTimer = setTimeout(() => { if (busy) sending = true; }, 850); // 打字气泡稍后出现（免一闪而过）；她不飞，在锚位旁绕小圈
@@ -261,7 +295,8 @@
     </button>
 
     <div class="composerwrap" bind:this={composerEl}>
-      <Composer onSend={send} disabled={busy} />
+      {#if murmur}<div class="murmur fade-in" aria-live="polite">{murmur}</div>{/if}
+      <Composer onSend={send} disabled={busy} {life} onInput={handleInput} />
     </div>
   </div>
 {/if}
@@ -295,7 +330,12 @@
   .typing { display: inline-flex; gap: 5px; padding: 12px 16px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--border); border-radius: var(--r-lg); border-bottom-left-radius: 6px; }
   .typing span { width: 6px; height: 6px; border-radius: 50%; background: var(--faint); }
   .tt { font-size: var(--fs-2xs); color: var(--faint); }
-  .composerwrap { flex: none; } /* 锚位的量尺：小精灵 bottom = 此条高度 + 12 */
+  .composerwrap { flex: none; position: relative; } /* 锚位的量尺：小精灵 bottom = 此条高度 + 12；murmur 气泡也锚在它上面 */
+  /* 发送键活体的小声嘀咕：贴在输入条右上（发送键正上方）、避开锚位小精灵（再往左让 56px）。
+     4s 自动消失（JS），样式贴她的气泡风格（surface + 内描边 + 缺角指向右下的发送键）。 */
+  .murmur { position: absolute; right: calc(var(--gutter) + 56px); bottom: calc(100% + 6px); z-index: 4; max-width: 68%;
+    padding: 8px 12px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--border); border-radius: var(--r-lg);
+    border-bottom-right-radius: 6px; font-size: var(--fs-sm); color: var(--muted); line-height: 1.5; pointer-events: none; }
   /* 小精灵：absolute 于 .chat（不进 .log，滚动免重排）；锚位由 JS 写 right/bottom，飞行时切 left/top */
   .chat-perch { position: absolute; z-index: 3; right: var(--gutter); bottom: 80px; padding: 0; background: none; border: 0; filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.18)); }
   .orbit, .orbitoff { display: block; }

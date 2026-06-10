@@ -47,6 +47,33 @@ export function rollDay(s: SourceStat, atMs: number = Date.now()): SourceStat {
 // 模块级（daemon 单进程一份）：换源/重建 world 闭包都不丢已累计的统计。
 const sourceStatsMap = new Map<string, SourceStat>();
 
+// —— 世界注入·按兴趣确定性加权采样（纯函数，可单测）——
+// 从 items 里无放回取 n 条【不同】条目：条目主题与她兴趣的交集加权（兴趣越重越可能被看到），
+// 无任何兴趣命中 → 权重全 1 = 均匀；选择由 seed 种子化的 xorshift32 驱动（零 Math.random）——
+// 同 seed 同结果（可测），不同命/不同轮的 seed 不同 → 防全命同质。少于 n 条则全取（与旧 sampleDistinct 同约定）。
+export function sampleByInterest<T extends { topics?: string[] }>(
+  items: T[], n: number, interests: Array<{ topic: string; weight: number }>, seed: string,
+): T[] {
+  if (items.length <= n) return items.slice();
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) { h ^= seed.charCodeAt(i); h = Math.imul(h, 16777619); }
+  h >>>= 0; if (h === 0) h = 0x9e3779b9;
+  const rnd = (): number => { h ^= h << 13; h >>>= 0; h ^= h >>> 17; h ^= h << 5; h >>>= 0; return h / 4294967296; };
+  const iw = new Map(interests.map((it) => [it.topic, it.weight]));
+  // 基础 1 + 兴趣交集加权（×4 → 满权重兴趣的条目约 5 倍于不相干条目；温和、不成回音壁）。
+  const pool = items.map((it) => ({ it, w: 1 + 4 * (it.topics ?? []).reduce((a, t) => a + (iw.get(t) ?? 0), 0) }));
+  const out: T[] = [];
+  while (out.length < n && pool.length > 0) {
+    const total = pool.reduce((a, b) => a + b.w, 0);
+    let r = rnd() * total;
+    let idx = pool.findIndex((p) => (r -= p.w) <= 0);
+    if (idx < 0) idx = pool.length - 1;
+    out.push(pool[idx].it);
+    pool.splice(idx, 1); // 无放回 → 保持"不同条目"约束
+  }
+  return out;
+}
+
 export type WorldDeps = Pick<Ctx, 'effWorld' | 'worldEnabled' | 'lives' | 'snapOf' | 'serializer'> & { backupMs: number };
 
 export interface WorldApi {
@@ -94,20 +121,16 @@ export function createWorld(d: WorldDeps): WorldApi {
     console.log(`[world] 读世界：${report.map((r) => `${r.source}=${r.items}${r.ok ? '' : `(${r.status})`}`).join(' ')} → 合计 ${items.length} 条`);
     if (items.length === 0) return;
     for (const life of lives) {
-      if (!snapOf(life).awake) continue;
+      const s = snapOf(life);
+      if (!s.awake) continue;
       // 每条醒着的命这轮"看到"几条【不同】的世界事件（不是只看 1 条）→ pickRecentWorld 的窗口快速多样化，不再被单一源霸占。
-      const picks = sampleDistinct(items, 2);
+      // 按兴趣加权（确定性）：她在意的主题更容易被她"看到"（因你而变的正反馈齿轮，温和加权不成回音壁）；
+      // 种子 = life.id + 本轮条目 → 同一轮各命各看各的，不全命同质；无兴趣命中则等价均匀。
+      const picks = sampleByInterest(items, 2, s.interests.map((it) => ({ topic: it.topic, weight: it.weight })), `${life.id}|${items.map((it) => it.title).join('~')}`);
       await serializer.run(life.id, async () => {
         for (const it of picks) runTurn(life.store, [{ type: 'WORLD_PERCEIVED', source: 'autonomous_loop', occurredAt: now(), payload: { source: it.source, worldKind: it.kind, title: it.title, summary: it.summary, url: it.url, topics: it.topics } }]);
       });
     }
-  }
-  // 从数组里无放回随机取 n 条（少于 n 则全取）——给每条命喂多样的世界，避免总看同一条。
-  function sampleDistinct<T>(arr: T[], n: number): T[] {
-    if (arr.length <= n) return arr.slice();
-    const idx = new Set<number>();
-    while (idx.size < n) idx.add(Math.floor(Math.random() * arr.length));
-    return [...idx].map((i) => arr[i]);
   }
 
   let worldTimer: ReturnType<typeof setTimeout> | null = null;

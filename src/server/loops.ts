@@ -216,9 +216,12 @@ export function startLoops(ctx: Ctx, t: LoopTiming): LoopHandles {
     }
   }, DISCOVER_MS);
 
-  // 行动反馈闭环（Phase 3 / §"行动→世界反馈→改变她"）：她的心声被点赞/评论 → 她【感到被回应】并被改变。
-  // 落成 FEEDBACK_PERCEIVED（确定性、进神圣日志）。脱敏：只记聚合数，不记是谁。首见某帖先记基线、不补发历史。
-  const seenEngagement = new Map<string, number>();
+  // 行动反馈闭环（Phase 3 / §"行动→世界反馈→改变她"）：她的心声被共鸣/评论 → 她【感到被回应】并被改变。
+  // 升级·按关系归因：知道是【谁】接住了她——真实用户记到 u_<userId>、同类记到 peer_<id>，
+  // 落成带 relationshipId 的 FEEDBACK_PERCEIVED（确定性、进神圣日志；折叠对该 bond 施加微量正反馈）。
+  // 首见某帖先记基线、不补发历史；防刷：每命每跳每关系最多 1 条（attributeEngagement 聚合保证）。
+  // follow 关注依然绝不回喂（平台契约：粉丝数永不进她的引擎）。
+  const seenEngagement = new Map<string, EngagementSeen>();
   const feedbackTimer = setInterval(() => {
     for (const life of lives) {
       try {
@@ -240,20 +243,16 @@ export function startLoops(ctx: Ctx, t: LoopTiming): LoopHandles {
         const posts = allFeedPosts().filter((p) => p.life === life.id).slice(0, 20);
         if (posts.length === 0) continue;
         const ids = posts.map((p) => p.postId);
-        const cc = feed.commentCounts(ids);
-        const rx = feed.reactionsFor(ids, life.id);
-        let fresh = 0;
-        for (const p of posts) {
-          const reactions = Object.values(rx.get(p.postId)?.counts ?? {}).reduce((a, b) => a + b, 0);
-          const total = reactions + (cc.get(p.postId) ?? 0);
-          if (!seenEngagement.has(p.postId)) { seenEngagement.set(p.postId, total); continue; } // 基线，不补发历史
-          const prev = seenEngagement.get(p.postId) ?? 0;
-          if (total > prev) { fresh += total - prev; seenEngagement.set(p.postId, total); }
-        }
-        if (fresh > 0) {
-          const valence = Math.min(0.8, 0.3 + 0.1 * fresh); // 被回应=正反馈（被看见），随回应数温和增长、有上限
+        const reactors = feed.reactorsFor(ids); // 谁留了共鸣（user_id：真实用户 id 或生命体 id）
+        const comments = new Map(ids.map((id) => [id, feed.commentsFor(id, 50)])); // 谁留了话（kind 区分真人/同类）
+        const hits = attributeEngagement(life.id, posts, reactors, comments, seenEngagement,
+          (uid) => (lifeById(uid) ? { rel: peerId(uid), fromKind: 'peer' as const } : accounts.getAccount(uid) ? { rel: accounts.relIdFor(uid), fromKind: 'human' as const } : null),
+          (c) => (c.kind === 'life' ? (lifeById(c.handle) ? { rel: peerId(c.handle), fromKind: 'peer' as const } : null) : accounts.getAccount(c.userId) ? { rel: accounts.relIdFor(c.userId), fromKind: 'human' as const } : null));
+        for (const h of hits) {
+          // 被回应=正反馈（被看见），评论比共鸣稍重（留了话）、按本跳互动数温和增长、小幅有上限。
+          const valence = Math.min(0.6, (h.responseKind === 'comment' ? 0.35 : 0.25) + 0.05 * (h.count - 1));
           serializer.run(life.id, async () => {
-            runTurn(life.store, [{ type: 'FEEDBACK_PERCEIVED', source: 'autonomous_loop', occurredAt: now(), payload: { actionKind: 'muse', responseKind: 'reaction', valence, fromKind: 'human', count: fresh } }]);
+            runTurn(life.store, [{ type: 'FEEDBACK_PERCEIVED', source: 'autonomous_loop', occurredAt: now(), payload: { actionKind: 'muse', responseKind: h.responseKind, valence, fromKind: h.fromKind, count: h.count, relationshipId: h.rel } }]);
           });
         }
       } catch (e) { console.warn('[feedback] 反馈感知出错:', (e as Error).message); }
@@ -350,4 +349,51 @@ export function startLoops(ctx: Ctx, t: LoopTiming): LoopHandles {
     : null;
 
   return { heartbeat, socialTimer, discoverTimer, feedbackTimer, commentTimer, reactTimer };
+}
+
+// —— 行动反馈·按"谁互动"归因（纯函数，feedbackTimer 与测试共用）——
+// 对比基线找出每帖【新增】的共鸣/评论互动者，解析成 relationshipId 后按关系聚合：
+// 同一关系本跳无论点了几个帖/留了几条话，只产【一条】反馈（防刷：每命每跳每关系最多 1 条；count 记总数）。
+// seen 基线（每帖：已见最大评论 id + 已见共鸣者集合）由调用方持有、被原地推进——
+// 首见的帖只记基线不产出（不补发历史）；共鸣取消再点不重复算（已在集合里）。她自己的评论不算反馈。
+export interface EngagementSeen { maxCommentId: number; reactors: Set<string> }
+export interface EngagementHit { rel: string; fromKind: 'human' | 'peer'; responseKind: 'reaction' | 'comment'; count: number }
+type RelResolved = { rel: string; fromKind: 'human' | 'peer' } | null;
+export function attributeEngagement(
+  lifeId: string,
+  posts: Array<{ postId: string }>,
+  reactorsByPost: Map<string, string[]>,
+  commentsByPost: Map<string, FeedComment[]>,
+  seen: Map<string, EngagementSeen>,
+  relOfReactor: (userId: string) => RelResolved,
+  relOfComment: (c: FeedComment) => RelResolved,
+): EngagementHit[] {
+  const byRel = new Map<string, EngagementHit>();
+  const bump = (who: NonNullable<RelResolved>, kind: 'reaction' | 'comment'): void => {
+    const cur = byRel.get(who.rel);
+    if (!cur) byRel.set(who.rel, { rel: who.rel, fromKind: who.fromKind, responseKind: kind, count: 1 });
+    else { cur.count += 1; if (kind === 'comment') cur.responseKind = 'comment'; } // 既点又评 → 按"留了话"算（更重的那种）
+  };
+  for (const p of posts) {
+    const reactors = reactorsByPost.get(p.postId) ?? [];
+    const comments = commentsByPost.get(p.postId) ?? [];
+    const maxId = comments.reduce((m, c) => Math.max(m, c.id), 0);
+    const s = seen.get(p.postId);
+    if (!s) { seen.set(p.postId, { maxCommentId: maxId, reactors: new Set(reactors) }); continue; } // 基线，不补发历史
+    for (const uid of reactors) {
+      if (s.reactors.has(uid)) continue;
+      s.reactors.add(uid);
+      if (uid === lifeId || uid === `life:${lifeId}`) continue; // 不该发生（不给自己留），稳妥兜底
+      const who = relOfReactor(uid);
+      if (who) bump(who, 'reaction');
+    }
+    for (const c of comments) {
+      if (c.id <= s.maxCommentId) continue;
+      if (c.kind === 'life' && c.handle === lifeId) continue; // 她自己在自家帖下的接话不算"被回应"
+      const who = relOfComment(c);
+      if (who) bump(who, 'comment');
+    }
+    if (maxId > s.maxCommentId) s.maxCommentId = maxId;
+  }
+  return [...byRel.values()];
 }

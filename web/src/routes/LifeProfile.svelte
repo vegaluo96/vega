@@ -26,6 +26,8 @@
   });
   $: awake = p && p.awake !== false;
   $: ageText = p ? (p.ageDays >= 1 ? `醒来约 ${p.ageDays} 天` : '今天刚醒来') : '';
+  // 出生日期（生日自知）：她知道、你也看得见。
+  $: bornText = p && p.bornAt ? (() => { const d = new Date(p.bornAt); return `生于 ${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`; })() : '';
 </script>
 
 {#if notFound}
@@ -41,7 +43,7 @@
       <div class="state"><span class="dot" class:awake></span>{awake ? `${p.emotion} · ${p.dayPhase}` : '休眠'}</div>
       <p class="feeling">{awake ? (p.feeling || `此刻${p.emotion}`) : '她此刻在休眠，呼吸很轻。'}{#if awake && p.sleepPressure > 0.6}<span class="dim">（看起来有点困了）</span>{/if}</p>
       {#if p.becoming}<p class="becoming">正在成为：{p.becoming}</p>{/if}
-      <p class="age">{ageText}{p.tension ? ` · 心里在拉扯：${p.tension}` : ''}</p>
+      <p class="age">{bornText ? `${bornText} · ` : ''}{ageText}{p.tension ? ` · 心里在拉扯：${p.tension}` : ''}</p>
     </div>
 
     <div class="body">

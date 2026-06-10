@@ -12,6 +12,8 @@ export interface PostSource { title: string; source: string; url: string }
 export interface FeedStore {
   toggleReaction(postId: string, userId: string, emoji: string): void;
   reactionsFor(postIds: string[], userId: string): Map<string, { counts: Record<string, number>; mine: string | null }>;
+  reactorsFor(postIds: string[]): Map<string, string[]>; // 每帖【谁】留了共鸣（user_id 列表，只读）——反馈按关系归因用（绝不进神圣日志，仅采集层读）
+
   addComment(postId: string, userId: string, handle: string, text: string, replyTo?: string | null): FeedComment;
   addLifeComment(postId: string, lifeId: string, text: string, replyTo?: string | null): FeedComment; // 生命流评论（同类/真人互评）
   commentsFor(postId: string, limit: number): FeedComment[];
@@ -52,6 +54,14 @@ export function createFeedStore(path: string): FeedStore {
       for (const r of rows) { const e = out.get(r.post_id); if (e) e.counts[r.emoji] = Number(r.c); }
       const mine = db.prepare(`SELECT post_id,emoji FROM post_reactions WHERE user_id=? AND post_id IN (${ph(postIds.length)})`).all(userId, ...postIds) as Array<{ post_id: string; emoji: string }>;
       for (const r of mine) { const e = out.get(r.post_id); if (e) e.mine = r.emoji; }
+      return out;
+    },
+    reactorsFor(postIds) {
+      const out = new Map<string, string[]>();
+      for (const id of postIds) out.set(id, []);
+      if (postIds.length === 0) return out;
+      const rows = db.prepare(`SELECT post_id,user_id FROM post_reactions WHERE post_id IN (${ph(postIds.length)})`).all(...postIds) as Array<{ post_id: string; user_id: string }>;
+      for (const r of rows) out.get(r.post_id)?.push(r.user_id);
       return out;
     },
     addComment(postId, userId, handle, text, replyTo) {

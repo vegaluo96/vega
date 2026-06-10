@@ -775,6 +775,19 @@ function appraiseFeedback(st: RState, e: LifeEvent<'FEEDBACK_PERCEIVED'>): void 
   s.connection.value = clamp(s.connection.value + W * val * gain * sens, -1, 1);
   s.valence.value = clamp(s.valence.value + W * val * gain * sens, -1, 1);
   if (val < 0) s.safety.value = clamp(s.safety.value + W * val * gain, 0, 1); // 被无视 → 安全感轻降
+  // 按关系归因（加法演进）：知道是【谁】接住了她 → 对那段 bond 施加微量正反馈（"是你看见了我"长成靠近）。
+  // 幅度 = relationship_dynamics 小步长（kCloseness 0.25/kTrust 0.35）的约 1/10，远小于一句真话；只正向（防"差评刷远"被滥用）。
+  // 旧事件无 relationshipId → 此块整体跳过，与旧轨迹逐位一致；防刷上限在采集层（每命每跳每关系最多 1 条）。
+  if (p.relationshipId) {
+    const b = st.bonds[p.relationshipId];
+    if (b && !b.ended && val > 0) {
+      b.closeness = clamp(b.closeness + 0.03 * val * sens, 0, 1);
+      b.trust = clamp(b.trust + 0.02 * val * sens, -1, 1);
+      // 里程碑瞬间与 appraiseMessage 同款不变量：closeness 首次越线记 seq（只记首次，回落不清）。
+      if (b.closeness >= K.crossFriendAt && b.crossings?.friendAtSeq == null) b.crossings = { ...b.crossings, friendAtSeq: e.seq };
+      if (b.closeness >= K.crossIntimateAt && b.crossings?.intimateAtSeq == null) b.crossings = { ...b.crossings, intimateAtSeq: e.seq };
+    }
+  }
   // 强反馈进既有日志 → 反思里长成持久改变（被持续看见→更敞开；总被忽视→学会自处/更戒备）。
   if (val >= 0.4) st.warmthLog.push(e.seq);
   else if (val <= -0.4) st.lonelyLog.push(e.seq);

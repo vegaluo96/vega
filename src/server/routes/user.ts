@@ -156,7 +156,7 @@ export async function handleUserApi(ctx: Ctx, req: IncomingMessage, res: ServerR
     const musings = allFeedPosts().filter((p) => p.life === lp.id).slice(0, 20).map((p) => ({ text: p.text, at: p.at }));
     return send(res, 200, {
       id: lp.id, awake: s.awake, willingToWake: s.willingToWake, emotion: s.emotion, feeling: s.feeling, dayPhase: s.dayPhase,
-      temperament: tempLabel(s.temperament), tension: s.tension, ageDays, vitality: round3(s.soma.vitality.value),
+      temperament: tempLabel(s.temperament), tension: s.tension, ageDays, bornAt: s.bornAt, vitality: round3(s.soma.vitality.value), // bornAt=出生时刻（公开：生日自知，主页展示出生日期）
       peers: s.socialWorld.filter((t) => !t.ended).map((t) => ({ name: t.displayRef, closeness: t.closeness, attachment: t.attachment, style: t.style })),
       // 她从世界里长出的兴趣（脱敏：纯主题，不含任何用户）——让"她在意什么"看得见，不再只是一具状态机。phase=兴趣四阶段(Hidi&Renninger)。
       interests: s.interests.slice(0, 8).map((it) => ({ topic: it.topic, weight: it.weight, confirmed: it.status === 'confirmed', phase: it.phase })),

@@ -20,6 +20,7 @@
   let hue = Math.floor(Math.random() * 360);
   let busy = false;
   let err = '';
+  let bornRandom = null; // 一键随机的结果（{id, archetype}）——展示她叫什么、是什么原型
 
   api.archetypes().then((d) => { archetypes = d.archetypes || []; }).catch(() => { archetypes = []; });
 
@@ -33,6 +34,19 @@
       const r = await api.createLife(name.trim(), arch || undefined);
       FX.burst(ev.currentTarget, { count: 16, color: '#e8c87a', spread: 90 }); // 留痕由后端自记（审计日志）
       setTimeout(() => dispatch('born', { id: r.id }), 600);
+    } catch (e) { err = e.message; } finally { busy = false; }
+  }
+
+  // 一键随机：名字与先天原型全交给服务端（随机发音名 + 随机原型，避撞、审计留痕）——先展示她叫什么再收尾。
+  async function birthRandom(ev) {
+    if (busy) return;
+    busy = true; err = ''; bornRandom = null;
+    try {
+      const r = await api.createLifeRandom();
+      bornRandom = { id: r.id, archetype: r.archetype || '' };
+      name = r.id; // 预览同步成她真实的名字（基因由名字确定性派生）
+      FX.burst(ev.currentTarget, { count: 16, color: '#e8c87a', spread: 90 });
+      setTimeout(() => dispatch('born', { id: r.id }), 1400); // 多留一会儿，看清她叫什么
     } catch (e) { err = e.message; } finally { busy = false; }
   }
 </script>
@@ -67,7 +81,11 @@
       </div>
     </div>
     {#if err}<p class="msg bad">{err}</p>{/if}
-    <button class="btn btn-block born" disabled={!idOk || busy} on:click={birth}>{busy ? '降生中…' : '让她出生'}</button>
+    {#if bornRandom}<p class="msg">她来了——叫「{bornRandom.id}」{bornRandom.archetype ? `（原型：${bornRandom.archetype}）` : ''}。</p>{/if}
+    <div class="bornrow">
+      <button class="btn btn-soft randbtn" disabled={busy} on:click={birthRandom} title="名字与先天原型全随机（服务端生成、避撞）">{busy ? '…' : '一键随机'}</button>
+      <button class="btn born grow" disabled={!idOk || busy} on:click={birth}>{busy ? '降生中…' : '让她出生'}</button>
+    </div>
   </div>
 </div>
 
@@ -84,5 +102,7 @@
   .hrow { display: flex; gap: 8px; align-items: center; }
   .grow { flex: 1; }
   .hint { font-size: var(--fs-2xs); line-height: 1.6; margin: 0; }
-  .born { margin-top: 18px; }
+  .bornrow { display: flex; gap: 10px; margin-top: 18px; }
+  .bornrow .grow { flex: 1; }
+  .randbtn { flex: none; }
 </style>

@@ -35,6 +35,7 @@ export const api = {
   saveWorldConfig: (patch) => req('POST', '/admin/world-config', patch),
   testWorld: () => req('POST', '/admin/world-config/test'),
   createLife: (id, archetype) => req('POST', '/admin/lives', archetype ? { id, archetype } : { id }),
+  createLifeRandom: () => req('POST', '/admin/lives', { random: true }), // 一键随机：服务端随机名 + 随机原型
   archetypes: () => req('GET', '/admin/archetypes'),
   chainTrace: (body) => req('POST', '/admin/chain-trace', body),
   health: () => req('GET', '/admin/health'),
