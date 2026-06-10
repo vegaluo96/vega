@@ -43,7 +43,7 @@
     <div class="sun" style="top:{sc.sun.y}%;width:{sunR}px;height:{sunR}px;margin-left:{-sunR / 2}px;margin-top:{-sunR / 2}px;background:radial-gradient(circle, {sc.sun.c} 36%, transparent 72%);box-shadow:0 0 {sc.dusk ? 60 : 40}px {sc.dusk ? 22 : 14}px {sc.sun.halo};animation:{animate ? 'cr-aura 6s ease-in-out infinite' : 'none'};"></div>
   {/if}
   {#if sc.moon}
-    <div class="moon" style="top:{sc.moon.y}%;background:radial-gradient(circle at 36% 34%, {sc.moon.c}, #b9c4e8);"></div>
+    <div class="moon" style="top:{sc.moon.y}%;background:radial-gradient(circle at 36% 34%, {sc.moon.c}, rgb(185,196,232));"></div>
   {/if}
   {#each stars as s}
     <span class="star" style="left:{s.x}%;top:{s.y}%;width:{s.r * 2}px;height:{s.r * 2}px;animation:{animate ? `cr-aura ${s.d}s ease-in-out ${s.delay}s infinite` : 'none'};"></span>

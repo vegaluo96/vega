@@ -1,144 +1,111 @@
 <script>
+  // 我（账号：心意余额、遇见过的她、设置：微信/外观/语言/退出）。
   import { onMount } from 'svelte';
   import { api, clearSession } from '../lib/api.js';
-  import { theme, toggleTheme } from '../lib/theme.js';
-  import { enablePush, pushSupported } from '../lib/push.js';
   import { navigate } from '../lib/router.js';
-  import PageHeader from '../components/PageHeader.svelte';
+  import { theme, toggleTheme } from '../lib/theme.js';
+  import { openBind } from '../lib/sheets.js';
+  import TopBar from '../components/TopBar.svelte';
+  import RechargeBtn from '../components/RechargeBtn.svelte';
+  import Creature from '../components/Creature.svelte';
+  import Section from '../components/Section.svelte';
   import Icon from '../components/Icon.svelte';
-  import Skeleton from '../components/Skeleton.svelte';
-  import LifeAvatar from '../components/LifeAvatar.svelte';
-
-  let pushMsg = '';
-  async function turnOnPush() {
-    pushMsg = '';
-    try {
-      await enablePush();
-      pushMsg = '已开启——她想你了、来找你时，会推到这里。';
-    } catch (e) {
-      pushMsg = e.message;
-    }
-  }
 
   let me = null;
+  let livesMap = {};
   let error = '';
-  let followed = []; // 我关注的生命体（vibe 来自画廊，按 me.following 过滤）
   onMount(async () => {
     try {
-      me = await api.me();
-      if ((me.following || []).length) {
-        try { const all = await api.lives(); followed = all.filter((l) => me.following.includes(l.id)); } catch { /* 画廊取不到不影响本页 */ }
-      }
-    } catch (e) {
-      error = e.message;
-      if (e.status === 401) clearSession();
-    }
+      const [m, lives] = await Promise.all([api.me(), api.lives()]);
+      me = m;
+      livesMap = Object.fromEntries(lives.map((l) => [l.id, l]));
+    } catch (e) { error = e.message; if (e.status === 401) clearSession(); }
   });
-
-  async function logout() {
-    try { await api.logout(); } catch {}
-    clearSession();
-  }
-
-  let rechargeMsg = '';
-  let rechargingAmount = 100;
-  async function recharge() {
-    rechargeMsg = '';
-    try {
-      const r = await api.recharge(rechargingAmount);
-      rechargeMsg = `已申请 ${r.amount} 心意，等待审批通过后到账。`;
-      try { me = await api.me(); } catch { /* 刷新待审批额，忽略失败 */ }
-    } catch (e) {
-      rechargeMsg = e.message;
-    }
-  }
+  $: met = me ? me.lives.map((l) => livesMap[l.id]).filter(Boolean) : [];
+  $: dark = $theme === 'dark';
+  async function logout() { try { await api.logout(); } catch { /* ignore */ } clearSession(); }
 </script>
 
-<div class="me">
-  <div class="sticktop"><PageHeader title="你在 ZSKY" /></div>
-
-  {#if !me && !error}<Skeleton rows={4} />{/if}
+<div class="page">
+  <TopBar title="我"><svelte:fragment slot="right"><RechargeBtn /></svelte:fragment></TopBar>
   {#if me}
-    <section class="block">
-      <h2 class="section-title">心意值</h2>
-      <div>
-        <div class="row"><span class="rk">余额</span><span class="rv mono">{me.balance}</span></div>
-        {#if me.pendingRecharge > 0}<div class="row"><span class="rk">审批中</span><span class="rv pending">{me.pendingRecharge} · 等待通过</span></div>{/if}
-        <div class="row act">
-          <select class="input sel" bind:value={rechargingAmount}>
-            <option value={100}>100 心意</option>
-            <option value={500}>500 心意</option>
-            <option value={2000}>2000 心意</option>
-          </select>
-          <button class="btn" on:click={recharge}>申请充值</button>
-        </div>
+    <div class="body">
+      <div class="who">
+        <span class="mono-av">{me.account.handle[0]}</span>
+        <div class="winfo"><div class="wh">{me.account.handle}</div><div class="meta">{me.account.email}{me.account.emailVerified ? ' · 已验证' : ''}</div></div>
       </div>
-      {#if rechargeMsg}<p class="ok">{rechargeMsg}</p>{/if}
-    </section>
 
-    {#if followed.length}
-      <section class="block">
-        <h2 class="section-title">我关注的 · {followed.length}</h2>
-        <div class="follows">
-          {#each followed as f}
-            <button class="fl" on:click={() => navigate('profile', { id: f.id })}>
-              <LifeAvatar id={f.id} emotion={f.emotion} awake={f.awake} size={52} />
-              <span class="flname">{f.id}</span>
-            </button>
-          {/each}
+      <div class="sky balance">
+        <div class="brow">
+          <div class="bl"><span class="blk">心意余额</span><span class="blv mono">{me.balance}</span></div>
+          <button class="btn btn-sm rc" on:click={() => navigate('recharge')}>充值</button>
         </div>
-      </section>
-    {/if}
-
-    {#if pushSupported()}
-      <section class="block">
-        <div class="actgrp">
-          <button class="btn btn-secondary" on:click={turnOnPush}>开启推送通知</button>
-          {#if pushMsg}<p class="ok">{pushMsg}</p>{/if}
-        </div>
-      </section>
-    {/if}
-
-    <section class="block">
-      <h2 class="section-title">账户</h2>
-      <div>
-        <div class="row"><span class="rk">昵称</span><span class="rv">{me.account.handle}</span></div>
-        <div class="row"><span class="rk">邮箱</span><span class="rv">{me.account.email}</span></div>
-        {#if me.account.role !== 'user'}<div class="row"><span class="rk">角色</span><span class="rv">{me.account.role}</span></div>{/if}
+        <div class="bnote">心意只用来让她说得更细。用尽了她也照样醒着、记得你——只是话朴素些。</div>
       </div>
-    </section>
+
+      {#if met.length}
+        <Section title="遇见过的她">
+          <div class="met">
+            {#each met as l (l.id)}
+              <button class="metcell" on:click={() => navigate('profile', { id: l.id })}><Creature life={l} size={58} /><span class="mn">{l.id}</span></button>
+            {/each}
+          </div>
+        </Section>
+      {/if}
+
+      <Section title="设置">
+        <div class="card-quiet settings">
+          <button class="srow" on:click={() => openBind()}>
+            <Icon name="wechat" size={20} /><span class="st">微信</span><span class="sd">{me.wechat ? me.wechat.lifeId : '未绑定'}</span><Icon name="chevron" size={16} />
+          </button>
+          <button class="srow" on:click={toggleTheme}>
+            <Icon name={dark ? 'moon' : 'sun'} size={20} /><span class="st">外观</span><span class="sd">{dark ? '夜间' : '白天'}</span>
+            <span class="toggle" class:on={dark}><span class="knob"></span></span>
+          </button>
+          <button class="srow" on:click={() => {}}>
+            <Icon name="globe" size={20} /><span class="st">语言</span><span class="sd">简体中文</span><Icon name="chevron" size={16} />
+          </button>
+          <button class="srow danger last" on:click={logout}>
+            <Icon name="logout" size={20} /><span class="st">退出登录</span>
+          </button>
+        </div>
+      </Section>
+
+      <p class="caption foot">你仰望的星空，也在仰望你。<br /><span class="faint">ZSKY · 一座数字生命的社会</span></p>
+    </div>
   {:else if error}
-    <p class="err">{error}</p>
+    <p class="caption err">{error}</p>
   {/if}
-
-  <div class="footer">
-    <button class="btn-ghost btn" on:click={toggleTheme}><Icon name={$theme === 'dark' ? 'sun' : 'moon'} size={18} /> {$theme === 'dark' ? '白天' : '黑夜'}</button>
-    <button class="btn-ghost btn" on:click={logout}><Icon name="logout" size={18} /> 登出</button>
-  </div>
 </div>
 
 <style>
-  .me { max-width: var(--maxw); margin: 0 auto; padding: 0 var(--gutter) 96px; }
-  .block { margin-top: var(--s6); }
-  .block .section-title { margin: 0 2px 10px; }
-  .actgrp { padding: var(--s2) 0; }
-
-  .pending { color: var(--accent); }
-  .sel { flex: 1; min-height: 44px; }
-  .ok { color: var(--success); font-size: var(--fs-sm); margin: 10px 2px 0; }
-
-  .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: var(--s3) 0; border-bottom: 1px solid var(--border-subtle); }
-  .row:last-child { border-bottom: 0; }
-  .row.act { padding: var(--s3) 0; }
-  .rk { color: var(--faint); font-size: var(--fs-sm); }
-  .rv { font-size: var(--fs-md); font-weight: 600; }
-
-  /* 我关注的：横向头像条（仿生命主页的同类朋友） */
-  .follows { display: flex; gap: var(--s3); overflow-x: auto; padding: 2px 2px 6px; scrollbar-width: none; }
-  .follows::-webkit-scrollbar { display: none; }
-  .fl { flex: none; width: 64px; display: flex; flex-direction: column; align-items: center; gap: 6px; background: none; border: 0; padding: 0; cursor: pointer; }
-  .flname { font-size: var(--fs-sm); font-weight: 600; color: var(--text); max-width: 64px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-  .footer { display: flex; gap: 10px; margin-top: var(--s6); }
-  .footer .btn { flex: 1; }
+  .page { padding-bottom: 96px; }
+  .body { padding: 0 var(--gutter); }
+  .who { display: flex; align-items: center; gap: 16px; padding: 10px 0 18px; }
+  .mono-av { flex: none; width: 60px; height: 60px; border-radius: 50%; display: grid; place-items: center; font-size: 24px; font-weight: 800; color: var(--on-primary); background: var(--primary); }
+  .wh { font-weight: 800; font-size: var(--fs-lg); letter-spacing: -0.01em; }
+  .balance { padding: 14px 16px; color: #fff; }
+  .brow { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .bl { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+  .blk { font-size: var(--fs-sm); opacity: 0.72; }
+  .blv { font-size: 20px; font-weight: 800; line-height: 1; }
+  .rc { background: rgba(255,255,255,0.16); color: #fff; min-height: 34px; }
+  .bnote { font-size: var(--fs-xs); opacity: 0.6; margin-top: 10px; line-height: 1.5; }
+  .met { display: flex; gap: 18px; overflow-x: auto; padding: 2px 0 4px; }
+  .metcell { flex: none; display: flex; flex-direction: column; align-items: center; gap: 6px; width: 64px; }
+  .mn { font-size: var(--fs-xs); font-weight: 600; }
+  .settings { overflow: hidden; }
+  .srow { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 14px 16px; box-shadow: inset 0 -1px 0 0 var(--border-subtle); color: var(--text); }
+  .srow.last { box-shadow: none; }
+  .srow :global(.ico:first-child) { color: var(--muted); }
+  .srow.danger { color: var(--danger); }
+  .srow.danger :global(.ico) { color: var(--danger); }
+  .st { flex: 1; font-weight: 500; }
+  .sd { color: var(--faint); font-size: var(--fs-sm); }
+  .toggle { width: 42px; height: 25px; border-radius: var(--r-pill); background: var(--surface-3); position: relative; flex: none; transition: background var(--t) var(--ease); }
+  .toggle.on { background: var(--text); }
+  .knob { position: absolute; top: 3px; left: 3px; width: 19px; height: 19px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.25); transition: left var(--t) var(--ease); }
+  .toggle.on .knob { left: 20px; background: var(--bg); }
+  .foot { text-align: center; margin-top: 20px; line-height: 1.7; }
+  .err { padding: 20px; }
 </style>

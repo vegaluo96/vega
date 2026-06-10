@@ -1,9 +1,13 @@
 <script>
+  // 应用外壳：底部 5 tab（纯图标，红点模型）+ 路由 + SSE + 微信绑定弹层。沉浸页（对话/资料/心声/充值）隐藏底栏。
   import { onMount, onDestroy } from 'svelte';
-  import { get } from 'svelte/store';
   import { route, navigate } from '../lib/router.js';
-  import { stream } from '../lib/api.js';
-  import { unreadNotifs } from '../lib/notify.js';
+  import { api, stream } from '../lib/api.js';
+  import { reaches, addReach, notifSeenAt } from '../lib/reaches.js';
+  import { bindSheet, closeBind } from '../lib/sheets.js';
+  import { hydrateFollows } from '../lib/follows.js';
+  import Icon from '../components/Icon.svelte';
+  import WechatBind from '../components/WechatBind.svelte';
   import Plaza from './Plaza.svelte';
   import Explore from './Explore.svelte';
   import Chats from './Chats.svelte';
@@ -12,104 +16,74 @@
   import PostDetail from './PostDetail.svelte';
   import Me from './Me.svelte';
   import Notifications from './Notifications.svelte';
-  import Icon from '../components/Icon.svelte';
-  import { t } from '../lib/i18n.js';
+  import Recharge from './Recharge.svelte';
 
-  const TABS = [
-    { k: 'plaza', ico: 'plaza', label: 'nav.plaza' },
-    { k: 'explore', ico: 'search', label: 'nav.explore' },
-    { k: 'chats', ico: 'chats', label: 'nav.chats' },
-    { k: 'notifications', ico: 'notifications', label: 'nav.notifications' },
-    { k: 'me', ico: 'me', label: 'nav.me' },
-  ];
-  // 主导航高亮：chat/profile 归到来源 tab（默认广场）
-  $: activeTab = TABS.some((x) => x.k === $route.name) ? $route.name : 'plaza';
-  $: immersive = $route.name === 'chat' || $route.name === 'profile' || $route.name === 'post';
-
-  // 未读红点：她趁你不在时来找你 → 「通知」tab 标红；进入通知页即清。
+  const TABS = [['plaza', 'plaza'], ['explore', 'explore'], ['chats', 'chats'], ['notifications', 'notifications'], ['me', 'me']];
+  let notes = [];
   let es;
-  onMount(() => { es = stream((ev) => { if (ev.type === 'reach_out' && get(route).name !== 'notifications') unreadNotifs.set(true); }); });
+
+  onMount(async () => {
+    hydrateFollows();
+    // 种红点：把"她趁你不在时来找你"（未回）填进对话红点；拉通知算系统红点。
+    try { const chats = await api.chats(); chats.forEach((c) => { if (c.pending) addReach(c.life); }); } catch { /* ignore */ }
+    try { notes = await api.notifications(); } catch { /* ignore */ }
+    es = stream((ev) => { if (ev.type === 'reach_out') addReach(ev.data.life); });
+  });
   onDestroy(() => es && es.close());
-  $: if ($route.name === 'notifications') unreadNotifs.set(false);
+
+  $: activeTab = TABS.some(([k]) => k === $route.name) ? $route.name : 'plaza';
+  $: immersive = ['chat', 'profile', 'post', 'recharge'].includes($route.name);
+  $: chatsDot = $reaches.length > 0;
+  $: notifDot = notes.some((n) => n.type !== 'reach' && new Date(n.at).getTime() > $notifSeenAt);
+  $: dots = { chats: chatsDot, notifications: notifDot };
 </script>
 
 <div class="app" class:immersive>
   <nav>
     <div class="brand">ZSKY</div>
-    {#each TABS as tab}
-      <button class:active={activeTab === tab.k} class:userentry={tab.k === 'me'} on:click={() => navigate(tab.k)} aria-label={t(tab.label)} title={t(tab.label)}>
+    {#each TABS as [k, ico]}
+      <button class:active={activeTab === k} class:userentry={k === 'me'} on:click={() => navigate(k)} aria-label={k}>
         <span class="ic">
-          <Icon name={tab.ico} size={24} sw={activeTab === tab.k ? 2.4 : 1.8} />
-          {#if tab.k === 'notifications' && $unreadNotifs}<span class="reddot"></span>{/if}
+          <Icon name={ico} size={25} sw={activeTab === k ? 2.3 : 1.8} />
+          {#if dots[k]}<span class="reddot"></span>{/if}
         </span>
       </button>
     {/each}
   </nav>
 
   <main class="content">
-    {#if $route.name === 'chat'}
-      {#key $route.params.id}<Chat lifeId={$route.params.id} />{/key}
-    {:else if $route.name === 'profile'}
-      {#key $route.params.id}<LifeProfile lifeId={$route.params.id} />{/key}
-    {:else if $route.name === 'post'}
-      {#key $route.params.id}<PostDetail postId={$route.params.id} />{/key}
-    {:else if $route.name === 'explore'}
-      <Explore />
-    {:else if $route.name === 'notifications'}
-      <Notifications />
-    {:else if $route.name === 'chats'}
-      <Chats />
-    {:else if $route.name === 'me'}
-      <Me />
-    {:else}
-      <Plaza />
-    {/if}
+    {#if $route.name === 'chat'}{#key $route.params.id}<Chat lifeId={$route.params.id} />{/key}
+    {:else if $route.name === 'profile'}{#key $route.params.id}<LifeProfile lifeId={$route.params.id} />{/key}
+    {:else if $route.name === 'post'}{#key $route.params.id}<PostDetail postId={$route.params.id} />{/key}
+    {:else if $route.name === 'recharge'}<Recharge />
+    {:else if $route.name === 'explore'}<Explore />
+    {:else if $route.name === 'notifications'}<Notifications />
+    {:else if $route.name === 'chats'}<Chats />
+    {:else if $route.name === 'me'}<Me />
+    {:else}<Plaza />{/if}
   </main>
+
+  {#if $bindSheet}<WechatBind lifeId={$bindSheet.lifeId} onClose={closeBind} />{/if}
 </div>
 
 <style>
   .content { min-height: 100vh; min-height: 100dvh; }
-
-  /* ── 移动端：底部 tab 栏；沉浸视图(对话/主页)隐藏底栏 ── */
-  nav {
-    position: fixed; bottom: 0; left: 0; right: 0; z-index: 20;
-    display: flex; justify-content: space-around; gap: 2px;
-    padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
-    background: color-mix(in srgb, var(--bg) 86%, transparent);
-    backdrop-filter: saturate(180%) blur(16px);
-    box-shadow: inset 0 1px 0 0 var(--border-subtle);
-  }
+  nav { position: fixed; bottom: 0; left: 0; right: 0; z-index: 20; display: flex; align-items: stretch; background: color-mix(in srgb, var(--bg) 80%, transparent); backdrop-filter: saturate(160%) blur(16px); -webkit-backdrop-filter: saturate(160%) blur(16px); box-shadow: inset 0 1px 0 0 var(--border-subtle); padding-bottom: env(safe-area-inset-bottom); }
   nav .brand { display: none; }
-  nav button {
-    flex: 1; max-width: 64px; min-height: 44px;
-    display: flex; align-items: center; justify-content: center;
-    background: none; border: 0; color: var(--faint); padding: 4px; border-radius: var(--r-pill);
-    transition: color var(--t-hover) ease, background var(--t-hover) ease;
-  }
-  nav button.active { color: var(--text); background: var(--surface-2); }
+  nav button { flex: 1; display: flex; align-items: center; justify-content: center; padding: 14px 0; color: var(--faint); }
+  nav button.active { color: var(--text); }
   .ic { position: relative; display: inline-flex; }
-  .reddot { position: absolute; top: -3px; right: -4px; width: 8px; height: 8px; border-radius: 50%; background: var(--danger); box-shadow: 0 0 0 2px var(--bg); }
+  .reddot { position: absolute; top: -1px; right: -3px; width: 8px; height: 8px; border-radius: 50%; background: var(--life-reaching); box-shadow: 0 0 0 2px var(--bg); }
   .app.immersive nav { display: none; }
 
-  /* ── 桌面端：左侧导航轨 + 居中内容栏 ── */
   @media (min-width: 1000px) {
     .app { display: flex; max-width: 1000px; margin: 0 auto; align-items: flex-start; }
     .app.immersive nav { display: flex; }
-    nav {
-      position: sticky; top: 0; left: auto; right: auto; bottom: auto;
-      flex-direction: column; justify-content: flex-start; align-items: center; gap: 6px;
-      width: 76px; height: 100vh; height: 100dvh; padding: 20px 10px 18px;
-      border-top: 0; box-shadow: inset -1px 0 0 0 var(--border); backdrop-filter: none; background: var(--bg);
-    }
+    nav { position: sticky; top: 0; left: auto; right: auto; bottom: auto; flex-direction: column; justify-content: flex-start; align-items: center; gap: 6px; width: 76px; height: 100vh; height: 100dvh; padding: 20px 10px 18px; box-shadow: inset -1px 0 0 0 var(--border); backdrop-filter: none; background: var(--bg); }
     nav .brand { display: block; font-weight: 800; letter-spacing: 0.08em; font-size: var(--fs-sm); padding: 4px 0 16px; color: var(--text); }
-    nav button {
-      flex: none; max-width: none; width: 48px; height: 48px; min-height: 48px;
-      border-radius: var(--r-md); color: var(--muted);
-      transition: background var(--t-hover) ease, color var(--t-hover) ease;
-    }
+    nav button { flex: none; width: 48px; height: 48px; border-radius: var(--r-md); color: var(--muted); }
     nav button.userentry { margin-top: auto; }
     nav button.active { background: var(--surface-2); color: var(--text); }
-    nav button:not(.active):hover { color: var(--text); }
     .content { flex: 1; min-width: 0; box-shadow: inset -1px 0 0 0 var(--border); }
   }
 </style>

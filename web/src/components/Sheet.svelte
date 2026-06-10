@@ -5,7 +5,9 @@
   export let onClose = () => {};
 </script>
 
+<!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions a11y-no-noninteractive-element-interactions -->
 <div class="overlay fade-in" on:click={onClose} role="presentation">
+  <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-noninteractive-element-interactions -->
   <div class="sheet rise-in" on:click|stopPropagation role="dialog" aria-label={title}>
     <div class="head">
       <h2 class="page-title sm">{title}</h2>

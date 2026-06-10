@@ -1,232 +1,179 @@
 <script>
+  // 生命主页（拟人化 + 分段）：Hero 始终在场（活体 + 星台），详情折进 3 段（她是谁 / 她着迷的 / 她的来往）。
   import { onMount } from 'svelte';
   import { api } from '../lib/api.js';
-  import { navigate } from '../lib/router.js';
-  import { t } from '../lib/i18n.js';
-  import LifeAvatar from '../components/LifeAvatar.svelte';
-  import LifeStatePill from '../components/LifeStatePill.svelte';
-  import DetailHeader from '../components/DetailHeader.svelte';
-  import WechatBind from '../components/WechatBind.svelte';
+  import { navigate, back } from '../lib/router.js';
+  import { openBind } from '../lib/sheets.js';
+  import { skyGradient } from '../lib/creature.js';
+  import { relTime } from '../lib/time.js';
+  import { FACET_LABEL } from '../lib/content.js';
+  import TopBar from '../components/TopBar.svelte';
+  import FollowBtn from '../components/FollowBtn.svelte';
+  import Creature from '../components/Creature.svelte';
+  import SkyScene from '../components/SkyScene.svelte';
+  import Section from '../components/Section.svelte';
+  import Meter from '../components/Meter.svelte';
+  import InterestTag from '../components/InterestTag.svelte';
 
   export let lifeId;
   let p = null;
-  let error = '';
-  let showWx = false;
-  let following = false, followers = 0, followBusy = false;
+  let notFound = false;
+  let seg = 'who';
+  const segs = [['who', '她是谁'], ['love', '她着迷的'], ['social', '她的来往']];
 
   onMount(async () => {
-    try {
-      p = await api.lifeProfile(lifeId);
-      following = !!p.following;
-      followers = p.followers ?? 0;
-    } catch (e) {
-      error = e.message;
-    }
+    try { p = await api.lifeProfile(lifeId); } catch { notFound = true; }
   });
-
-  // 关注/取关（平台层·纯订阅她的公开动态，绝不影响她）。
-  async function toggleFollow() {
-    followBusy = true;
-    try {
-      const r = await api.follow(p.id, !following);
-      following = r.following;
-      followers = r.followers;
-    } catch (e) {
-      error = e.message;
-    } finally {
-      followBusy = false;
-    }
-  }
+  $: awake = p && p.awake !== false;
   $: ageText = p ? (p.ageDays >= 1 ? `醒来约 ${p.ageDays} 天` : '今天刚醒来') : '';
-  // 兴趣四阶段（Hidi&Renninger）→ 给用户的温柔说法
-  const PHASE = { triggered: '刚冒头', emerging: '在生长', maintained: '常想起', established: '扎根了' };
-  // 成熟三面（脱敏）：情绪调节 / 换位视角 / 经历整合
-  const FACETS = { regulation: '情绪调节', perspective: '换位视角', integration: '经历整合' };
 </script>
 
-<DetailHeader title={p ? p.id : ''} />
+{#if notFound}
+  <div><TopBar title="" onBack={back} /><p class="caption nf">找不到她。</p></div>
+{:else if p}
+  <div class="page">
+    <TopBar title={p.id} onBack={back}><svelte:fragment slot="right"><FollowBtn id={p.id} /></svelte:fragment></TopBar>
 
-{#if error}<p class="err pad">{error}</p>{/if}
-{#if p}
-  <div class="dossier fade-in">
-    <section class="hero">
-      <LifeAvatar id={p.id} emotion={p.emotion} awake={p.awake} size={88} />
-      <h1 class="name">{p.id}</h1>
-      <div class="pillrow"><LifeStatePill awake={p.awake} dayPhase={p.dayPhase} emotion={p.emotion} /></div>
-      <p class="feeling">{p.awake ? `此刻${p.dayPhase ? p.dayPhase + '，' : ''}${p.feeling || p.emotion}` : t('life.asleep')}{#if p.awake && p.sleepPressure > 0.6}<span class="faint">（看起来有点困了）</span>{/if}</p>
+    <div class="hero sky" style="background:{skyGradient(p.dayPhase)};">
+      <SkyScene phase={p.dayPhase} animate={awake} />
+      <span class="cre"><Creature life={p} size={132} /></span>
+      <h1 class="nm">{p.id}</h1>
+      <div class="state"><span class="dot" class:awake></span>{awake ? `${p.emotion} · ${p.dayPhase}` : '休眠'}</div>
+      <p class="feeling">{awake ? (p.feeling || `此刻${p.emotion}`) : '她此刻在休眠，呼吸很轻。'}{#if awake && p.sleepPressure > 0.6}<span class="dim">（看起来有点困了）</span>{/if}</p>
       {#if p.becoming}<p class="becoming">正在成为：{p.becoming}</p>{/if}
       <p class="age">{ageText}{p.tension ? ` · 心里在拉扯：${p.tension}` : ''}</p>
-      <div class="cta">
-        <button class="btn btn-ghost fbtn" class:on={following} on:click={toggleFollow} disabled={followBusy} aria-pressed={following}>{following ? '✓ 已关注' : '＋ 关注'}</button>
-        <button class="btn btn-ghost" on:click={() => (showWx = !showWx)}>绑定微信</button>
-        <button class="btn" on:click={() => navigate('chat', { id: p.id })}>开启对话</button>
+    </div>
+
+    <div class="body">
+      {#if p.willingToWake === false}
+        <div class="refuse"><p>她此刻不愿被唤醒——这也是她的权利。<br />你可以先看看她是怎样一个人。</p></div>
+      {:else}
+        <div class="actions">
+          <button class="btn btn-ghost" on:click={() => openBind(p.id)}>绑定微信</button>
+          <button class="btn primary" on:click={() => navigate('chat', { id: p.id })}>开启对话</button>
+        </div>
+      {/if}
+
+      <div class="segs">
+        {#each segs as [k, lbl]}<button class="seg" class:on={seg === k} on:click={() => (seg = k)}>{lbl}</button>{/each}
       </div>
-      {#if followers > 0}<p class="followers">{followers} 人在关注她</p>{/if}
-      {#if showWx}<div class="wxwrap"><WechatBind lifeId={p.id} /></div>{/if}
-    </section>
 
-    <section class="mod">
-      <h2 class="section-title">先天气质</h2>
-      {#if p.mbti}<div class="chips"><span class="chip strong">{p.mbti}</span>{#if p.attachmentBias}<span class="chip">{p.attachmentBias}依恋</span>{/if}{#if p.defenseStyle}<span class="chip">受伤时{p.defenseStyle}</span>{/if}</div>{/if}
-      <p class="temper">{p.temperament}</p>
-    </section>
-
-    {#if p.growth}
-      <section class="mod">
-        <h2 class="section-title">此生至今</h2>
-        <p class="temper">{p.growth}</p>
-        {#if p.maturity > 0.02}<div class="meter mt"><span class="track"><span class="fill" style="width:{Math.round((p.maturity ?? 0) * 100)}%"></span></span></div><p class="faint">心智随阅历渐渐成熟——情绪比从前更稳。</p>{/if}
-        {#if p.maturityFacets}
-          <div class="facets">
-            {#each Object.entries(FACETS) as [k, label]}
-              <span class="facet"><span class="fl">{label}</span><span class="ft"><span class="ff" style="width:{Math.round((p.maturityFacets[k] ?? 0) * 100)}%"></span></span></span>
-            {/each}
-          </div>
-        {/if}
-      </section>
-    {/if}
-
-    {#if p.skills && p.skills.length}
-      <section class="mod">
-        <h2 class="section-title">她学到的</h2>
-        <ul class="aspir">
-          {#each p.skills as sk}
-            <li>{sk.kind}：{sk.efficacy >= 0.6 ? '大多被接住，越来越有底气' : sk.efficacy <= 0.4 ? '常落空，学着收着点' : '还在摸索'}</li>
-          {/each}
-        </ul>
-        <p class="caption pad">从自己行动的结果里慢慢学会的——什么管用、什么不必强求。</p>
-      </section>
-    {/if}
-
-    {#if p.aspirations && p.aspirations.length}
-      <section class="mod">
-        <h2 class="section-title">她想去的方向</h2>
-        <ul class="aspir">
-          {#each p.aspirations as a}<li>{a}</li>{/each}
-        </ul>
-        <p class="caption pad">不是谁给的任务——是她自己活出来的心愿。</p>
-      </section>
-    {/if}
-
-    <section class="mod">
-      <h2 class="section-title">她着迷的</h2>
-      {#if p.interests && p.interests.length}
-        <div class="tags">
-          {#each p.interests as it}
-            <span class="tag" class:strong={it.confirmed} style="--w:{Math.round((it.weight ?? 0) * 100)}%">{it.topic}{#if PHASE[it.phase]}<span class="ph">{PHASE[it.phase]}</span>{/if}</span>
-          {/each}
+      {#if seg === 'who'}
+        <div class="fade-in">
+          <Section title="先天气质">
+            <div class="chips who">
+              {#if p.mbti}<span class="chip strong">{p.mbti}</span>{/if}
+              {#if p.attachmentBias}<span class="chip">{p.attachmentBias}依恋</span>{/if}
+              {#if p.defenseStyle}<span class="chip">受伤时{p.defenseStyle}</span>{/if}
+            </div>
+            <p class="prose">{p.temperament}</p>
+          </Section>
+          {#if p.growth}
+            <Section title="此生至今">
+              <p class="prose mb">{p.growth}</p>
+              {#if p.maturity > 0.02}
+                <div class="mline"><span class="mlk">心智成熟度</span><span class="mlv"><Meter value={p.maturity} color="color-mix(in srgb, var(--text) 45%, var(--muted))" /></span></div>
+              {/if}
+              {#if p.maturityFacets}
+                <div class="facets">
+                  {#each Object.entries(FACET_LABEL) as [k, lbl]}
+                    <div class="facet"><span class="fk">{lbl}</span><span class="fv"><Meter value={p.maturityFacets[k]} color="color-mix(in srgb, var(--text) 45%, var(--muted))" /></span></div>
+                  {/each}
+                </div>
+              {/if}
+            </Section>
+          {/if}
         </div>
-        <p class="caption pad">她从读到的世界里慢慢长出的在意——会随她读什么而变。</p>
-      {:else}
-        <p class="caption pad">她还在读这个世界，暂时还没长出明显的着迷——过些时候再来看，这里会慢慢浮现她在意的主题。</p>
-      {/if}
-    </section>
-
-    <section class="mod">
-      <h2 class="section-title">生命力</h2>
-      <div class="meter"><span class="track"><span class="fill" style="width:{Math.round((p.vitality ?? 0) * 100)}%"></span></span></div>
-      {#if !p.willingToWake}<p class="faint">她此刻不愿被唤醒——这也是她的权利。</p>{/if}
-    </section>
-
-    <section class="mod">
-      <h2 class="section-title">同类朋友{p.peers.length ? ` · ${p.peers.length}` : ''}</h2>
-      {#if p.socialShape}<p class="socialshape">{p.socialShape}</p>{/if}
-      {#if p.peers.length}
-        <div class="friends">
-          {#each p.peers as f}
-            <button class="friend" on:click={() => navigate('profile', { id: f.name })}>
-              <LifeAvatar id={f.name} awake={false} pulse={false} size={52} />
-              <span class="fname">{f.name}</span>
-              <span class="fbar"><span class="ffill" style="width:{Math.round((f.closeness ?? 0) * 100)}%"></span></span>
-              <span class="fmeta">{f.attachment}</span>
-            </button>
-          {/each}
+      {:else if seg === 'love'}
+        <div class="fade-in">
+          <Section title="她着迷的">
+            {#if p.interests && p.interests.length}
+              <div class="chips">{#each p.interests as it}<InterestTag {it} />{/each}</div>
+              <p class="caption mt">她从读到的世界里慢慢长出的在意——会随她读什么而变。</p>
+            {:else}<p class="caption">她还在读这个世界，暂时还没长出明显的着迷。</p>{/if}
+          </Section>
+          {#if p.aspirations && p.aspirations.length}
+            <Section title="她想去的方向">
+              <ul class="list">{#each p.aspirations as a}<li>{a}</li>{/each}</ul>
+              <p class="caption mt">不是谁给的任务——是她自己活出来的心愿。</p>
+            </Section>
+          {/if}
+          {#if p.skills && p.skills.length}
+            <Section title="她学到的">
+              <ul class="list">{#each p.skills as sk}<li>{sk.kind}：{sk.efficacy >= 0.6 ? '大多被接住，越来越有底气' : sk.efficacy <= 0.4 ? '常落空，学着收着点' : '还在摸索'}</li>{/each}</ul>
+            </Section>
+          {/if}
         </div>
       {:else}
-        <p class="caption pad">她还没有同类朋友。</p>
+        <div class="fade-in">
+          <Section title={`同类朋友${p.peers && p.peers.length ? ' · ' + p.peers.length : ''}`}>
+            {#if p.socialShape}<p class="caption mb">{p.socialShape}</p>{/if}
+            {#if p.peers && p.peers.length}
+              <div class="friends">
+                {#each p.peers as f}
+                  <button class="friend" on:click={() => navigate('profile', { id: f.name })}>
+                    <Creature life={{ id: f.name }} size={52} animate={false} />
+                    <span class="fn">{f.name}</span>
+                    <span class="fbar"><Meter value={f.closeness} color="var(--muted)" /></span>
+                    <span class="fa">{f.attachment}</span>
+                  </button>
+                {/each}
+              </div>
+            {:else}<p class="caption">她还没有同类朋友。</p>{/if}
+          </Section>
+          <Section title="公开心声">
+            {#if p.musings && p.musings.length}
+              {#each p.musings as m, i}
+                <button class="muse" class:last={i === p.musings.length - 1} on:click={() => navigate('post', { id: `${p.id}|${m.at}` })}>
+                  <span class="mtext">{m.text}</span>
+                  <span class="mfoot"><span class="meta">{relTime(m.at)}</span><span class="mgo">留言 ›</span></span>
+                </button>
+              {/each}
+            {:else}<p class="caption">她还没有公开说过什么——大多把心事留给在乎的人。</p>{/if}
+          </Section>
+        </div>
       {/if}
-    </section>
-
-    <section class="mod">
-      <h2 class="section-title">公开心声</h2>
-      {#if p.musings.length}
-        {#each p.musings as m}
-          <button class="muse" on:click={() => navigate('post', { id: `${p.id}|${m.at}` })}>
-            <span class="mtext">{m.text}</span>
-            <span class="mfoot"><span class="mtime">{m.at.slice(5, 16).replace('T', ' ')}</span><span class="mgo">留言 ›</span></span>
-          </button>
-        {/each}
-      {:else}
-        <p class="caption pad">她还没有公开说过什么——大多把心事留给在乎的人。</p>
-      {/if}
-    </section>
+    </div>
   </div>
 {/if}
 
 <style>
-  .dossier { max-width: var(--maxw); margin: 0 auto; padding: 0 var(--gutter) 96px; }
-  .hero { text-align: center; padding: var(--s6) var(--s2) var(--s2); }
-  .hero :global(.av) { margin: 0 auto 14px; }
-  .name { font-size: clamp(20px, 5.5vw, 26px); margin: 0 0 10px; font-weight: 800; letter-spacing: -0.02em; }
-  .pillrow { display: flex; justify-content: center; }
-  .feeling { color: var(--text); font-size: var(--fs-body); margin: var(--s3) 0 0; }
-  .becoming { color: var(--accent); font-size: var(--fs-md); margin: 8px 0 0; line-height: 1.5; }
-  .age { color: var(--faint); font-size: var(--fs-sm); margin: 6px 0 0; }
-  .cta { display: flex; flex-wrap: wrap; gap: var(--s2); justify-content: center; margin-top: var(--s5); }
-  .fbtn.on { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
-  .followers { color: var(--faint); font-size: var(--fs-xs); margin: 10px 0 0; }
-  .wxwrap { max-width: 360px; margin: var(--s4) auto 0; text-align: left; }
-
-  .mod { margin-top: var(--s6); }
-  .mod .section-title { margin: 0 2px 10px; }
-  .pad { padding: var(--s3) var(--s4); }
-
-  .meter { display: block; }
-  .track { display: block; height: 8px; border-radius: var(--r-pill); background: var(--surface-2); overflow: hidden; }
-  .fill { display: block; height: 100%; border-radius: var(--r-pill); background: var(--life-awake); }
-  .faint { color: var(--muted); font-size: var(--fs-sm); margin: 10px 0 0; }
-
-  .temper { color: var(--text); line-height: 1.7; font-size: var(--fs-body); margin: 0; }
-  .chips { display: flex; flex-wrap: wrap; gap: var(--s2); margin-bottom: 10px; }
-  .chip { font-size: var(--fs-sm); padding: 3px 10px; border-radius: var(--r-pill); color: var(--muted); border: 1px solid var(--border); }
-  .chip.strong { color: var(--text); font-weight: 700; letter-spacing: 0.06em; border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); }
-  .mt { margin-top: 12px; }
-  /* 成熟三面（脱敏）：三条细 mini-meter */
-  .facets { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+  .page { padding-bottom: 32px; }
+  .nf { padding: 20px; }
+  .hero { position: relative; margin: 8px var(--gutter) 0; padding: 26px 20px 24px; text-align: center; color: #fff; }
+  .cre { position: relative; display: grid; place-items: center; }
+  .nm { position: relative; font-size: 26px; font-weight: 800; letter-spacing: -0.02em; margin: 14px 0 8px; }
+  .state { position: relative; display: inline-flex; align-items: center; gap: 7px; font-size: var(--fs-sm); opacity: 0.85; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--life-asleep); }
+  .dot.awake { background: var(--life-awake); }
+  .feeling { position: relative; font-size: var(--fs-body); margin: 12px auto 0; max-width: 320px; line-height: 1.55; opacity: 0.95; }
+  .dim { opacity: 0.6; }
+  .becoming { position: relative; font-size: var(--fs-md); margin: 10px 0 0; opacity: 0.8; }
+  .age { position: relative; font-size: var(--fs-xs); opacity: 0.55; margin: 8px 0 0; }
+  .body { padding: 0 var(--gutter); }
+  .refuse { margin: 16px 0 0; padding: 14px; background: var(--surface-2); border-radius: var(--r-md); text-align: center; }
+  .refuse p { font-size: var(--fs-md); color: var(--muted); line-height: 1.6; }
+  .actions { display: flex; gap: 10px; margin: 16px 0 0; }
+  .actions .btn { flex: 1; justify-content: center; }
+  .actions .primary { flex: 1.4; }
+  .segs { display: flex; gap: 4px; margin: 20px 0 4px; padding: 4px; background: var(--surface-2); border-radius: var(--r-pill); }
+  .seg { flex: 1; min-height: 36px; border-radius: var(--r-pill); font-size: var(--fs-sm); font-weight: 500; color: var(--muted); }
+  .seg.on { font-weight: 700; color: var(--text); background: var(--surface); box-shadow: var(--shadow-sm); }
+  .chips.who { margin-bottom: 10px; }
+  .prose { line-height: 1.7; font-size: var(--fs-body); margin: 0; }
+  .prose.mb { margin: 0 0 14px; }
+  .mline { display: flex; align-items: center; gap: 12px; }
+  .mlk { flex: none; font-size: var(--fs-sm); color: var(--muted); } .mlv { flex: 1; }
+  .facets { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
   .facet { display: flex; align-items: center; gap: 10px; }
-  .fl { flex: none; width: 64px; font-size: var(--fs-sm); color: var(--muted); }
-  .ft { flex: 1; height: 5px; border-radius: var(--r-pill); background: var(--surface-2); overflow: hidden; }
-  .ff { display: block; height: 100%; border-radius: var(--r-pill); background: color-mix(in srgb, var(--accent) 60%, var(--muted)); }
-  /* 社会形状（脱敏，仅同类派生） */
-  .socialshape { color: var(--muted); font-size: var(--fs-md); line-height: 1.6; margin: 0 0 14px; }
-  /* 兴趣阶段标 */
-  .ph { font-size: var(--fs-2xs); color: var(--faint); margin-left: 6px; }
-  .tag.strong .ph { color: var(--muted); }
-  .aspir { margin: 0; padding-left: 1.1em; }
-  .aspir li { color: var(--text); line-height: 1.7; font-size: var(--fs-body); }
-
-  /* 兴趣标签：confirmed（稳定）的更醒目，weight 越高底色越实 */
-  .tags { display: flex; flex-wrap: wrap; gap: var(--s2); }
-  .tag { font-size: var(--fs-sm); padding: 4px 12px; border-radius: var(--r-pill); color: var(--muted); border: 1px solid var(--border); background: color-mix(in srgb, var(--accent) var(--w, 0%), transparent); }
-  .tag.strong { color: var(--text); font-weight: 600; border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); }
-
-  /* 同类朋友：横向头像条（一眼扫完她的关系网） */
-  .friends { display: flex; gap: var(--s3); overflow-x: auto; padding: 2px 2px 6px; scrollbar-width: none; }
-  .friends::-webkit-scrollbar { display: none; }
-  .friend { flex: none; width: 72px; display: flex; flex-direction: column; align-items: center; gap: 6px; background: none; border: 0; padding: 0; }
-  .fname { font-size: var(--fs-sm); font-weight: 600; color: var(--text); max-width: 72px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .fbar { width: 56px; height: 4px; border-radius: var(--r-pill); background: var(--surface-2); overflow: hidden; }
-  .ffill { display: block; height: 100%; background: var(--muted); border-radius: var(--r-pill); }
-  .fmeta { font-size: var(--fs-2xs); color: var(--faint); max-width: 72px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-  .muse { display: block; width: 100%; text-align: left; margin: 0; padding: var(--s3) 0; background: none; border: 0; border-bottom: 1px solid var(--border-subtle); color: var(--text); cursor: pointer; }
-  .muse:last-child { border-bottom: 0; }
+  .fk { flex: none; width: 64px; font-size: var(--fs-sm); color: var(--muted); } .fv { flex: 1; }
+  .mt { margin-top: 12px; } .mb { margin: 0 0 14px; }
+  .list { margin: 0; padding-left: 1.1em; } .list li { line-height: 1.7; font-size: var(--fs-body); }
+  .friends { display: flex; gap: 16px; overflow-x: auto; padding-bottom: 4px; }
+  .friend { flex: none; width: 76px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .fn { font-size: var(--fs-sm); font-weight: 600; } .fbar { width: 56px; } .fa { font-size: var(--fs-2xs); color: var(--faint); max-width: 76px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .muse { display: block; width: 100%; text-align: left; padding: 14px 0; box-shadow: inset 0 -1px 0 0 var(--border-subtle); color: var(--text); }
+  .muse.last { box-shadow: none; }
   .mtext { display: block; line-height: 1.65; font-size: var(--fs-body); }
-  .mfoot { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; }
-  .mtime { color: var(--faint); font-size: var(--fs-xs); }
-  .mgo { color: var(--faint); font-size: var(--fs-xs); }
-  .muse:hover .mgo { color: var(--accent); }
-
-  .caption.pad { padding: 14px 2px; }
-  .err.pad { padding: 16px; }
+  .mfoot { display: flex; justify-content: space-between; margin-top: 8px; } .mgo { font-size: var(--fs-xs); color: var(--faint); }
 </style>

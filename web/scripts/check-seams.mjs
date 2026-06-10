@@ -15,7 +15,7 @@ const WHOLE_FILES = [
   'src/routes/PostDetail.svelte',
   'src/routes/Shell.svelte',
   'src/components/Composer.svelte',
-  'src/components/DetailHeader.svelte',
+  'src/components/TopBar.svelte',
 ];
 // 按规则块扫描（这些文件别处有合法真 border，只查 fixed/sticky 的那几条规则）。
 const RULE_BLOCKS = [
