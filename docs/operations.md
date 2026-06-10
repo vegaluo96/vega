@@ -28,15 +28,16 @@
 
 > 纯函数内核在 `src/kernel/`（reconstruct / 事件库 / 哈希链 / 情感配置 —— 零依赖、确定性、`RECONSTRUCT_VERSION` 在此）；`src/engine/` 是其上的编排层（converse / seeds / critic / invariant-checker）。服务层只在内核外编排，不反向污染。
 
-## 部署（智能升级，微信不掉）
+## 部署（Docker，服务器侧手动）
 
-```bash
-cd /opt/vega && bash deploy/update.sh
-```
+生产 zsky 以 **Docker 容器**运行（镜像基于 `node:22-bookworm-slim`，Dockerfile 在仓库根）：
 
-`update.sh` 智能判断：**前端改动不重启 daemon**（微信连接保持）；**仅引擎改动**才重连一次（token 持久化，自动重连、不用重扫）。首次全量见 README。
+- 流程：服务器上手动 **build → rm → run**；env 经 `--env-file /srv/zsky.env` 注入（新增变量先更新 `.env.example`，再同步补进该文件）。
+- 容器内以**非 root（uid 1000）**运行；`VEGA_HOST=0.0.0.0`、端口 8787（宿主侧由端口映射/反代收口）。
+- **持久化只挂 `VEGA_LIFE_PATH` 所在目录**（accounts.db / settings / feed / announce / 检查点 / 备份全在其下）——容器其余路径无持久性。
+- 旧 systemd 路径（`deploy/vega.service` + `deploy/update.sh`）已 **disable，仅作回滚通道**：先停容器，再 `ALLOW_SYSTEMD=1 bash deploy/update.sh`。main 推送自动部署的 workflow 已撤。
 
-Caddy 把 `zsky.com`（用户站）与 `admin.zsky.com`（后台）都反代给 daemon，daemon 按域名分流。systemd 常驻见 `deploy/vega.service`。
+Caddy 把 `zsky.com`（用户站）与 `admin.zsky.com`（后台）都反代给 daemon，daemon 按域名分流。
 
 ## 接生生命体
 

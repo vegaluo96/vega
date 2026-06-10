@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
-# ZSKY / vega —— 安全升级脚本（让"拉 GitHub 代码不掉微信"成为铁律）。
+# ZSKY / vega —— 【旧 systemd 路径】升级脚本（已停用，仅作回滚通道）。
 #
-# 原理：
+# ⚠️ 部署方式已迁移：生产 zsky 现以 Docker 容器运行（非 root / uid 1000；env 经 --env-file /srv/zsky.env
+#    注入；持久化只挂 VEGA_LIFE_PATH 所在目录；容器内 VEGA_HOST=0.0.0.0、端口 8787）。
+#    日常部署在服务器侧手动执行 Docker 流程（build → rm → run）；systemd vega.service 已 disable。
+#    本脚本只在【回滚到 systemd】时使用（须先停容器，再）：ALLOW_SYSTEMD=1 bash deploy/update.sh
+#
+# 原理（systemd 路径下仍成立）：
 #   · daemon 把【用户端 web/dist 与后台 web-admin/dist 当静态文件、按请求即时读取】——
 #     所以前端改动只需重建 dist，【无需重启 daemon】，微信/所有长连接一秒都不断。
 #   · 微信登录态（bot_token/baseurl/游标）持久化在仓库【外】的 sqlite（见 VEGA_LIFE_PATH 同级
@@ -9,10 +14,19 @@
 #   · 因此：只有【引擎/服务端代码 src/ 变了】才需要重启 daemon（这时微信会自动重连一次，
 #     是预期内、唯一一次性的中断）。日常前端/文档更新 = 微信完全不受影响。
 #
-# 用法：在仓库根执行   bash deploy/update.sh [branch]
+# 用法：在仓库根执行   ALLOW_SYSTEMD=1 bash deploy/update.sh [branch]
 #   - branch 缺省 main
 #   - 服务名缺省 vega，可用 VEGA_SERVICE 覆盖
 set -euo pipefail
+
+# 防双跑闸：生产已是 Docker——本脚本会 systemctl restart（把已 disable 的 vega.service 拉起来），
+# 和容器抢同一份数据/端口。没有显式 ALLOW_SYSTEMD=1（=明确在做 systemd 回滚）就拒绝执行。
+if [ "${ALLOW_SYSTEMD:-0}" != "1" ]; then
+  echo "✗ 已停用：生产已迁移 Docker（本脚本会 systemctl restart vega，可能与容器双跑抢端口/数据）。" >&2
+  echo "  日常部署：服务器侧手动 docker build → rm → run（env 在 /srv/zsky.env）。" >&2
+  echo "  回滚 systemd（先停容器！）： ALLOW_SYSTEMD=1 bash deploy/update.sh" >&2
+  exit 1
+fi
 
 cd "$(dirname "$0")/.."            # 仓库根（如 /opt/vega）
 SERVICE="${VEGA_SERVICE:-vega}"
