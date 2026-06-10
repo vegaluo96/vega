@@ -1,7 +1,7 @@
 <script>
-  // 广场（默认首页 · 社会优先）：你的她们（关注的命横向条）+ 她们的公开心声（社会流）。
-  import { onMount } from 'svelte';
-  import { api } from '../lib/api.js';
+  // 广场（默认首页 · 社会优先）：你的她们（关注的命横向条）+ 她们的公开心声（社会流，SSE 实时）。
+  import { onMount, onDestroy } from 'svelte';
+  import { api, stream } from '../lib/api.js';
   import { navigate } from '../lib/router.js';
   import { relTime } from '../lib/time.js';
   import { follows } from '../lib/follows.js';
@@ -16,6 +16,7 @@
   let posts = [];
   let livesMap = {};
   let loaded = false;
+  let es;
 
   async function load() {
     try {
@@ -25,7 +26,23 @@
     } catch { /* 失败留空 */ }
     loaded = true;
   }
-  onMount(load);
+  onMount(() => {
+    load();
+    // SSE 实时（稳定功能，别删）：她发新心声 → 置顶新帖（同一 postId，刷新后表情/评论对得上）；
+    // 有人在帖下留言 → 内联预览实时更新（最多 2 条）。
+    es = stream((ev) => {
+      if (ev.type === 'musing') {
+        const id = `${ev.data.life}|${ev.data.at}`;
+        if (!posts.some((p) => p.postId === id)) {
+          posts = [{ kind: 'muse', postId: id, life: ev.data.life, text: ev.data.text, at: ev.data.at, reactions: {}, myReaction: null, comments: 0, source: ev.data.source || null, preview: [] }, ...posts].slice(0, 60);
+        }
+      } else if (ev.type === 'feed_comment') {
+        const p = posts.find((x) => x.postId === ev.data.postId);
+        if (p) { p.preview = [...(p.preview || []), { handle: ev.data.handle, text: ev.data.text, kind: ev.data.kind }].slice(-2); p.comments = (p.comments || 0) + 1; posts = posts; }
+      }
+    });
+  });
+  onDestroy(() => es && es.close());
 
   $: myLives = $follows.map((id) => livesMap[id]).filter(Boolean);
 

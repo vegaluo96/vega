@@ -6,6 +6,7 @@
   import { back } from '../lib/router.js';
   import { clearReach } from '../lib/reaches.js';
   import { emoState } from '../lib/creature.js';
+  import { fitViewport } from '../lib/viewport.js';
   import { openBind } from '../lib/sheets.js';
   import { FX } from '../lib/fx.js';
   import TopBar from '../components/TopBar.svelte';
@@ -168,7 +169,7 @@
 {#if notFound}
   <div><TopBar title="" onBack={back} /><p class="caption nf">找不到她。</p></div>
 {:else if life}
-  <div class="chat">
+  <div class="chat" use:fitViewport>
     <TopBar title={life.id} onBack={back} sub={awake ? `${life.dayPhase ? life.dayPhase + ' · ' : ''}${life.feeling || life.emotion}` : '此刻在休眠'}>
       <svelte:fragment slot="right"><button class="icon-btn rel" class:on={showRel} on:click={() => (showRel = !showRel)} aria-label="你们之间"><Icon name="more" size={22} /></button></svelte:fragment>
     </TopBar>
@@ -220,7 +221,10 @@
 {/if}
 
 <style>
-  .chat { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+  /* 移动端：钉死在可见视口（沉浸页本就隐藏底栏）→ 键盘弹起时输入条贴在键盘正上方（高度由 VisualViewport 驱动，
+     iOS Safari 的 dvh 不随键盘收缩——这正是 fitViewport 存在的原因，别删）。桌面回到正常流。 */
+  .chat { position: fixed; top: 0; left: 0; right: 0; z-index: 30; display: flex; flex-direction: column; height: 100vh; height: 100dvh; background: var(--bg); }
+  @media (min-width: 1000px) { .chat { position: relative; z-index: auto; } }
   .nf { padding: 20px; }
   .rel.on { color: var(--text); }
   .relpanel { margin: 10px var(--gutter) 0; padding: 14px; background: var(--surface-2); border-radius: var(--r-md); display: flex; flex-direction: column; gap: 2px; }
