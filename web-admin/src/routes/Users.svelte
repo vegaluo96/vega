@@ -35,7 +35,7 @@
 </PageHead>
 {#if error}<p class="msg bad">{error}</p>{/if}
 
-<div class="card-quiet tablewrap">
+<div class="card-quiet tblwrap">
   <table class="tbl">
     <thead><tr>
       <th>用户</th><th>角色</th><th>余额</th><th>最近活跃</th><th>注册</th><th>状态</th><th></th>
@@ -64,7 +64,6 @@
 <style>
   .search { display: flex; align-items: center; gap: 8px; height: 38px; width: 260px; padding: 0 12px; border-radius: var(--r-pill); background: var(--surface-2); color: var(--faint); }
   .search input { flex: 1; min-width: 0; border: 0; background: none; color: var(--text); font: inherit; font-size: var(--fs-sm); outline: none; }
-  .tablewrap { overflow: hidden; }
   .uname { font-weight: 700; }
   .umail { display: block; }
   .rolechip { min-height: 22px; font-size: var(--fs-2xs); }

@@ -24,7 +24,7 @@
 
 <PageHead title="安全" sub="守住底线：词表拦截 → 她以接管话术回应并转介——全部留痕" />
 
-<div class="layout">
+<div class="cols-2 even">
   <div class="col">
     <div class="card-quiet pane">
       <div class="section-title st">安全词表</div>
@@ -59,7 +59,6 @@
 </div>
 
 <style>
-  .layout { display: grid; grid-template-columns: 1fr 1.2fr; gap: 12px; align-items: start; }
   .col { display: flex; flex-direction: column; gap: 12px; }
   .pane { padding: 18px; }
   .st { margin-bottom: 10px; }

@@ -163,10 +163,12 @@
 </div>
 
 <style>
-  .drawer { position: absolute; top: 0; right: 0; width: 420px; max-width: 92vw; height: 100%; overflow-y: auto; background: var(--surface); box-shadow: var(--shadow-md); padding: 24px; }
+  /* z-index=50（阶层表见 app.css：overlay 40 之上）；边线走阴影，不用真 border（接缝纪律） */
+  .drawer { position: absolute; top: 0; right: 0; z-index: 50; width: 420px; max-width: 92vw; height: 100%; overflow-y: auto; background: var(--surface); box-shadow: var(--shadow-md); padding: 24px; }
   .dtop { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
   .dname { font-size: var(--fs-lg); font-weight: 800; }
-  .kpis { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin: 16px 0; }
+  /* 抽屉内固定 3 列（420px 窄容器，auto-fit 会折行）；minmax(0,1fr) 防长数字撑破 */
+  .kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 16px 0; }
   .st { margin: 18px 0 8px; }
   .lives { display: flex; gap: 12px; flex-wrap: wrap; }
   .lifecell { display: inline-flex; align-items: center; gap: 6px; }

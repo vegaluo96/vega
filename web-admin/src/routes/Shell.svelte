@@ -81,14 +81,16 @@
   </aside>
 
   <main class="amain" bind:this={main}>
-    <svelte:component this={VIEWS[view]} {nav} {param} />
+    <div class="page">
+      <svelte:component this={VIEWS[view]} {nav} {param} />
+    </div>
   </main>
 </div>
 
 <style>
   .wrap { display: flex; height: 100vh; overflow: hidden; max-width: 1280px; margin: 0 auto; box-shadow: 0 0 0 1px var(--border-subtle); background: var(--bg); }
-  /* sticky/固定上下文：边线一律 inset box-shadow（接缝纪律，绝不用真 border） */
-  .sidebar { position: sticky; top: 0; height: 100vh; width: 220px; flex: none; display: flex; flex-direction: column; padding: 20px 12px 16px; box-shadow: inset -1px 0 0 0 var(--border-subtle); overflow-y: auto; }
+  /* sticky/固定上下文：边线一律 inset box-shadow（接缝纪律，绝不用真 border）；z-index=10（阶层表见 app.css） */
+  .sidebar { position: sticky; top: 0; z-index: 10; height: 100vh; width: 220px; flex: none; display: flex; flex-direction: column; padding: 20px 12px 16px; box-shadow: inset -1px 0 0 0 var(--border-subtle); overflow-y: auto; }
   .logo { display: flex; align-items: center; gap: 10px; padding: 0 10px 18px; }
   .logo b { font-weight: 900; font-size: 17px; letter-spacing: 0.03em; }
   .tagline { margin-left: 7px; font-weight: 700; letter-spacing: 0.1em; }
@@ -105,5 +107,6 @@
   .whomain { min-width: 0; flex: 1; }
   .whoname { font-weight: 700; font-size: var(--fs-sm); line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .whorole { font-size: var(--fs-2xs); line-height: 1.3; }
-  .amain { flex: 1; min-width: 0; height: 100vh; overflow-y: auto; padding: 0 32px 40px; }
+  /* 内容区只负责滚动；留白与宽度统一交给 .page（app.css 布局原语） */
+  .amain { flex: 1; min-width: 0; height: 100vh; overflow-y: auto; }
 </style>

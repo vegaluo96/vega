@@ -40,7 +40,7 @@
 {#if error}<p class="msg bad">{error}</p>{/if}
 
 {#if h}
-  <div class="kpis">
+  <div class="grid-kpi">
     <Kpi label="引擎规模" value={`${h.scale.awake}/${h.scale.lives} 醒着`} sub={`事件 ${h.scale.events.toLocaleString()} · 用户 ${h.scale.users}`} tone="var(--success)" />
     <Kpi label="模型 · 嘴/耳" value={h.model.active ? '在线' : '模板嘴'} sub={String(h.model.model || '')} tone={h.model.active ? 'var(--success)' : 'var(--warning)'} />
     <Kpi label="在场感知" value={h.audience.present ? '有人在' : '无人'} sub={`已安静 ${h.audience.idleMinutes} 分 · 门控 ${h.audience.gateMinutes} 分`} />
@@ -48,7 +48,7 @@
   </div>
 {/if}
 
-<div class="two">
+<div class="cols-2 vgap">
   <div class="card-quiet pane">
     <div class="section-title st">事件流</div>
     {#each activity.slice(0, 30) as e}<EventRow {e} />{/each}
@@ -113,8 +113,6 @@
 </div>
 
 <style>
-  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
-  .two { display: grid; grid-template-columns: 1.4fr 1fr; gap: 12px; margin-top: 12px; align-items: start; }
   .col { display: flex; flex-direction: column; gap: 12px; }
   .pane { padding: 18px; }
   .st { margin-bottom: 8px; }

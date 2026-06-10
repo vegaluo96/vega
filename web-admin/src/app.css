@@ -105,6 +105,28 @@ a { color: var(--link); text-decoration: none; }
 ::selection { background: color-mix(in srgb, var(--text) 14%, transparent); }
 input, textarea { font: inherit; }
 
+/* ============================================================================
+   布局原语（全站归一：视图不再自造内容容器 / KPI 网格 / 两栏骨架）
+   z-index 阶层（全站对号入座，不再混战）：
+     sidebar 10 ／ sticky 头 15 ／ overlay 40 ／ drawer 50 ／ toast 60
+     （#fx-layer 9999 为纯装饰粒子层，pointer-events:none，不参与层级争夺）
+   ========================================================================== */
+/* 唯一内容容器：Shell 内容区只负责滚动，留白与宽度全在这里。 */
+.page { max-width: 1080px; margin: 0 auto; padding: 0 32px 40px; }
+/* KPI 网格：自适应列数，窄窗换行不溢出（取代各页 repeat(N,1fr) 写死列数）。 */
+.grid-kpi { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+/* 两栏（侧列表 + 详情）：左列有界、右列 minmax(0,1fr) 防内容把左列挤变形；窄窗堆叠。 */
+.cols { display: grid; grid-template-columns: minmax(260px, 320px) minmax(0, 1fr); gap: 12px; align-items: start; }
+.cols.flip { grid-template-columns: minmax(0, 1fr) minmax(260px, 360px); } /* 列表在左、侧栏在右 */
+/* 两栏（加权面板）：主 1.4fr / 副 1fr；.even = 等宽。 */
+.cols-2 { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 12px; align-items: start; }
+.cols-2.even { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+@media (max-width: 1100px) { .cols, .cols.flip, .cols-2, .cols-2.even { grid-template-columns: minmax(0, 1fr); } }
+/* 区块垂直节奏（KPI 行 → 面板行）。 */
+.vgap { margin-top: 12px; }
+/* 表格统一外包：窄窗横向滚动，不炸开页面。 */
+.tblwrap { overflow-x: auto; }
+
 /* —— 文字层级 —— */
 .page-title { font-size: var(--fs-xl); font-weight: 800; letter-spacing: -0.02em; line-height: 1.2; margin: 0; }
 .section-title { font-size: var(--fs-sm); font-weight: 700; letter-spacing: 0.02em; color: var(--muted); margin: 0; }
@@ -173,7 +195,7 @@ input, textarea { font: inherit; }
 .msg { font-size: var(--fs-sm); color: var(--success); margin: 8px 0 0; line-height: 1.6; }
 .msg.bad { color: var(--danger); }
 
-/* —— 弹层（抽屉/出生表单）：fixed 上下文，边线一律 inset box-shadow —— */
+/* —— 弹层（抽屉/出生表单）：fixed 上下文，边线一律 inset box-shadow；z-index 见顶部阶层表（overlay 40） —— */
 .overlay { position: fixed; inset: 0; z-index: 40; }
 .overlay .scrim { position: absolute; inset: 0; width: 100%; height: 100%; background: var(--scrim); cursor: default; }
 

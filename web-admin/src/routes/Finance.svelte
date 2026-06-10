@@ -56,7 +56,7 @@
 <PageHead title="财务" sub="心意的进与出——充值审批在工作台，这里看账本、定价与平台余额" />
 {#if error}<p class="msg bad">{error}</p>{/if}
 
-<div class="kpis">
+<div class="grid-kpi">
   <Kpi label="模型账户余额" value={pb ? (pb.error ? '查询失败' : pb.configured === false ? '未配置' : `$${pb.remainingUsd}`) : '…'}
     sub={pb && pb.configured && !pb.error ? `已用 $${pb.usedUsd} / 总 $${pb.totalUsd}` : '对账 token 在下方配置'}
     tone={pb && pb.configured && !pb.error ? (pb.remainingUsd < 5 ? 'var(--danger)' : 'var(--success)') : undefined} />
@@ -66,7 +66,7 @@
   <Kpi label="平台请求数" value={pb && pb.configured && !pb.error ? pb.requestCount : '—'} sub="apiyi 累计调用" />
 </div>
 
-<div class="two">
+<div class="cols-2 vgap">
   <div class="card-quiet pane">
     <div class="section-title st">流水</div>
     <!-- TODO(后端)：credit_ledger 已落库（充值到账/对话消耗/手动调整），缺查询端点；接上后这里渲染 +绿/-灰 账本。 -->
@@ -129,8 +129,6 @@
 </div>
 
 <style>
-  .kpis { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
-  .two { display: grid; grid-template-columns: 1.4fr 1fr; gap: 12px; margin-top: 12px; align-items: start; }
   .col { display: flex; flex-direction: column; gap: 12px; }
   .pane { padding: 18px; }
   .st { margin-bottom: 8px; }

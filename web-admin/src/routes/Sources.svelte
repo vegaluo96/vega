@@ -89,7 +89,7 @@
 {#if saveMsg}<p class="msg" class:bad={saveMsg.startsWith('✗')}>{saveMsg}</p>{/if}
 {#if testMsg}<p class="msg" class:bad={testMsg.startsWith('✗')}>{testMsg}</p>{/if}
 
-<div class="layout">
+<div class="cols-2">
   <div class="card-quiet list">
     {#each rows as s, i (s.url)}
       {@const st = statsFor(s.url)}
@@ -140,7 +140,6 @@
 <style>
   .headacts { display: flex; gap: 8px; }
   .deny { padding: 24px; }
-  .layout { display: grid; grid-template-columns: 1.4fr 1fr; gap: 12px; align-items: start; }
   .list { padding: 8px; }
   .pad { padding: 10px; }
   .srow { display: flex; align-items: center; gap: 12px; padding: 11px 10px; box-shadow: inset 0 -1px 0 0 var(--border-subtle); transition: opacity var(--t) var(--ease); }

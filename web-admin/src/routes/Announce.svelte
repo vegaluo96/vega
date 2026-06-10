@@ -22,7 +22,7 @@
 
 <PageHead title="公告" sub="以系统身份发往「通知 · 系统」——克制使用，别打扰她们与他们的日常" />
 
-<div class="layout">
+<div class="cols-2 even">
   <div class="card-quiet pane">
     <div class="section-title st">新公告</div>
     <input class="input ttl" bind:value={title} placeholder="标题" aria-label="公告标题" />
@@ -44,7 +44,6 @@
 </div>
 
 <style>
-  .layout { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
   .pane { padding: 18px; }
   .st { margin-bottom: 10px; }
   .ttl { min-height: 38px; }

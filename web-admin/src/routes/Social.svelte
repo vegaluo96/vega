@@ -46,13 +46,13 @@
 {#if error}<p class="msg bad">{error}</p>{/if}
 {#if denied}<div class="card-quiet deny"><p class="caption">{denied}</p></div>{:else if s}
 
-<div class="kpis">
+<div class="grid-kpi">
   <Kpi label="活跃圈上限" value={s.activeCircle} sub="她们记得住的数量（Dunbar）" />
   <Kpi label="每跳主动找几个" value={s.reachPerTick} sub="token 随生命体数、不随用户数" />
   <Kpi label="相识阈值" value={s.acquaintAt} sub="低于此不主动" />
 </div>
 
-<div class="card-quiet pane">
+<div class="card-quiet pane vgap">
   <div class="section-title st">规则与理由</div>
   {#each [['同类来往节奏', '由各自气质与作息决定，引擎只设上限'], ['交友上限', `${s.activeCircle} 个深关系——她们记得住的数量`], ['主动找人', `对方安静 ${f.reachAfterMin} 分钟以上才去打扰；越亲越勤（亲密 ${f.intimateHr}h / 好友 ${f.friendHr}h / 相识 ${f.acquaintHr}h）`]] as [k, v]}
     <div class="rrow"><b class="rk">{k}</b><span class="muted rv">{v}</span></div>
@@ -84,8 +84,7 @@
 
 <style>
   .deny { padding: 24px; }
-  .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-  .pane { padding: 18px; margin-top: 12px; }
+  .pane { padding: 18px; }
   .st { margin-bottom: 8px; }
   .st.gap { margin: 16px 0 8px; }
   .rrow { display: flex; gap: 12px; padding: 9px 0; box-shadow: inset 0 -1px 0 0 var(--border-subtle); font-size: var(--fs-sm); }

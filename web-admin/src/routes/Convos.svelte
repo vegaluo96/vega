@@ -63,7 +63,7 @@
 {#if denied}
   <div class="card-quiet deny"><p class="caption">{denied}</p></div>
 {:else}
-  <div class="layout">
+  <div class="cols flip">
     <div class="card-quiet list">
       {#each rels as r (r.rel)}
         <button class="item" class:on={sel && sel.rel === r.rel} on:click={() => open(r)}>
@@ -117,7 +117,6 @@
   .picker { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
   .lifechip { gap: 8px; }
   .deny { padding: 24px; }
-  .layout { display: grid; grid-template-columns: 1fr 360px; gap: 14px; align-items: start; }
   .list { padding: 8px; }
   .pad { padding: 10px 12px; }
   .item { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 11px 12px; border-radius: var(--r-sm); }

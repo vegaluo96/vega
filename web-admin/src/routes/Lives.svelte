@@ -81,7 +81,7 @@
 {#if error}<p class="msg bad">{error}</p>{/if}
 {#if creating}<CreateLife on:close={() => { creating = false; }} on:born={onBorn} />{/if}
 
-<div class="layout">
+<div class="cols">
   <div class="card-quiet list">
     {#each lives as l (l.id)}
       <button class="item" class:on={sel === l.id} on:click={() => select(l.id)}>
@@ -114,14 +114,14 @@
         </div>
       </div>
 
-      <div class="kpis">
+      <div class="grid-kpi">
         <Kpi label="活力" value={Math.round((detail.soma?.vitality || 0) * 100) + '%'} />
         <Kpi label="睡眠压" value={Math.round((detail.sleepPressure || 0) * 100) + '%'} tone={detail.sleepPressure > 0.7 ? 'var(--warning)' : undefined} />
         <Kpi label="心智成熟" value={Math.round((detail.maturity || 0) * 100) + '%'} />
         <Kpi label="同类朋友" value={detail.social?.peerCount ?? 0} sub={`兴趣 ${(detail.interests || []).length}`} />
       </div>
 
-      <div class="two">
+      <div class="cols-2 even">
         <div class="card-quiet pane">
           <div class="section-title st">成熟度三面</div>
           {#each Object.entries(FACET_LABEL) as [k, lbl]}
@@ -175,7 +175,7 @@
         </div>
       </div>
 
-      <div class="two">
+      <div class="cols-2 even">
         <div class="card-quiet pane">
           <div class="section-title st">福祉时间线（wellbeing）</div>
           {#if latest}
@@ -249,7 +249,6 @@
 </div>
 
 <style>
-  .layout { display: grid; grid-template-columns: 300px 1fr; gap: 14px; align-items: start; }
   .list { padding: 8px; }
   .pad { padding: 10px 12px; }
   .item { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 10px 12px; border-radius: var(--r-sm); }
@@ -268,8 +267,6 @@
   .mb { min-height: 24px; }
   .temper { margin: 8px 0 0; line-height: 1.6; }
   .tension { margin: 6px 0 0; font-size: var(--fs-sm); color: var(--life-tension); }
-  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
-  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
   .pane { padding: 18px; }
   .st { margin-bottom: 10px; }
   .st.gap { margin: 14px 0 8px; }

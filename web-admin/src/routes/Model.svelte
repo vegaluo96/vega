@@ -60,14 +60,14 @@
 {#if error}<p class="msg bad">{error}</p>{/if}
 {#if denied}<div class="card-quiet deny"><p class="caption">{denied}</p></div>{:else if m}
 
-<div class="kpis">
+<div class="grid-kpi">
   <Kpi label="嘴 · 对外措辞" value={m.active ? '在线' : '模板嘴'} sub={m.model} tone={m.active ? 'var(--success)' : 'var(--warning)'} />
   <Kpi label="耳 · 听懂自然语言" value={m.perceive === false ? '关' : '常驻'} sub={m.perceiveModel || '同嘴'} tone="var(--success)" />
   <Kpi label="超时" value={`${m.timeoutMs}ms`} sub="超时自动回落模板嘴" />
   <Kpi label="密钥" value={m.apiKeySet ? '已配' : '未配'} sub={m.apiKeySet ? `${m.apiKeyMasked} · 来自${m.apiKeyFrom === 'override' ? '后台' : '环境变量'}` : '未配则离线模板嘴'} tone={m.apiKeySet ? 'var(--success)' : 'var(--warning)'} />
 </div>
 
-<div class="two">
+<div class="cols-2 vgap">
   <div class="card-quiet pane">
     <div class="section-title st">用途路由（每个用途独立选型）</div>
     <div class="route">
@@ -122,8 +122,6 @@
 
 <style>
   .deny { padding: 24px; }
-  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
-  .two { display: grid; grid-template-columns: 1.4fr 1fr; gap: 12px; margin-top: 12px; align-items: start; }
   .col { display: flex; flex-direction: column; gap: 12px; }
   .pane { padding: 18px; }
   .st { margin-bottom: 10px; }

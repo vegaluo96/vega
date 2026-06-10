@@ -59,14 +59,14 @@
   </button>
 {/if}
 
-<div class="kpis">
+<div class="grid-kpi">
   <Kpi label="今日消息" value={todayMsgs} sub={`近 ${activity.length} 条事件中`} />
   <Kpi label="活跃用户" value={users} sub={health ? `微信通道 ${health.channels.length}` : '注册账号'} />
   <Kpi label="模型" value={health ? (health.model.active ? '在线' : '模板嘴') : '—'} sub={health ? String(health.model.model || '') : ''} tone={health && health.model.active ? 'var(--success)' : undefined} />
   <Kpi label="引擎心跳" value={heartbeat.v} sub={heartbeat.ok ? 'tick 正常' : '等待 tick'} tone={heartbeat.ok ? 'var(--success)' : 'var(--warning)'} />
 </div>
 
-<div class="two">
+<div class="cols-2 vgap">
   <div class="card-quiet pane">
     <div class="ptop">
       <span class="section-title">生命体 · {awakeN}/{lives.length} 醒着</span>
@@ -100,8 +100,6 @@
   .btx b { font-weight: 700; }
   .bwait { margin-left: 10px; }
   .bgo { color: var(--link); font-size: var(--fs-sm); font-weight: 600; }
-  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
-  .two { display: grid; grid-template-columns: 1.4fr 1fr; gap: 12px; margin-top: 12px; align-items: start; }
   .pane { padding: 18px; }
   .ptop { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
   .plink { font-size: var(--fs-xs); color: var(--link); }
