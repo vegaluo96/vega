@@ -16,7 +16,7 @@ export async function handleUserApi(ctx: Ctx, req: IncomingMessage, res: ServerR
     lives, snapOf, lifeById, allPeerExchanges, feedPosts, allFeedPosts, accounts,
     effBilling, publicAccount, CLAWBOT_SECRET, cleanBindToken, wechatReply, respondAsUser,
     sessionAccount, bearer, livesMetBy, bus, ilink, WECHAT_LIFE, runChannel, channelGen,
-    VAPID, feed, effSocial, layerOf, clientIp, loginGuard,
+    VAPID, feed, announce, effSocial, layerOf, clientIp, loginGuard,
   } = ctx;
 
   // 公开：社会广场（发现）
@@ -259,6 +259,10 @@ export async function handleUserApi(ctx: Ctx, req: IncomingMessage, res: ServerR
     }
     dyn.sort((a, b) => (String(a.at) < String(b.at) ? 1 : -1));
     for (const d of dyn.slice(0, 12)) notes.push(d);
+    // 8) 托管者公告（audience 含人类）——落到「通知·系统」；最近 10 条，平台留痕（announce.json），不进神圣日志。
+    for (const a of announce.list().filter((x) => x.audience === 'humans' || x.audience === 'both').slice(0, 10)) {
+      notes.push({ type: 'announce', at: a.at, title: a.title, text: a.text });
+    }
     notes.sort((a, b) => (String(a.at) < String(b.at) ? 1 : -1));
     return send(res, 200, notes);
   }

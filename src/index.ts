@@ -74,5 +74,6 @@ export { createEventBus, visibleTo, type EventBus, type BusEvent } from './platf
 export { generateVapidKeys, sendPush, type VapidKeys, type PushSubscription } from './platform/webpush.ts';
 export { createSettingsStore, type SettingsStore, type ModelOverride, type SocialConfig, type WorldConfig } from './platform/settings.ts';
 export { createFeedStore, type FeedStore, type FeedComment, type PostSource } from './platform/feed.ts';
+export { createAnnounceStore, ANNOUNCE_TITLE_MAX, ANNOUNCE_TEXT_MAX, type AnnounceStore, type Announcement, type AnnounceAudience } from './platform/announce.ts';
 export { createWorldFeed, parseRss, parsePolymarket, parseOnThisDay, tagTopics, classifySource, POLYMARKET_TOKENS, ONTHISDAY_TOKENS, type WorldFeed, type WorldItem, type SourceReport, type SourceKind } from './world/sources.ts';
 export { createIlink, type IlinkConfig, type QrStatus, type IncomingMsg } from './platform/ilink.ts';

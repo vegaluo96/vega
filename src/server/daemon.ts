@@ -12,6 +12,7 @@ import {
   createDynamicPerceiver,
   createSettingsStore,
   createFeedStore,
+  createAnnounceStore,
   createIlink,
   createEventBus,
   createSerializer,
@@ -64,6 +65,7 @@ const now = (): string => new Date().toISOString();
 // 当前生效配置 = 后台覆盖 ⊕ 环境变量兜底；没 key = null（回落离线模板嘴）。改了即时生效、无需重启。
 const settings = createSettingsStore(join(DATA_DIR, 'settings.json'));
 const feed = createFeedStore(join(DATA_DIR, 'feed.db')); // 广场发帖互动（表情/评论），平台层、不进神圣日志
+const announce = createAnnounceStore(join(DATA_DIR, 'announce.json')); // 托管者公告（人类/生命体/两者），平台留痕；生命体侧另经神圣链路注入事件
 // 微信 iLink（ZSKY 自己当机器人，无需 OpenClaw）：网页扫码登录 + 后台收发消息。base 可用 VEGA_ILINK_BASE 覆盖。
 const ilink = createIlink({ base: process.env.VEGA_ILINK_BASE });
 const WECHAT_LIFE = process.env.VEGA_WECHAT_LIFE || ''; // 微信通道默认对应哪条命；空=第一条
@@ -141,7 +143,7 @@ const authed = (req: IncomingMessage): boolean => !AUTH || req.headers.authoriza
 const world = createWorld({ effWorld: config.effWorld, worldEnabled: config.worldEnabled, lives, snapOf, serializer, backupMs: BACKUP_MS });
 
 const ctx: Ctx = {
-  settings, feed, accounts, ilink, bus, serializer, autoBudget, mouth, templateMouth, perceiver,
+  settings, feed, announce, accounts, ilink, bus, serializer, autoBudget, mouth, templateMouth, perceiver,
   lives, lifeById, snapOf, buildThread, livesMetBy, recomputePeers, saveCheckpoint, meetPeer, partPeer,
   ...config, // effWorld/worldStatus/worldEnabled/effMouthConfig/effPerceiveConfig/modelStatus/effSocial/layerOf/effBilling（见 ./config.ts）
   respondAsUser, wechatReply, runChannel, birthLife, cleanBindToken,

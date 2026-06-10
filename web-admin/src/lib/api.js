@@ -46,6 +46,8 @@ export const api = {
   saveBillingConfig: (patch) => req('POST', '/admin/billing-config', patch),
   platformBalance: () => req('GET', '/admin/platform-balance'),
   userConversations: (id) => req('GET', `/admin/users/${encodeURIComponent(id)}/conversations`),
+  announces: () => req('GET', '/admin/announce'),
+  announce: (title, text, audience) => req('POST', '/admin/announce', { title, text, audience }),
 };
 export const setSession = (t) => session.set(t || '');
 export const clearSession = () => session.set('');

@@ -21,9 +21,9 @@
   let opened = { plaza: false, system: false }; // 本次会话是否打开过该 tab（打开即灭该 tab 红点）
   let prevSeen = 0;                             // 进页前的已读水位（fresh 的判据），mount 时从全局水位读取
 
-  // milestone（关系里程碑，情感事件）归广场；系统只剩 wallet/welcome 工具行。
+  // milestone（关系里程碑，情感事件）归广场；系统只剩 wallet/welcome/announce 工具行（announce=托管者公告，图标走 bell 分支）。
   const inPlaza = (n) => n.type === 'reply' || n.type === 'life_event' || n.type === 'milestone';
-  const inSystem = (n) => n.type === 'wallet' || n.type === 'welcome';
+  const inSystem = (n) => n.type === 'wallet' || n.type === 'welcome' || n.type === 'announce';
   const isFresh = (n, since) => new Date(n.at).getTime() > since;
 
   onMount(async () => {

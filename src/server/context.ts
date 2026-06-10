@@ -3,7 +3,7 @@
 // 这是"拆掉 1951 行 god-file"的接缝：daemon = 组装根，路由/回路 = 纯逻辑（吃 ctx）。
 import type { IncomingMessage } from 'node:http';
 import {
-  createAccountStore, createFeedStore, createSettingsStore, createIlink,
+  createAccountStore, createFeedStore, createSettingsStore, createAnnounceStore, createIlink,
   createEventBus, createSerializer, createAutonomousBudget,
   createTemplateMouth, createDynamicPerceiver, governedMouth,
   type Account, type ApiyiConfig, type DerivedSnapshot, type DurableEventStore,
@@ -48,6 +48,7 @@ export type ReachInfo = { lastRecvMs: number; lastSentMs: number; pending: boole
 type AccountStore = ReturnType<typeof createAccountStore>;
 type FeedStore = ReturnType<typeof createFeedStore>;
 type SettingsStore = ReturnType<typeof createSettingsStore>;
+type AnnounceStore = ReturnType<typeof createAnnounceStore>;
 type Ilink = ReturnType<typeof createIlink>;
 type EventBus = ReturnType<typeof createEventBus>;
 type Serializer = ReturnType<typeof createSerializer>;
@@ -58,7 +59,7 @@ type Perceiver = ReturnType<typeof createDynamicPerceiver>;
 
 export interface Ctx {
   // —— 单例 store / 服务 ——
-  settings: SettingsStore; feed: FeedStore; accounts: AccountStore; ilink: Ilink;
+  settings: SettingsStore; feed: FeedStore; announce: AnnounceStore; accounts: AccountStore; ilink: Ilink;
   bus: EventBus; serializer: Serializer; autoBudget: AutonomousBudget;
   mouth: Mouth; templateMouth: TemplateMouth; perceiver: Perceiver;
 

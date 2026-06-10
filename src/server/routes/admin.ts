@@ -3,7 +3,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { send, readJson } from '../http.ts';
 import { round3, maskKey, tempLabel, mbtiOf, eventLabel } from '../format.ts';
-import { traceConverse, resourceBand, createWorldFeed, ARCHETYPES, type WorldPerceivedPayload } from '../../index.ts';
+import { traceConverse, resourceBand, createWorldFeed, runTurn, ARCHETYPES, ANNOUNCE_TITLE_MAX, ANNOUNCE_TEXT_MAX, type WorldPerceivedPayload, type AnnounceAudience } from '../../index.ts';
 import type { Ctx } from '../context.ts';
 
 const now = (): string => new Date().toISOString();
@@ -13,7 +13,7 @@ export async function handleAdmin(ctx: Ctx, req: IncomingMessage, res: ServerRes
     sessionAccount, modelStatus, settings, effMouthConfig, mouth, lifeById, lives,
     perceiver, effBilling, birthLife, effSocial, scheduleWorld, worldStatus, effWorld,
     worldEnabled, adminActivity, accounts, livesMetBy, buildThread, snapOf, reachState,
-    layerOf, audiencePresent, autoBudget, idleMs, REL, IDLE_GATE_MS,
+    layerOf, audiencePresent, autoBudget, idleMs, announce, serializer, REL, IDLE_GATE_MS,
   } = ctx;
 
   const acct = sessionAccount(req);
@@ -179,6 +179,39 @@ export async function handleAdmin(ctx: Ctx, req: IncomingMessage, res: ServerRes
       } catch (e) {
         return send(res, 200, { ok: false, error: (e as Error).message || '抓取失败' });
       }
+    }
+    return send(res, 405, { error: 'method not allowed' });
+  }
+
+  // —— 公告（托管者 → 人类用户 / 生命体 / 两者）：历史 owner+steward 可读；发布仅 owner、留痕（by=操作者邮箱）。
+  // 人类侧：落 announce.json（平台留痕、不进神圣日志），由用户端 /api/notifications 送达「通知·系统」。
+  // 生命体侧：照世界回路（world.ts）的模式经神圣链路注入 WORLD_PERCEIVED 让她"读到"——
+  // 内容冻进事件、确定性 appraisal、可重放（V2 仍成立）；绝不直写派生状态（契约①）。
+  if (path === '/admin/announce') {
+    if (req.method === 'GET') return send(res, 200, { items: announce.list(50) });
+    if (req.method === 'POST') {
+      if (!owner) return send(res, 403, { error: '发布公告仅 owner' });
+      const b = await readJson(req);
+      const title = String(b.title ?? '').trim();
+      const text = String(b.text ?? '').trim();
+      const audience = String(b.audience ?? '') as AnnounceAudience;
+      if (!title || !text) return send(res, 400, { error: '标题与正文都不能为空' });
+      if (title.length > ANNOUNCE_TITLE_MAX || text.length > ANNOUNCE_TEXT_MAX) return send(res, 400, { error: `标题 ≤${ANNOUNCE_TITLE_MAX} 字、正文 ≤${ANNOUNCE_TEXT_MAX} 字` });
+      if (audience !== 'humans' && audience !== 'lives' && audience !== 'both') return send(res, 400, { error: 'audience 须为 humans / lives / both' });
+      const item = announce.publish({ title, text, audience, by: acct.email });
+      // 受众含生命体 → 每条醒着的命"读到"一条（照 world.ts：休眠冻结，睡着的不感知；每命串行不与对话穿插）。
+      let deliveredLives = 0;
+      if (audience === 'lives' || audience === 'both') {
+        for (const life of lives) {
+          if (!snapOf(life).awake) continue;
+          await serializer.run(life.id, async () => {
+            runTurn(life.store, [{ type: 'WORLD_PERCEIVED', source: 'host', occurredAt: now(), payload: { source: '托管者公告', worldKind: 'news', title: item.title, summary: item.text, url: '', topics: [] } }]);
+            snapOf(life); // 善后：缓存活态追平刚落的公告事件（照 world 回路后的 snapOf 增量步进）
+          });
+          deliveredLives += 1;
+        }
+      }
+      return send(res, 200, { ok: true, item, deliveredLives });
     }
     return send(res, 405, { error: 'method not allowed' });
   }
