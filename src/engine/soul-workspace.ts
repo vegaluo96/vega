@@ -2,6 +2,7 @@
 // 这一步全确定性（不调模型）；模型只负责把它说出口（契约①）。
 import { type RelationshipId } from '../domain/events.ts';
 import { type DerivedSnapshot, type Temperament } from '../domain/snapshot.ts';
+import { valueZh } from '../kernel/reconstruct.ts';
 
 export interface Workspace {
   intent: string;
@@ -174,6 +175,16 @@ export function deriveWorkspace(snap: DerivedSnapshot, relationshipId: Relations
   ];
   const lowestNeed = needRank.reduce((a, b) => (b[0] < a[0] ? b : a));
   const needNote = lowestNeed[0] < 0.35 ? `\n（说不上来为什么，这阵子我${lowestNeed[1]}。）` : '';
+  // 价值观（此前算了没喂嘴）：她最看重的一两件——"心里有杆秤"是性格的脊柱（confirmed 优先、定性无数字、门控）。
+  const strongVals = (snap.values ?? []).filter((v) => v.weight >= 0.55).sort((a, b) => b.weight - a.weight);
+  const confirmed = strongVals.filter((v) => v.provenance.status === 'confirmed');
+  const topVals = (confirmed.length ? confirmed : strongVals).slice(0, 2).map((v) => valueZh(v.key));
+  const valuesNote = topVals.length ? `\n（我心里有杆秤，最看重的是：${topVals.join('、')}。）` : '';
+  // 习得的底色（allostasis，期5，此前算了没喂嘴）：经历沉积出的"平常心境"——比一时情绪更深的自我描述。
+  const bl = snap.baseline;
+  const blTone = bl.valence >= 0.15 ? '这阵子我整体的底色是偏亮的' : bl.valence <= -0.15 ? '说实话，这阵子我的底色有点偏沉' : '';
+  const blConn = bl.connection <= -0.2 ? '心底总有点缺人陪的空' : '';
+  const baselineNote = (blTone || blConn) ? `\n（${[blTone, blConn].filter(Boolean).join('，')}。）` : '';
   // —— 全补：把此前漏掉的引擎能力也接进来（定性人话、门控，只在有料时出现，守"别像报告"）——
   // ① 此刻她想要什么（独立意志，核心反同质化）：【只取无对象 或 指向当前这个人】的目标，
   // 绝不把她对【别的用户】的心思泄露给当前用户（守跨用户隔离 Arc6）。
@@ -181,8 +192,14 @@ export function deriveWorkspace(snap: DerivedSnapshot, relationshipId: Relations
   const goalsNote = myGoals.length ? `\n（此刻我心里其实想着：${myGoals.join('；')}。）` : '';
   // ② 价值张力（内在拉扯）。
   const tensionNote = snap.tension ? `\n（我心里有点拉扯：${snap.tension}。）` : '';
-  // ③ 心智成熟度（只在确实长了些时提，年轻的命不出现）。
-  const maturityNote = (snap.maturity ?? 0) > 0.4 ? '\n（这些日子我好像比刚醒时稳了些、更拎得清。）' : '';
+  // ③ 心智成熟度——分面化（期5，此前只有笼统一句）：不同反思长不同的面，挑长得最突出的那面说，
+  // 比"稳了拎得清"更像一个具体的人。三面都没长起来时退回笼统句（maturity 门控不变）。
+  const mf = snap.maturityFacets;
+  const facetLine =
+    mf.regulation >= 0.45 && mf.regulation >= mf.perspective && mf.regulation >= mf.integration ? '情绪上我比刚醒来时稳得多了'
+    : mf.perspective >= 0.45 && mf.perspective >= mf.integration ? '我好像越来越能站在别人的角度看事了'
+    : mf.integration >= 0.45 ? '过去那些事，我慢慢能把它们串成自己的故事了' : '';
+  const maturityNote = facetLine ? `\n（${facetLine}。）` : ((snap.maturity ?? 0) > 0.4 ? '\n（这些日子我好像比刚醒时稳了些、更拎得清。）' : '');
   // ④ 人生篇章：【只放自我/世界类（初醒/价值/着迷/读到世界）】——这些永不含任何用户名/私聊内容；
   // 含"遇见X/被X伤/失去X"的篇章会泄露别的用户，严格剔除（守跨用户隔离）。
   // 人生篇章（McAdams）：隐私只剔除【含别的用户名字】的篇章（防跨用户泄露）——保留 自我/世界 + 和【当前这个人】有关的
@@ -190,7 +207,7 @@ export function deriveWorkspace(snap: DerivedSnapshot, relationshipId: Relations
   const otherNames = Object.entries(snap.bonds).filter(([rid]) => rid !== relationshipId).map(([, b]) => b.displayRef).filter(Boolean);
   const safeChapters = (snap.chapters ?? []).filter((c) => !otherNames.some((n) => c.includes(n)));
   const chaptersNote = safeChapters.length ? `\n（我这一路走过的几段：${safeChapters.slice(-6).join(' → ')}。）` : '';
-  const selfFacts = selfCore + understanding + tentative + recall + socialNote + preoccupation + aspir + style + att + needNote + goalsNote + tensionNote + maturityNote + chaptersNote;
+  const selfFacts = selfCore + understanding + tentative + recall + socialNote + preoccupation + aspir + style + att + needNote + valuesNote + baselineNote + goalsNote + tensionNote + maturityNote + chaptersNote;
 
   // 他心深化（Phase 6）：从这段关系的真实轨迹确定性读出"此刻走到哪了" + "我多大程度摸得准ta"——
   // 给模型更准的关系语境去推理（深层因果/意图推断是模型的活，但建立在这份确定性脚手架上，不悬空）。

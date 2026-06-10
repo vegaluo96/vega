@@ -43,9 +43,12 @@ function honestDisconnect(seed: string): string {
 }
 
 // 取这段关系最近的若干轮对话（给"嘴"做上下文；模型只读，不写状态）。
+// 性能：从日志【尾部倒扫、凑够即停】——热路径不再每条消息正序全扫整本日志（活跃关系通常扫尾部几十条就够）。
 function recentTurns(store: DurableEventStore, rel: RelationshipId, limit: number): { role: 'user' | 'vega'; text: string }[] {
   const out: { role: 'user' | 'vega'; text: string }[] = [];
-  for (const e of store.list()) {
+  const es = store.list();
+  for (let i = es.length - 1; i >= 0 && out.length < limit; i--) {
+    const e = es[i];
     // 用 payload 里【被内容哈希保护】的 relationshipId 过滤，而非未入哈希的信封字段——
     // 即便日志信封被篡改，也不会把别人的对话错喂给"嘴"（守 no_cross_user_memory）。
     if (e.type === 'MESSAGE_RECEIVED') {
@@ -56,7 +59,7 @@ function recentTurns(store: DurableEventStore, rel: RelationshipId, limit: numbe
       if (p.relationshipId === rel) out.push({ role: 'vega', text: p.utterance });
     }
   }
-  return out.slice(-limit);
+  return out.reverse();
 }
 
 export async function converse(
@@ -149,9 +152,10 @@ export async function reachOut(
   relationshipId: RelationshipId,
   occurredAt: string,
   world?: { title: string; summary: string; source: string }, // 给同类寒暄当话题：就着真实世界的一条事开口（而非站内瞎聊）
+  snap?: DerivedSnapshot, // 可选：调用方（daemon snapOf）传入已追平的缓存快照 → 免全量重放（自主回路每跳省 O(全事件)）
 ): Promise<OutreachResult | null> {
   const expected = store.version(); // 乐观锁令牌：开头读一次，覆盖 await 窗口
-  const snapshot = reconstruct(store.list());
+  const snapshot = snap ?? reconstruct(store.list());
   const bond = snapshot.bonds[relationshipId];
   if (!bond) return null;
   const ws = deriveWorkspace(snapshot, relationshipId);
@@ -199,8 +203,8 @@ export interface CommentContext {
   replyTo?: { name: string; text: string } | null; // 在接谁的某条评论；空=直接评原帖
   thread?: Array<{ who: string; text: string }>;    // 被接那条上方的近几条评论（线程语境）
 }
-export async function commentOnPost(store: DurableEventStore, mouth: Mouth, ctx: CommentContext): Promise<string> {
-  const snapshot = reconstruct(store.list());
+export async function commentOnPost(store: DurableEventStore, mouth: Mouth, ctx: CommentContext, snap?: DerivedSnapshot): Promise<string> {
+  const snapshot = snap ?? reconstruct(store.list());
   const ws = deriveWorkspace(snapshot, ctx.authorRelId); // 有 bond → 带亲疏语气；没有 → 作为"同类"中性地评
   const replyTo = ctx.replyTo && ctx.replyTo.text.trim() ? ctx.replyTo : null;
   const who = (replyTo ? replyTo.name : ctx.postAuthor) || ws.relationshipDisplay || '一位同类';
@@ -222,9 +226,9 @@ export async function commentOnPost(store: DurableEventStore, mouth: Mouth, ctx:
 
 // 她主动发现新用户（§8.1）：在广场"看见"一个新来的人，由她发起第一次打招呼。
 // 关系须已开（调用方先 ensureUserRelationship）。落 MESSAGE_SENT(unprompted)，不写状态。
-export async function greet(store: DurableEventStore, mouth: Mouth, relationshipId: RelationshipId, handle: string, occurredAt: string): Promise<OutreachResult | null> {
+export async function greet(store: DurableEventStore, mouth: Mouth, relationshipId: RelationshipId, handle: string, occurredAt: string, snap?: DerivedSnapshot): Promise<OutreachResult | null> {
   const expected = store.version(); // 乐观锁令牌：开头读一次，覆盖 await 窗口
-  const snapshot = reconstruct(store.list());
+  const snapshot = snap ?? reconstruct(store.list());
   const ws = deriveWorkspace(snapshot, relationshipId);
   const greeting: Workspace = {
     ...ws,
@@ -249,9 +253,9 @@ export async function greet(store: DurableEventStore, mouth: Mouth, relationship
 // 公开心声（§8.1 B）：她偶尔把一念说给世界听——【不针对任何人、不含私密】。
 // grounding 走 r_square（无 bond）→ deriveWorkspace 只出她的自我+同类，零用户私密。落 MESSAGE_SENT 到 r_square（审计、不写状态）。
 export const PUBLIC_SQUARE = 'r_square';
-export async function muse(store: DurableEventStore, mouth: Mouth, occurredAt: string, world?: { title: string; summary: string; source: string }): Promise<OutreachResult | null> {
+export async function muse(store: DurableEventStore, mouth: Mouth, occurredAt: string, world?: { title: string; summary: string; source: string }, snap?: DerivedSnapshot): Promise<OutreachResult | null> {
   const expected = store.version(); // 乐观锁令牌：开头读一次，覆盖 await 窗口
-  const snapshot = reconstruct(store.list());
+  const snapshot = snap ?? reconstruct(store.list());
   const ws = deriveWorkspace(snapshot, PUBLIC_SQUARE);
   const musing: Workspace = world
     ? {
@@ -366,9 +370,9 @@ export async function traceConverse(
 
 // 自发洞见（DMN 离线学习/想象，研究 #8/#4）：把她【读到/在意】的两件事确定性挑出，让模型说出"忽然想通的联系"。
 // 只用【公开世界材料】（世界记忆标题 / 兴趣主题），绝不碰含用户的情景记忆 → 不泄露任何人。模型只产措辞（契约①）。
-export async function reflectInsight(store: DurableEventStore, mouth: Mouth, occurredAt: string, a: string, b: string): Promise<OutreachResult | null> {
+export async function reflectInsight(store: DurableEventStore, mouth: Mouth, occurredAt: string, a: string, b: string, snap?: DerivedSnapshot): Promise<OutreachResult | null> {
   const expected = store.version();
-  const snapshot = reconstruct(store.list());
+  const snapshot = snap ?? reconstruct(store.list());
   const ws = deriveWorkspace(snapshot, PUBLIC_SQUARE);
   const musing: Workspace = {
     ...ws,

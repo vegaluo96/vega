@@ -1142,13 +1142,13 @@ function buildSemanticMemory(st: RState, decorated: MemoryEntry[]): SemanticMemo
   return out.sort((a, b) => b.episodes - a.episodes);
 }
 
-// 价值键 → 自然语（给内在独白/叙事用）。
+// 价值键 → 自然语（给内在独白/叙事/嘴的 grounding 用；导出供 soul-workspace 复用，不重复映射表）。
 const VALUE_ZH: Record<string, string> = {
   openness: '敞开', caution: '谨慎', expression: '敢表达', self_worth: '看重自己',
   guardedness: '戒备', self_protection: '自我保护', self_reliance: '能自处',
   forgiveness: '宽容', honesty: '坦诚',
 };
-const valueZh = (key: string): string => VALUE_ZH[key] ?? key;
+export const valueZh = (key: string): string => VALUE_ZH[key] ?? key;
 
 function buildNarrative(st: RState, sem: SemanticMemory[], goals: Goal[], decorated: MemoryEntry[]): string {
   const age = formatDuration(Date.parse(st.clockIso) - Date.parse(st.bornAt));

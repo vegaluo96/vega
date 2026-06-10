@@ -92,7 +92,7 @@ export function startLoops(ctx: Ctx, t: LoopTiming): LoopHandles {
           if (Date.now() - (st.lastSentMs || 0) <= layerOf(b.closeness, sc).everyMs * (1.5 - reachEff)) continue;
           if (!autoBudget.tryConsume()) break; // 治理：自主预算超额 → 这轮不主动开口
           const ra = now();
-          const o = await reachOut(life.store, mouth, rel, ra);
+          const o = await reachOut(life.store, mouth, rel, ra, undefined, snapOf(life)); // 传缓存快照 → 免全量重放
           if (o) { bus.publish('reach_out', rel, { life: life.id, text: o.utterance }); reached += 1; reachOutPending.set(`${life.id}|${rel}`, { rel, at: ra, kind: 'reach_out' }); } // 记下这次主动 → 反馈回路判断被回应/石沉
         }
         if (Date.now() - life.lastReflectAt > REFLECT_MS && life.store.version() - life.lastReflectSeq >= 3) {
@@ -109,11 +109,11 @@ export function startLoops(ctx: Ctx, t: LoopTiming): LoopHandles {
           life.museEveryMs = nextMuseGap(); // 下一条心声重新抽间隔 → 节奏持续变化，不形成固定周期
           if (pair && Math.random() < 0.3) {
             // 三成几率：不发新头条，而是把她在意/读到的两件事连起来——"独自想通了点什么"。
-            const o = await reflectInsight(life.store, mouth, mt, pair.a, pair.b);
+            const o = await reflectInsight(life.store, mouth, mt, pair.a, pair.b, snapOf(life)); // 缓存快照，免全量重放
             if (o) bus.publish('musing', 'public', { life: life.id, text: o.utterance, at: mt, source: null });
           } else {
             const w = pickRecentWorld(life); // 随机一条她最近读到的世界事件 → 就着它发帖；没有则发自己的念头
-            const o = await muse(life.store, mouth, mt, w); // 公开心声：不针对任何人、不含私密
+            const o = await muse(life.store, mouth, mt, w, snapOf(life)); // 公开心声：不针对任何人、不含私密；缓存快照免全量重放
             if (o) {
               const src = w ? { title: w.title, source: w.source, url: w.url } : null;
               if (src) feed.setSource(`${life.id}|${mt}`, src); // 帖子出处（展示用，平台层，不进神圣日志）
@@ -157,7 +157,7 @@ export function startLoops(ctx: Ctx, t: LoopTiming): LoopHandles {
           // 每命串行：各自的写入排进各自队列，和用户对话/心跳不穿插。
           await serializer.run(a.id, () => meetPeer(a, b.id)); // 重逢：彼此回到在场
           await serializer.run(b.id, () => meetPeer(b, a.id));
-          const opener = await serializer.run(a.id, () => reachOut(a.store, mouth, peerId(b.id), now(), pickRecentWorld(a))); // A 主动开口（读过世界就就着一条真事聊，否则寒暄）
+          const opener = await serializer.run(a.id, () => reachOut(a.store, mouth, peerId(b.id), now(), pickRecentWorld(a), snapOf(a))); // A 主动开口（读过世界就就着一条真事聊，否则寒暄）；缓存快照免全量重放
           if (opener) {
             bus.publish('society', 'public', { from: a.id, to: b.id, text: opener.utterance }); // 广场实时
             const rb = await serializer.run(b.id, () => converse(b.store, mouth, peerId(a.id), opener.utterance, now(), perceiver)); // B 回应
@@ -186,7 +186,7 @@ export function startLoops(ctx: Ctx, t: LoopTiming): LoopHandles {
         const life = awake[Math.floor(Math.random() * awake.length)];
         const o = await serializer.run(life.id, async () => {
           ensureUserRelationship(life.store, rel, u.handle, now());
-          return greet(life.store, mouth, rel, u.handle, now());
+          return greet(life.store, mouth, rel, u.handle, now(), snapOf(life)); // ensure 后再 snapOf：新开的关系已折进缓存
         });
         if (o) { bus.publish('reach_out', rel, { life: life.id, text: o.utterance }); reachOutPending.set(`${life.id}|${rel}`, { rel, at: now(), kind: 'greet' }); } // 推给那一个人 + 记下这次打招呼 → 学"主动打招呼陌生人会不会被回应"(greet 效能)
         return; // 一次只发现一个
@@ -284,7 +284,7 @@ export function startLoops(ctx: Ctx, t: LoopTiming): LoopHandles {
           const text = await commentOnPost(commenter.store, mouth, {
             authorRelId: relId, postAuthor: plan.post.life, postText: plan.post.text,
             replyTo: target ? { name: target.handle, text: target.text } : null, thread,
-          });
+          }, snapOf(commenter)); // 缓存快照免全量重放
           if (!text) return; // 模型这轮没出声 → 不评（不发模板）
           const c = feed.addLifeComment(plan.post.postId, commenter.id, text, replyTo);
           bus.publish('feed_comment', 'public', { postId: plan.post.postId, handle: commenter.id, text, kind: 'life', at: c.at, replyTo }); // 首页内联实时刷新；replyTo 供前端展示"回复 X"
