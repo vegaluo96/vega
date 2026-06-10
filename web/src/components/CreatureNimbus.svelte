@@ -37,6 +37,8 @@
   $: bodyShadow = `0 6px 20px hsl(${hue2} 60% 30% / 0.42), inset -5px -7px 14px hsl(${hue2} 60% 30% / 0.32), inset 4px 5px 12px rgba(255,255,255,0.4)`;
   $: auraBg = `radial-gradient(circle, hsl(${baseHue} 85% 64% / ${dim ? 0.16 : 0.26 + vitality * 0.22}) 0%, transparent 66%)`;
   $: auraSize = px * (0.9 + vitality * 0.14) * auraReach;
+  $: earBg = `radial-gradient(circle at 40% 36%, hsl(${baseHue} ${sat}% ${Math.min(88, lit + 16)}%), hsl(${hue2} ${sat}% ${Math.max(38, lit - 10)}%))`;
+  $: earShadow = `inset -2px -3px 6px hsl(${hue2} 60% 30% / 0.3)`;
 </script>
 
 <div class="nimbus" style="width:{px}px;height:{px}px;">
@@ -78,8 +80,27 @@
 
   <div class="bodywrap" style="width:{body}px;height:{body}px;animation:{animate ? bodyAnim : 'none'};">
     <div class="wisp" style="width:{body * 0.26}px;height:{body * 0.34}px;margin-left:{-(body * 0.13)}px;background:linear-gradient({wispC}, transparent);opacity:{dim ? 0.4 : 0.7};animation:{animate && awake ? `cr-sway ${breathDur * 1.4}s ease-in-out infinite` : 'none'};"></div>
+    {#if genes.ears}
+      <!-- 耳朵：感受型（F）才有的两只小圆耳（藏在身体后）——性格长在形体上 -->
+      <div class="ear" style="left:12%;background:{earBg};box-shadow:{earShadow};"></div>
+      <div class="ear" style="right:12%;background:{earBg};box-shadow:{earShadow};"></div>
+    {/if}
+    <!-- 呆毛：头顶一缕，倾角独一无二（基因），随呼吸轻摇 -->
+    <svg class="sprout" viewBox="0 0 24 18" width={body * 0.3} height={body * 0.22} style="margin-left:{-(body * 0.15)}px;transform:rotate({genes.sproutTilt}deg);">
+      <g class="sproutSway" style="animation:{animate && awake ? `cr-sway ${breathDur * 1.2}s ease-in-out infinite` : 'none'};">
+        <path d="M12 17 Q11 8 16 3" stroke={wispC} stroke-width="2.4" fill="none" stroke-linecap="round" />
+        <circle cx="16.6" cy="2.6" r="2" fill="hsl({baseHue} 85% 74%)" opacity={dim ? 0.5 : 0.95} />
+      </g>
+    </svg>
     <div class="body" style="border-radius:{bodyRadius};background:{bodyBg};box-shadow:{bodyShadow};animation:{animate ? wobAnim : 'none'};"></div>
     <div class="hl" style="opacity:{dim ? 0.3 : 0.7};"></div>
+    <!-- 独有斑纹 + 内纹理：每条命都不同（身份感）；底部一圈淡环光让身体更饱满 -->
+    <div class="marks" style="border-radius:{bodyRadius};">
+      {#each genes.spots as s}
+        <span class="spot" style="left:{s.x}%;top:{s.y}%;width:{s.r}%;height:{s.r * 0.82}%;background:hsl({(hue2 + 18) % 360} 70% {Math.min(90, lit + 22)}%);opacity:{dim ? s.o * 0.5 : s.o};"></span>
+      {/each}
+      <span class="innerring" style="background:radial-gradient(ellipse, transparent 50%, hsl({baseHue} 80% 82% / 0.2) 64%, transparent 80%);"></span>
+    </div>
     {#if moteArr.length && animate}
       <div class="motes">
         {#each moteArr as a}
@@ -107,6 +128,12 @@
   .twinkle { position: absolute; width: 5px; height: 5px; }
   .bodywrap { position: relative; transform-origin: 50% 56%; }
   .wisp { position: absolute; left: 50%; bottom: -14%; border-radius: 50% 50% 46% 54% / 38% 38% 62% 62%; transform-origin: 50% 0%; }
+  .ear { position: absolute; top: -8%; width: 25%; height: 25%; border-radius: 50%; }
+  .sprout { position: absolute; left: 50%; top: -13%; transform-origin: 50% 100%; overflow: visible; }
+  .sproutSway { transform-origin: 50% 100%; }
+  .marks { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+  .spot { position: absolute; border-radius: 50%; }
+  .innerring { position: absolute; left: 18%; bottom: 4%; width: 64%; height: 36%; border-radius: 50%; }
   .body { position: absolute; inset: 0; }
   .hl { position: absolute; left: 24%; top: 18%; width: 30%; height: 22%; border-radius: 50%; background: radial-gradient(circle, rgba(255,255,255,0.7), transparent 70%); }
   .motes { position: absolute; inset: 14%; animation: cr-orbit-r 16s linear infinite; }

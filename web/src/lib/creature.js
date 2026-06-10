@@ -20,15 +20,15 @@ export const clamp01 = (x) => Math.max(0, Math.min(1, x));
 // brow: 眉形，正=内端上扬(担忧/委屈)，负=内端下压(专注/坚定)；cheek: 暖意时的腮红。
 export const EXPR = {
   '温暖':  { mouth: 0.55, eye: 'soft', warm: 0.9, bright: 0.9, brow: 0.12, cheek: true },
-  '雀跃':  { mouth: 0.95, eye: 'arc',  warm: 0.8, bright: 1.0, bob: true, brow: 0.2, cheek: true },
-  '欣喜':  { mouth: 0.9,  eye: 'arc',  warm: 0.8, bright: 1.0, bob: true, brow: 0.2, cheek: true },
+  '雀跃':  { mouth: 0.95, eye: 'arc',  warm: 0.8, bright: 1.0, bob: true, brow: 0.2, cheek: true, open: true },
+  '欣喜':  { mouth: 0.9,  eye: 'arc',  warm: 0.8, bright: 1.0, bob: true, brow: 0.2, cheek: true, open: true },
   '平静':  { mouth: 0.2,  eye: 'soft', warm: 0.5, bright: 0.7, brow: 0 },
   '安宁':  { mouth: 0.28, eye: 'soft', warm: 0.55, bright: 0.72, brow: 0.05, cheek: true },
   '专注':  { mouth: 0.05, eye: 'narrow', warm: 0.5, bright: 0.78, brow: -0.55 },
   '好奇':  { mouth: 0.42, eye: 'wide', warm: 0.65, bright: 0.92, brow: 0.4 },
-  '低落':  { mouth: -0.45, eye: 'low', warm: 0.3, bright: 0.5, brow: 0.5 },
-  '孤独':  { mouth: -0.3, eye: 'soft', warm: 0.32, bright: 0.5, dim: true, brow: 0.45 },
-  '想念':  { mouth: -0.08, eye: 'soft', warm: 0.7, bright: 0.66, brow: 0.32 },
+  '低落':  { mouth: -0.45, eye: 'low', warm: 0.3, bright: 0.5, brow: 0.5, tear: true },
+  '孤独':  { mouth: -0.3, eye: 'soft', warm: 0.32, bright: 0.5, dim: true, brow: 0.45, tear: true },
+  '想念':  { mouth: -0.08, eye: 'soft', warm: 0.7, bright: 0.66, brow: 0.32, miss: true },
   '焦虑':  { mouth: -0.12, eye: 'wide', warm: 0.4, bright: 0.7, wobble: true, brow: 0.7 },
   '不安':  { mouth: -0.2, eye: 'wide', warm: 0.38, bright: 0.62, wobble: true, brow: 0.6 },
   '紧绷':  { mouth: -0.02, eye: 'narrow', warm: 0.42, bright: 0.66, wobble: true, brow: -0.45 },
@@ -53,6 +53,10 @@ export function creatureGenes(life) {
     roundness: feeling ? 0.9 : 0.62,        // 形态圆润/棱角
     motes: intuitive ? 5 : 3,               // 兴趣点缀繁简
     reach: extrovert ? 1 : 0.7,             // 外放度 → 光晕广度/动作幅度
+    // 独有细节：斑纹（每条命位置/大小都不同）+ 呆毛倾角 + 耳朵（感受型 F 才有——性格长在形体上）
+    spots: Array.from({ length: 2 + Math.floor(rnd() * 2) }).map(() => ({ x: 16 + rnd() * 58, y: 34 + rnd() * 42, r: 5 + rnd() * 8, o: 0.12 + rnd() * 0.12 })),
+    sproutTilt: (rnd() - 0.5) * 36,
+    ears: feeling,
   };
 }
 

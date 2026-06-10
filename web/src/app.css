@@ -196,6 +196,8 @@ input, textarea { font: inherit; }
 @keyframes cr-sway { 0%,100% { transform: rotate(-7deg); } 50% { transform: rotate(7deg); } }
 @keyframes cr-twinkle { 0%,100% { opacity: 0; transform: scale(0.3); } 50% { opacity: 0.95; transform: scale(1); } }
 @keyframes cr-hop { 0%,70%,100% { transform: translateY(0); } 79% { transform: translateY(-12%); } 86% { transform: translateY(0); } 91% { transform: translateY(-4%); } 96% { transform: translateY(0); } }
+@keyframes cr-glance { 0%,44%,100% { transform: translateX(0); } 50%,60% { transform: translateX(1.6px); } 66%,78% { transform: translateX(-1.3px); } 84% { transform: translateX(0); } }
+@keyframes cr-tear { 0% { opacity: 0; transform: translateY(0) scale(0.6); } 22% { opacity: 0.85; } 100% { opacity: 0; transform: translateY(9px) scale(1.05); } }
 
 @media (prefers-reduced-motion: reduce) {
   #app *, #app *::before, #app *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }

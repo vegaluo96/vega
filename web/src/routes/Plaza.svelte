@@ -10,20 +10,22 @@
   import RechargeBtn from '../components/RechargeBtn.svelte';
   import Creature from '../components/Creature.svelte';
   import ReactionBar from '../components/ReactionBar.svelte';
+  import PullRefresh from '../components/PullRefresh.svelte';
   import Icon from '../components/Icon.svelte';
 
   let posts = [];
   let livesMap = {};
   let loaded = false;
 
-  onMount(async () => {
+  async function load() {
     try {
       const [feed, lives] = await Promise.all([api.feed(), api.lives()]);
       posts = feed;
       livesMap = Object.fromEntries(lives.map((l) => [l.id, l]));
     } catch { /* 失败留空 */ }
     loaded = true;
-  });
+  }
+  onMount(load);
 
   $: myLives = $follows.map((id) => livesMap[id]).filter(Boolean);
 
@@ -42,6 +44,7 @@
 <div class="page">
   <TopBar title="广场"><svelte:fragment slot="right"><RechargeBtn /></svelte:fragment></TopBar>
 
+  <PullRefresh onRefresh={load}>
   <div class="body">
     <!-- 你的她们：你关注的命（刷信息流时固定在标题下）-->
     <div class="yours">
@@ -96,6 +99,7 @@
       </div>
     </div>
   </div>
+  </PullRefresh>
 </div>
 
 <style>

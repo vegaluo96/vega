@@ -80,7 +80,7 @@
 
 <style>
   .content { min-height: 100vh; min-height: 100dvh; }
-  nav { position: fixed; bottom: 0; left: 0; right: 0; z-index: 20; display: flex; align-items: stretch; background: color-mix(in srgb, var(--bg) 80%, transparent); backdrop-filter: saturate(160%) blur(16px); -webkit-backdrop-filter: saturate(160%) blur(16px); box-shadow: inset 0 1px 0 0 var(--border-subtle); padding-bottom: env(safe-area-inset-bottom); }
+  nav { position: fixed; bottom: 0; left: 0; right: 0; z-index: 20; display: flex; align-items: stretch; background: color-mix(in srgb, var(--bg) 80%, transparent); backdrop-filter: saturate(160%) blur(12px); -webkit-backdrop-filter: saturate(160%) blur(12px); box-shadow: inset 0 1px 0 0 var(--border-subtle); padding-bottom: env(safe-area-inset-bottom); }
   nav .brand { display: none; }
   nav button { flex: 1; display: flex; align-items: center; justify-content: center; padding: 14px 0; color: var(--faint); }
   nav button.active { color: var(--text); }
