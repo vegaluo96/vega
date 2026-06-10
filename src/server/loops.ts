@@ -3,7 +3,7 @@
 // （scheduleWorld 被 ctx/后台路由共享，留在组装根更直观）。所有回路写入仍走每命串行队列、与用户对话不穿插。
 import {
   runTurn, makeTick, reachOut, reflectInsight, muse, converse,
-  pickSocialPair, greet, ensureUserRelationship, commentOnPost,
+  pickSocialPair, greet, ensureUserRelationship, commentOnPost, describeAppearance,
   type FeedComment, type SocialPair,
 } from '../index.ts';
 import { round3, moodReactionFor } from './format.ts';
@@ -157,7 +157,8 @@ export function startLoops(ctx: Ctx, t: LoopTiming): LoopHandles {
           // 每命串行：各自的写入排进各自队列，和用户对话/心跳不穿插。
           await serializer.run(a.id, () => meetPeer(a, b.id)); // 重逢：彼此回到在场
           await serializer.run(b.id, () => meetPeer(b, a.id));
-          const opener = await serializer.run(a.id, () => reachOut(a.store, mouth, peerId(b.id), now(), pickRecentWorld(a), snapOf(a))); // A 主动开口（读过世界就就着一条真事聊，否则寒暄）；缓存快照免全量重放
+          // 生命体也知道对方长什么样：跨命信息属平台层，组成确定性事实注入 grounding（契约①：模型仍只产措辞）。
+          const opener = await serializer.run(a.id, () => reachOut(a.store, mouth, peerId(b.id), now(), pickRecentWorld(a), snapOf(a), '\n（我记得' + b.id + '的样子：' + describeAppearance(b.id, snapOf(b).temperament) + '）')); // A 主动开口（读过世界就就着一条真事聊，否则寒暄）；缓存快照免全量重放
           if (opener) {
             bus.publish('society', 'public', { from: a.id, to: b.id, text: opener.utterance }); // 广场实时
             const rb = await serializer.run(b.id, () => converse(b.store, mouth, peerId(a.id), opener.utterance, now(), perceiver)); // B 回应

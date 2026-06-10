@@ -89,7 +89,8 @@ export async function userSay(
   perceiver?: Perceiver,
   channel = 'chat',
   cached?: CachedState, // 透传 daemon 的缓存态 → converse 增量折叠（热路径提速）
+  extraFacts?: string, // 透传平台层注入的跨命确定性事实（如「我记得X的样子」）——引擎只拼 grounding，模型仍只产措辞
 ): Promise<ConverseResult> {
   ensureUserRelationship(store, relId, handle, occurredAt);
-  return converse(store, mouth, relId, content, occurredAt, perceiver, channel, cached);
+  return converse(store, mouth, relId, content, occurredAt, perceiver, channel, cached, extraFacts);
 }

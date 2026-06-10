@@ -41,6 +41,7 @@ export {
   type PatchSource,
 } from './engine/invariant-checker.ts';
 export { converse, traceConverse, reachOut, muse, reflectInsight, greet, commentOnPost, PUBLIC_SQUARE, type ConverseResult, type OutreachResult, type CommentContext, type CachedState, type ChainTrace } from './engine/converse.ts';
+export { describeAppearance } from './engine/appearance.ts'; // 外观自知：跨命「她知道对方长什么样」由平台层用它组事实注入
 export { makeTick, runAutonomousTick } from './engine/autonomous-loop.ts';
 export { peerExchange, pickSocialPair, type Participant, type PeerTurn, type SocialPair } from './engine/society.ts';
 export { ARCHETYPES, archetypeFor, innateSeedFor, genesisPayloadFor, type Archetype } from './engine/seeds.ts';

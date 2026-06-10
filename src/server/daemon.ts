@@ -125,7 +125,7 @@ const {
 } = createLives({ accounts, serializer, peerId, REL, HOST_CONN, userName, HOST, PORT, MUSE_MS, DATA_DIR, LIFE_PATH });
 
 // 写链路（神圣链路·用户侧入口，实现见 ./respond.ts）：计费 + 串行 + 资源感知。/api/say 与微信 /api/wechat/say 共用。
-const { respondAsUser } = createResponder({ accounts, serializer, snapOf, mouth, templateMouth, perceiver, effBilling: config.effBilling, touch: presence.touch });
+const { respondAsUser } = createResponder({ accounts, serializer, snapOf, mouth, templateMouth, perceiver, effBilling: config.effBilling, lifeById, touch: presence.touch });
 
 // 微信 / iLink 通道（实现见 ./wechat.ts）：长轮询收发 + 统一应答。写链路 respondAsUser 仍在本文件、注入进去。
 const { runChannel, wechatReply } = createWechat({
