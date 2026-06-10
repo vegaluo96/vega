@@ -25,6 +25,7 @@ export async function handleUserApi(ctx: Ctx, req: IncomingMessage, res: ServerR
         id: l.id, awake: s.awake, emotion: s.emotion, feeling: s.feeling, dayPhase: s.dayPhase,
         temperament: tempLabel(s.temperament), mbti: mbtiOf(s.temperament), tension: s.tension,
         vitality: round3(s.soma.vitality.value),
+        ageDays: Math.floor((Date.parse(s.clockAt) - Date.parse(s.bornAt)) / 86_400_000), // 发现页「新诞生」筛选用（公开，主页也展示）
         interests: s.interests.slice(0, 3).map((it) => ({ topic: it.topic, confirmed: it.status === 'confirmed' })),
       };
     }));

@@ -5,3 +5,8 @@ export const EPIGRAPH = {
   author: 'Vega',
   homage: '致敬 刘慈欣《朝闻道》',
 };
+
+// 兴趣四阶段（Hidi&Renninger）→ 给用户的温柔说法。
+export const PHASE_LABEL = { triggered: '刚冒头', emerging: '在生长', maintained: '常想起', established: '扎根了' };
+// 成熟三面（脱敏）：情绪调节 / 换位视角 / 经历整合。
+export const FACET_LABEL = { regulation: '情绪调节', perspective: '换位视角', integration: '经历整合' };

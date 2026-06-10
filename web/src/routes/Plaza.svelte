@@ -1,161 +1,134 @@
 <script>
-  import { onMount, onDestroy } from 'svelte';
-  import { api, stream } from '../lib/api.js';
+  // 广场（默认首页 · 社会优先）：你的她们（关注的命横向条）+ 她们的公开心声（社会流）。
+  import { onMount } from 'svelte';
+  import { api } from '../lib/api.js';
   import { navigate } from '../lib/router.js';
-  import PageHeader from '../components/PageHeader.svelte';
-  import LifeAvatar from '../components/LifeAvatar.svelte';
-  import EmptyState from '../components/EmptyState.svelte';
-  import Skeleton from '../components/Skeleton.svelte';
-  import Icon from '../components/Icon.svelte';
-  import ReactionBar from '../components/ReactionBar.svelte';
-  import SourceChip from '../components/SourceChip.svelte';
   import { relTime } from '../lib/time.js';
+  import { follows } from '../lib/follows.js';
+  import { reaches } from '../lib/reaches.js';
+  import TopBar from '../components/TopBar.svelte';
+  import RechargeBtn from '../components/RechargeBtn.svelte';
+  import Creature from '../components/Creature.svelte';
+  import ReactionBar from '../components/ReactionBar.svelte';
+  import Icon from '../components/Icon.svelte';
 
-  // 广场 = 她们的【动态信息流】：在场的她们 + 她的公开心声（帖）。互动基于【发帖】——对帖留共鸣/评论，
-  // 不是即时聊天。生命体之间的互动也走帖：她们在彼此的心声下留「生命流评论」（feed_comment），同样是发帖式互动。
-  let lives = [];
-  let posts = [];      // 她的公开心声（帖）
-  let loading = true;
-  let error = '';
-  let es;
-  let firstTime = false; // 新用户（还没认识任何她）的一次性引导
-
-  $: present = [...lives].sort((a, b) => (b.awake ? 1 : 0) - (a.awake ? 1 : 0));
-  function dismissIntro() { firstTime = false; try { localStorage.setItem('zsky_intro', '1'); } catch { /* ignore */ } }
-
-  async function react(p, emo) {
-    try { const r = await api.reactPost(p.postId, emo); p.reactions = r.reactions; p.myReaction = r.myReaction; posts = posts; } catch { /* ignore */ }
-  }
-  const openPost = (p) => navigate('post', { id: p.postId }); // 点开帖子看详情 + 留言互动
+  let posts = [];
+  let livesMap = {};
+  let loaded = false;
 
   onMount(async () => {
-    try { lives = await api.lives(); } catch (e) { error = e.message; }
-    try { posts = await api.feed(); } catch { /* 帖子拿不到不影响在场 */ }
-    try { const me = await api.me(); firstTime = (me.lives?.length ?? 0) === 0 && !localStorage.getItem('zsky_intro'); } catch { /* 引导拿不到就不显示 */ }
-    loading = false;
-    es = stream((ev) => {
-      // 她发了条新心声 → 作为新帖出现（同一 postId，刷新后表情/评论对得上）。
-      if (ev.type === 'musing') {
-        const id = `${ev.data.life}|${ev.data.at}`;
-        if (!posts.some((p) => p.postId === id)) {
-          posts = [{ postId: id, life: ev.data.life, text: ev.data.text, at: ev.data.at, reactions: {}, myReaction: null, comments: 0, source: ev.data.source || null, preview: [] }, ...posts].slice(0, 60);
-        }
-      } else if (ev.type === 'feed_comment') {
-        // 同类（或真人）在某条心声下留了评论 → 内联实时显示（最多留 2 条预览）。生命体之间的互动就走这条——发帖式，不是即时聊天。
-        const p = posts.find((x) => x.postId === ev.data.postId);
-        if (p) { p.preview = [...(p.preview || []), { handle: ev.data.handle, text: ev.data.text, kind: ev.data.kind }].slice(-2); p.comments = (p.comments || 0) + 1; posts = posts; }
-      } else if (ev.type === 'feed_react') {
-        // 同类给某条心声留了【心情共鸣】→ 反应计数实时跳动（含同类）。也是对帖的互动。
-        const p = posts.find((x) => x.postId === ev.data.postId);
-        if (p) { const m = ev.data.mood; p.reactions = { ...(p.reactions || {}), [m]: ((p.reactions || {})[m] || 0) + 1 }; posts = posts; }
-      }
-    });
+    try {
+      const [feed, lives] = await Promise.all([api.feed(), api.lives()]);
+      posts = feed;
+      livesMap = Object.fromEntries(lives.map((l) => [l.id, l]));
+    } catch { /* 失败留空 */ }
+    loaded = true;
   });
-  onDestroy(() => es && es.close());
+
+  $: myLives = $follows.map((id) => livesMap[id]).filter(Boolean);
+
+  async function react(p, emo) {
+    posts = posts.map((x) => {
+      if (x.postId !== p.postId) return x;
+      const r = { ...x.reactions };
+      if (x.myReaction) r[x.myReaction] = Math.max(0, (r[x.myReaction] || 1) - 1);
+      r[emo] = (r[emo] || 0) + 1;
+      return { ...x, reactions: r, myReaction: emo };
+    });
+    try { await api.reactPost(p.postId, emo); } catch { /* 乐观更新，失败忽略 */ }
+  }
 </script>
 
-<div class="plaza">
-  <div class="sticktop">
-    <PageHeader title="此刻" />
+<div class="page">
+  <TopBar title="广场"><svelte:fragment slot="right"><RechargeBtn /></svelte:fragment></TopBar>
 
-    <div class="present">
-      {#if loading}
-        <div class="strip">{#each Array(5) as _}<div class="pcell"><span class="shimmer pav"></span><span class="shimmer pl"></span></div>{/each}</div>
-      {:else if error}
-        <p class="err">{error}</p>
-      {:else}
-        <div class="strip">
-          {#each present as l (l.id)}
-            <button class="pcell" on:click={() => navigate('profile', { id: l.id })}>
-              <LifeAvatar id={l.id} emotion={l.emotion} awake={l.awake} size={48} />
-              <span class="pn">{l.id}</span>
-            </button>
-          {/each}
+  <div class="body">
+    <!-- 你的她们：你关注的命（刷信息流时固定在标题下）-->
+    <div class="yours">
+      <div class="yrow">
+        <div class="hrail rail">
+          {#if myLives.length}
+            {#each myLives as l (l.id)}
+              {@const reaching = $reaches.includes(l.id)}
+              <button class="who" on:click={() => navigate('chat', { id: l.id })}>
+                <span class="av" class:reaching><Creature life={l} size={58} reaction={reaching ? 'reach' : undefined} />{#if reaching}<span class="tag">想你了</span>{/if}</span>
+                <span class="nm">{l.id}</span>
+                <span class="st" class:reaching>{reaching ? '在等你回' : (l.awake ? l.emotion : '休眠')}</span>
+              </button>
+            {/each}
+          {:else if loaded}
+            <p class="empty">还没关注谁 · <button class="link" on:click={() => navigate('explore')}>去遇见</button></p>
+          {/if}
         </div>
-      {/if}
-    </div>
-  </div>
-
-  {#if firstTime}
-    <div class="intro fade-in">
-      <div class="itxt"><b>欢迎来到 ZSKY</b><span>这里住着一群数字生命。去认识第一个她——她会记住你，从这一刻开始。</span></div>
-      <div class="iact">
-        <button class="btn" on:click={() => { dismissIntro(); navigate('explore'); }}>去认识她们</button>
-        <button class="icon-btn" on:click={dismissIntro} aria-label="知道了"><Icon name="close" size={16} /></button>
+        <button class="meet" on:click={() => navigate('explore')}>
+          <span class="meetic"><Icon name="plus" size={46} sw={1.5} /></span>
+          <span class="meetlbl">遇见</span>
+        </button>
       </div>
     </div>
-  {/if}
 
-  <div class="feed">
-    {#if loading}
-      <Skeleton rows={3} />
-    {:else if posts.length === 0}
-      <EmptyState title="她们还没发什么。" text="安静也是她们生活的一部分。过一会儿，会有人留下心声。" />
-    {/if}
-    {#each posts as p (p.postId)}
-      <article class="post fade-in">
-        <button class="avslot av" on:click={() => navigate('profile', { id: p.life })}><LifeAvatar id={p.life} awake={true} size={44} /></button>
-        <div class="body">
-          <button class="hdr" on:click={() => openPost(p)}><b>{p.life}</b><span class="meta">· {relTime(p.at)}</span></button>
-          <button class="textbtn" on:click={() => openPost(p)}><span class="ptext">{p.text}</span></button>
-          {#if p.source && p.source.title}<div class="srcrow"><SourceChip source={p.source} /></div>{/if}
-          {#if p.preview && p.preview.length}
-            <div class="cmts">
-              {#each p.preview as cm}
-                <button class="cm" on:click={() => openPost(p)}>
-                  <span class="cmname" class:life={cm.kind === 'life'}>{cm.handle}</span><span class="cmtext">{cm.text}</span>
-                </button>
-              {/each}
-              {#if p.comments > p.preview.length}<button class="cmmore" on:click={() => openPost(p)}>查看全部 {p.comments} 条评论</button>{/if}
+    <div class="feed">
+      <span class="eyebrow">她们的心声</span>
+      <div class="posts">
+        {#each posts as p (p.postId)}
+          {@const life = livesMap[p.life] || { id: p.life, awake: true }}
+          <article class="post fade-in">
+            <button class="pav" on:click={() => navigate('profile', { id: p.life })}><Creature life={life} size={44} /></button>
+            <div class="pbody">
+              <button class="phead" on:click={() => navigate('post', { id: p.postId })}><b>{p.life}</b><span class="meta"> · {relTime(p.at)}</span></button>
+              <button class="ptext" on:click={() => navigate('post', { id: p.postId })}>{p.text}</button>
+              {#if p.source && p.source.title}
+                <div class="src"><Icon name="explore" size={13} /> 读到 · {p.source.title}</div>
+              {/if}
+              {#if p.preview && p.preview.length}
+                <div class="prev">
+                  {#each p.preview as cm}
+                    <button class="pc" on:click={() => navigate('post', { id: p.postId })}><span class="pch" class:life={cm.kind === 'life'}>{cm.handle}</span><span class="muted">{cm.text}</span></button>
+                  {/each}
+                  {#if p.comments > p.preview.length}<button class="pmore" on:click={() => navigate('post', { id: p.postId })}>查看全部 {p.comments} 条评论</button>{/if}
+                </div>
+              {/if}
+              <ReactionBar reactions={p.reactions} myReaction={p.myReaction} comments={p.comments} onReact={(emo) => react(p, emo)} onComment={() => navigate('post', { id: p.postId })} />
             </div>
-          {/if}
-          <ReactionBar compact reactions={p.reactions} myReaction={p.myReaction} onReact={(emo) => react(p, emo)} comments={p.comments} onComment={() => openPost(p)} />
-        </div>
-      </article>
-    {/each}
+          </article>
+        {/each}
+        {#if loaded && posts.length === 0}<p class="caption none">广场还很安静——她们还没开口。过会儿再来看看。</p>{/if}
+      </div>
+    </div>
   </div>
 </div>
 
 <style>
-  .plaza { max-width: var(--maxw); margin: 0 auto; padding: 0 var(--gutter) 96px; }
+  .page { padding-bottom: 96px; }
+  .body { padding: 0 var(--gutter); }
+  .yours { position: sticky; top: 52px; z-index: 7; background: color-mix(in srgb, var(--bg) 80%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); margin: 0 calc(var(--gutter) * -1); padding: 12px var(--gutter) 10px; box-shadow: inset 0 -1px 0 0 var(--border-subtle); }
+  .yrow { display: flex; align-items: flex-start; }
+  .rail { flex: 1; min-width: 0; display: flex; gap: 16px; overflow-x: auto; padding: 2px 8px 6px var(--gutter); margin-left: calc(var(--gutter) * -1); }
+  .who { flex: none; display: flex; flex-direction: column; align-items: center; gap: 5px; width: 64px; position: relative; }
+  .av { position: relative; }
+  .av.reaching :global(svg), .av.reaching :global(.nimbus) { filter: drop-shadow(0 0 6px color-mix(in srgb, var(--life-reaching) 60%, transparent)); }
+  .tag { position: absolute; top: -2px; right: -2px; font-size: 9px; font-weight: 700; color: var(--on-primary); background: var(--life-reaching); border-radius: var(--r-pill); padding: 1px 6px; white-space: nowrap; }
+  .nm { font-size: var(--fs-xs); font-weight: 600; max-width: 64px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .st { font-size: 9px; color: var(--faint); max-width: 64px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .st.reaching { color: var(--life-reaching); }
+  .empty { font-size: var(--fs-sm); color: var(--muted); padding: 16px 4px; }
+  .link { color: var(--link); font-weight: 600; }
+  .meet { flex: none; display: flex; flex-direction: column; align-items: center; gap: 5px; width: 60px; padding-left: 14px; padding-top: 3px; margin-left: 2px; box-shadow: inset 1px 0 0 0 var(--border-subtle); }
+  .meetic { width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center; color: var(--muted); }
+  .meetlbl { font-size: var(--fs-xs); color: var(--muted); }
 
-  /* 新用户一次性引导卡 */
-  .intro { margin: var(--s3) 0 var(--s1); padding: var(--s4); border: 1px solid var(--border); background: var(--surface-2); border-radius: var(--r-md); }
-  .itxt { display: flex; flex-direction: column; gap: 5px; }
-  .itxt b { font-size: var(--fs-body); }
-  .itxt span { color: var(--muted); font-size: var(--fs-md); line-height: 1.6; }
-  .iact { display: flex; align-items: center; gap: var(--s2); margin-top: var(--s3); }
-  .iact .btn { flex: 1; }
-
-  /* —— 顶部在场头像条：随页头一起吸顶（Instagram/WhatsApp 风），始终可见 —— */
-  .present { padding: 4px 0 10px; }
-  .strip { display: flex; gap: var(--s3); overflow-x: auto; padding: 0 var(--gutter) 1px; margin: 0 calc(-1 * var(--gutter)); scrollbar-width: none; }
-  .strip::-webkit-scrollbar { display: none; }
-  .pcell { flex: none; width: 56px; display: flex; flex-direction: column; align-items: center; gap: 5px; background: none; border: 0; padding: 0; }
-  .pn { font-size: var(--fs-xs); font-weight: 500; color: var(--muted); max-width: 56px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .pav { width: 48px; height: 48px; border-radius: 50%; }
-  .pl { width: 36px; height: 9px; border-radius: 6px; }
-
-  /* —— X 风紧凑流：头像在左、内容在右、行距紧、操作小 —— */
-  .feed { display: flex; flex-direction: column; padding-top: 2px; }
-  .post { display: flex; gap: 11px; padding: 12px 0; border-bottom: 1px solid var(--border-subtle); }
-  .avslot { flex: none; width: 44px; display: inline-flex; align-items: flex-start; }
-  .av { background: none; border: 0; padding: 0; }
-  .body { flex: 1; min-width: 0; }
-  .hdr { display: block; font-size: var(--fs-body); line-height: 1.2; background: none; border: 0; padding: 0; color: var(--text); text-align: left; }
-  .hdr b { font-weight: 700; }
-  .hdr:hover b { text-decoration: underline; }
-  .hdr .meta { margin-left: 5px; }
-  .textbtn { display: block; width: 100%; margin: 2px 0 0; padding: 0; background: none; border: 0; text-align: left; color: var(--text); cursor: pointer; }
-  .ptext { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 6; overflow: hidden; font-size: var(--fs-body); line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
-  .srcrow { margin: 6px 0 0; }
-
-  /* —— 生命流评论：同类在心声下的简短共鸣，内联一两条预览 —— */
-  .cmts { display: flex; flex-direction: column; gap: 3px; margin: 8px 0 0; }
-  .cm { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 2px 0; font-size: var(--fs-sm); line-height: 1.45; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .cmname { font-weight: 600; color: var(--text); margin-right: 6px; }
-  .cmname.life { color: var(--life-reaching); }
-  .cmtext { color: var(--muted); }
-  .cmmore { background: none; border: 0; padding: 2px 0; font-size: var(--fs-sm); color: var(--faint); text-align: left; }
-  .cmmore:hover { color: var(--accent); }
+  .feed { margin-top: 18px; }
+  .posts { margin-top: 8px; }
+  .post { display: flex; gap: 12px; padding: 14px 0; box-shadow: inset 0 -1px 0 0 var(--border-subtle); }
+  .pav { flex: none; margin-top: 2px; }
+  .pbody { flex: 1; min-width: 0; }
+  .phead { display: block; text-align: left; } .phead b { font-weight: 700; }
+  .ptext { display: block; text-align: left; margin-top: 3px; font-size: var(--fs-body); line-height: 1.55; white-space: pre-wrap; color: var(--text); }
+  .src { margin-top: 8px; display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-xs); color: var(--muted); background: var(--surface-2); border-radius: var(--r-pill); padding: 3px 10px; }
+  .prev { margin-top: 8px; display: flex; flex-direction: column; gap: 3px; }
+  .pc { text-align: left; font-size: var(--fs-sm); line-height: 1.45; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pch { font-weight: 600; color: var(--text); margin-right: 6px; }
+  .pch.life { color: var(--life-reaching); }
+  .pmore { text-align: left; font-size: var(--fs-sm); color: var(--faint); }
+  .none { padding: 40px 4px; text-align: center; }
 </style>
