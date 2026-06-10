@@ -2,6 +2,7 @@
 // 从 daemon 抽出，依赖经 createWechat 注入（多数复用 Ctx 字段类型 + sleep）。
 // 写链路 respondAsUser 仍在 daemon（神圣链路核心），这里只做"微信侧的认人/收发/兜底重发"。
 import type { Ctx } from './context.ts';
+import { splitUtterance } from '../index.ts';
 
 // 微信侧统一应答里把"zsky-bind: <码>"清洗成纯绑定码。纯函数，独立 export 供路由层共用。
 export const cleanBindToken = (s: string): string => { const t = s.replace(/^[\s\S]*zsky-bind:/i, '').trim(); return (t.split(/\s+/).pop() ?? t).trim(); };
@@ -68,6 +69,7 @@ export function createWechat(d: WechatDeps): Pick<Ctx, 'runChannel' | 'wechatRep
               const ac = accounts.getAccount(acctId);
               if (!ac) continue;
               let reply: string;
+              let creditHint = ''; // 「心意用完了」小声提示：单独攒着不混进 reply → 发送时确定性归入最后一段（不被拆段切碎）
               let delayed = false; // 走了模型 → 回复延迟若干秒，incoming 的 context_token 多半已过期
               if (snapOf(lf).willingToWake) { // 收到消息=把她叫醒（开连接由 respondAsUser 完成）；只有她【真的拒醒】才回睡眠提示，不再因"此刻无连接"卡死
                 const resp = await respondAsUser(lf, ac, m.text, 'wechat');
@@ -83,24 +85,39 @@ export function createWechat(d: WechatDeps): Pick<Ctx, 'runChannel' | 'wechatRep
                   const last = creditHintAt.get(acctId) ?? 0;
                   if (Date.now() - last > 10 * 60_000) {
                     creditHintAt.set(acctId, Date.now());
-                    reply += '\n\n（小声说：我的心意用完了，这会儿话就说得素些～去 zsky.com 给我充一点，我们能聊得更深。我一直都在。）';
+                    creditHint = '\n\n（小声说：我的心意用完了，这会儿话就说得素些～去 zsky.com 给我充一点，我们能聊得更深。我一直都在。）';
                   }
                 }
               } else {
                 reply = '她在更深的睡眠里，等会儿再来找我吧。';
               }
               // 发回微信——【必须检查结果】：之前忽略返回，sendmessage 失败也无声，于是"网页收到、微信收不到"。
-              // 关键：延迟回复（等模型生成完）时 incoming 的 context_token 多半已过期 → 先用【空 context】主动发；
-              // 即时回复（语音/睡眠，秒回）context 还新鲜 → 用原 context。送不出再用另一种 context 兜底重发一次。
-              // 这正是"语音秒回能到、文字等了模型就到不了微信"的根因。
-              // 用和"唯一送达成功的那条回复"（语音诚实回复，即时）一样的 context_token。之前给延迟回复改用
-              // 空 context 是误判：真正送出去过的那条用的是【原 context】。模型换快（秒级）后，用原 context
-              // 大概率落进 iLink 的回复窗口；送不出再用空 context 兜底重发一次。
-              // 发往微信的文本压成单行：唯一送达成功的那条是无换行短句，而模型回复常带换行——iLink 的
-              // text_item 很可能不接受内嵌换行（"无换行能到、带换行到不了"的另一可能根因）。网页端用原文(上面已 publish)。
-              const wechatText = reply.replace(/\s*\n+\s*/g, '  ').trim() || reply;
-              const sr = await ilink.sendMessage(ch.baseurl, ch.botToken, m.fromUserId, m.contextToken, wechatText, m.sessionId) as Record<string, unknown>;
-              console.log(`[wechat] 发回微信 delayed=${delayed} len=${wechatText.length} → ${JSON.stringify(sr).slice(0, 400)}`);
+              // 分段顺发（与网页端同一节奏逻辑）：splitUtterance 确定性拆 1–3 段，像真人一句一句蹦——
+              // "一口气一整块"本身就是最大的 AI 标记。神圣日志与网页端仍是完整原文（上面已 publish），这里只管"怎么递"。
+              // context 策略：延迟回复（等模型生成完）时 incoming 的 context_token 多半已过期，且回复令牌是一次性的、
+              // 撑不起多段 → 每段一律【空 context 主动发】（主动发已被证明可送达）；原 context 整场只留一发当兜底：
+              // 任一段送不出 → 剩余段（含该段）合并成一条用原 context 兜底重发一次（宁可合并也不丢内容）；
+              // 兜底也失败＝按现有失败路径，只记日志不重试。单段时即"空 context 主动发→原 context 兜底"。
+              // 每段仍压成单行：唯一送达成功过的那条是无换行短句，而模型回复常带换行——iLink 的
+              // text_item 很可能不接受内嵌换行（"无换行能到、带换行到不了"的另一可能根因）。
+              const segs = splitUtterance(reply);
+              if (!segs.length) segs.push(reply); // 防空兜底（reply 至少是'…'，理论到不了这里）
+              if (creditHint) segs[segs.length - 1] += creditHint; // 「心意用完了」小声话归入最后一段
+              const parts = segs.map((s) => s.replace(/\s*\n+\s*/g, '  ').trim() || s);
+              const sendFailed = (r: Record<string, unknown>): boolean => ('_error' in r) || ('_status' in r) || (r.errcode !== undefined && Number(r.errcode) !== 0);
+              for (let i = 0; i < parts.length; i++) {
+                if (!mine()) return; // 段间也防接班竞态：被新 worker 接班立刻退出（同长轮询处纪律：游标不前移，接班者重取这批）
+                const sr = await ilink.sendMessage(ch.baseurl, ch.botToken, m.fromUserId, '', parts[i], m.sessionId) as Record<string, unknown>;
+                console.log(`[wechat] 发回微信 delayed=${delayed} part=${i + 1}/${parts.length} len=${parts[i].length} → ${JSON.stringify(sr).slice(0, 400)}`);
+                if (sendFailed(sr)) {
+                  // 这段没送出去 → 剩余段合并成一条，用原 context 兜底重发一次后收工（已送出的段不再重复）。
+                  const rest = parts.slice(i).join('  ');
+                  const fb = await ilink.sendMessage(ch.baseurl, ch.botToken, m.fromUserId, m.contextToken, rest, m.sessionId) as Record<string, unknown>;
+                  console.log(`[wechat] 第 ${i + 1} 段没送出去，剩余 ${parts.length - i} 段合并用原 context 兜底重发 len=${rest.length} → ${JSON.stringify(fb).slice(0, 400)}`);
+                  break;
+                }
+                if (i < parts.length - 1) await sleep(Math.min(1500, 600 + parts[i + 1].length * 30)); // 确定性停顿随下一句长（同网页端节奏），像真人打字
+              }
             } catch (e) { console.log('[wechat] 回消息失败:', (e as Error).message); }
           }
           // 处理完才推进游标（之前在处理【前】就推进：被接班/崩在中途会丢整批消息）。仍是本代 worker 才前移 → 至少一次投递、不丢。
