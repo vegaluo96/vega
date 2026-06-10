@@ -26,7 +26,7 @@
 - `POST /api/feed/react {postId,emoji}` · `POST /api/feed/comment {postId,text,replyTo?}`
 
 **收件箱 / 通知 / 钱包**
-- `GET /api/chats` · `GET /api/notifications`（`note.type` ∈ `reach`/`reply`(带 postId)/`milestone`/`life_event`(可带 postId)/`wallet`/`welcome`）
+- `GET /api/chats` · `GET /api/notifications`（`note.type` ∈ `reach`/`reply`(带 postId)/`milestone`/`life_event`(可带 postId)/`wallet`/`welcome`）。`life_event`（她的人生动态）**纯订阅制：只来自你关注的命**——遇见过 ≠ 订阅；直接互动（`reply`/`milestone`）不受此限。
 - `POST /api/recharge {amount}`（申请充值，后台审批）
 
 **渠道 / 推送**

@@ -89,3 +89,46 @@ test('后台角色门：无会话 / 普通 user 打 /admin/* 一律 403', async 
   await handleAdmin({ sessionAccount: () => ({ role: 'user' }) } as unknown as Ctx, req, b.res, '/admin/users');
   assert.equal(b.cap.status, 403, '普通用户 → 403');
 });
+
+// —— 同名防冒充（用户 ↔ 生命体 不可同名）——
+import { createAccountStore } from '../src/platform/accounts.ts';
+import { handleUserApi } from '../src/server/routes/user.ts';
+
+test('防撞名：handleTaken 大小写不敏感地查用户昵称（接生生命体前用）', () => {
+  const acc = createAccountStore(':memory:');
+  acc.register('a@b.com', 'password1', 'Lyra');
+  assert.equal(acc.handleTaken('lyra'), true, '已有用户叫 Lyra → lyra 视作被占用');
+  assert.equal(acc.handleTaken('LYRA'), true);
+  assert.equal(acc.handleTaken('vega'), false);
+  assert.equal(acc.handleTaken(''), false);
+  acc.close();
+});
+
+test('防冒充：注册昵称与生命体同名 → 400（广场评论/通知里真假难辨的根子）', async () => {
+  const acc = createAccountStore(':memory:');
+  // 最小 ctx：register 分支只用到 lifeById / accounts / effBilling / publicAccount。
+  const ctx = {
+    accounts: acc,
+    lifeById: (id: string) => (id === 'vega' ? { id: 'vega' } : undefined),
+    effBilling: () => ({ costPerReply: 1, starterCredits: 0 }),
+    publicAccount: (a: unknown) => a,
+  } as unknown as Ctx;
+  const fakeReq = (body: unknown): IncomingMessage => ({
+    method: 'POST', url: '/api/auth/register', headers: {},
+    on(ev: string, cb: (chunk?: string) => void) { if (ev === 'data') cb(JSON.stringify(body)); if (ev === 'end') cb(); },
+  } as unknown as IncomingMessage);
+
+  const a = mockRes();
+  await handleUserApi(ctx, fakeReq({ email: 'x@y.com', password: 'password1', handle: 'vega' }), a.res, '/api/auth/register', ['api', 'auth', 'register']);
+  assert.equal(a.cap.status, 400, '与生命体撞名被拒');
+  assert.ok(a.cap.body.includes('生命体'), '错误文案说明原因');
+
+  const b = mockRes();
+  await handleUserApi(ctx, fakeReq({ email: 'x@y.com', password: 'password1', handle: 'Vega' }), b.res, '/api/auth/register', ['api', 'auth', 'register']);
+  assert.equal(b.cap.status, 400, '大小写变体同样被拒');
+
+  const c = mockRes();
+  await handleUserApi(ctx, fakeReq({ email: 'x@y.com', password: 'password1', handle: 'Tam' }), c.res, '/api/auth/register', ['api', 'auth', 'register']);
+  assert.equal(c.cap.status, 200, '正常昵称照常注册');
+  acc.close();
+});

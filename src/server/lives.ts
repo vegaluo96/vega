@@ -132,6 +132,7 @@ export function createLives(d: LivesDeps): LivesApi {
     const id = String(rawId ?? '').trim().toLowerCase();
     if (!/^[a-z][a-z0-9_-]{1,23}$/.test(id)) return { ok: false, error: '名字需 2–24 位、字母开头、仅小写字母/数字/-/_' };
     if (lifeById(id)) return { ok: false, error: '已存在同名生命体' };
+    if (accounts.handleTaken(id)) return { ok: false, error: '该名字已被某个用户的昵称占用（用户↔生命体不可同名，防冒充/通知错投）' };
     if (archetype && !ARCHETYPES.some((a) => a.name === archetype)) return { ok: false, error: '未知先天原型' };
     const life = makeLife(id, join(DATA_DIR, `${id}.jsonl`));
     lives.push(life);

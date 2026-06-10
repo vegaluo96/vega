@@ -71,7 +71,13 @@ export function createFeedStore(path: string): FeedStore {
       return rows.map((r) => ({ id: Number(r.id), userId: r.user_id, handle: r.handle, text: r.text, at: r.at, kind: kindOf(r.kind), replyTo: r.reply_to ?? null })).reverse();
     },
     lifeRepliesTo(handle, limit) {
-      const rows = db.prepare("SELECT post_id,handle,text,at FROM post_comments WHERE kind='life' AND reply_to=? ORDER BY id DESC LIMIT ?").all(handle, limit) as Array<{ post_id: string; handle: string; text: string; at: string }>;
+      // 同名防错投：只算"回的是同帖里【真实用户】的那条留言"（EXISTS kind='user'）——
+      // 即使昵称与某条生命体撞名（历史数据），生命体之间的互评也绝不会误投成"她回复了你"。
+      const rows = db.prepare(
+        "SELECT post_id,handle,text,at FROM post_comments p WHERE kind='life' AND reply_to=? " +
+        "AND EXISTS(SELECT 1 FROM post_comments u WHERE u.post_id=p.post_id AND u.kind='user' AND u.handle=p.reply_to) " +
+        'ORDER BY id DESC LIMIT ?',
+      ).all(handle, limit) as Array<{ post_id: string; handle: string; text: string; at: string }>;
       return rows.map((r) => ({ postId: r.post_id, lifeId: r.handle, text: r.text, at: r.at }));
     },
     commentCounts(postIds) {

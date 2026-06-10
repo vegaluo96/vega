@@ -52,7 +52,7 @@
     </div>
 
     {#if loaded && list.length === 0}
-      <div class="none"><div class="noneic"><Icon name="bell" size={30} /></div><p>{seg === 'plaza' ? '广场暂时没有新互动。' : '没有系统消息。'}</p></div>
+      <div class="none"><div class="noneic"><Icon name="bell" size={30} /></div><p>{seg === 'plaza' ? '这里只有【你关注的她们】的动态与广场互动——去发现页，关注喜欢的她吧。' : '没有系统消息。'}</p></div>
     {/if}
 
     {#if seg === 'plaza'}

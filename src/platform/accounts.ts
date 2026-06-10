@@ -57,6 +57,7 @@ export interface AccountStore {
   authenticate(token: string): Account | null;
   logout(token: string): void;
   getAccount(userId: string): Account | null;
+  handleTaken(handle: string): boolean; // 有没有用户已用这个昵称（大小写不敏感）——接生生命体前防撞名（用户↔生命体不可同名）
   relIdFor(userId: string): string;
   balance(userId: string): number;
   debit(userId: string, amount: number, reason: string, ref?: string): boolean;
@@ -225,6 +226,11 @@ export function createAccountStore(path = ':memory:', opts: AccountStoreOptions 
     getAccount(userId) {
       const u = userById(userId);
       return u ? toAccount(u) : null;
+    },
+    handleTaken(handle) {
+      const h = handle.trim().toLowerCase();
+      if (!h) return false;
+      return Boolean(db.prepare('SELECT 1 FROM users WHERE lower(handle)=? LIMIT 1').get(h));
     },
     relIdFor: (userId) => `u_${userId}`,
     balance,

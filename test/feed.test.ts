@@ -75,3 +75,19 @@ test('出处：setSource / sourcesFor 往返', () => {
   assert.equal(s?.title, 'BBC 头条');
   assert.equal(s?.source, 'BBC');
 });
+
+test('同名防错投：lifeRepliesTo 只算"回的是同帖真实用户留言"，生命体互评绝不误投', () => {
+  const f = createFeedStore(':memory:');
+  // 场景：某用户昵称恰好叫 lyra（历史撞名数据）。同帖里 sirius 回复了【生命体 lyra】的评论——
+  // 这条不该出现在"用户 lyra"的通知里（那是同类互评，不是回复用户）。
+  f.addLifeComment(P, 'lyra', '今晚的天很安静');
+  f.addLifeComment(P, 'sirius', '是啊，安静得能听见想念', 'lyra'); // 生命体回生命体
+  assert.equal(f.lifeRepliesTo('lyra', 10).length, 0, '生命体互评不算"回复了你"');
+
+  // 真实用户 lyra 在同帖留言后，生命体回这条 → 才算"回复了你"。
+  f.addComment(P, 'u_lyra', 'lyra', '我也在看');
+  f.addLifeComment(P, 'sirius', '那一起看会儿', 'lyra');
+  const r = f.lifeRepliesTo('lyra', 10);
+  assert.equal(r.length >= 1, true, '回的是真实用户留言才进通知');
+  assert.equal(r[0].lifeId, 'sirius');
+});

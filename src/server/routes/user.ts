@@ -35,7 +35,11 @@ export async function handleUserApi(ctx: Ctx, req: IncomingMessage, res: ServerR
   if (req.method === 'GET' && url === '/api/society') return send(res, 200, [...allPeerExchanges()].sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, 40));
   if (req.method === 'POST' && url === '/api/auth/register') {
     const b = await readJson(req);
-    const r = accounts.register(String(b.email ?? ''), String(b.password ?? ''), String(b.handle ?? ''), effBilling().starterCredits);
+    // 防冒充：用户昵称不得与任何生命体同名（大小写不敏感）——否则广场评论/通知里真假难辨。
+    // （反向同理：接生生命体时也查不得与已有用户昵称撞名，见 lives.ts birthLife。）
+    const handle = String(b.handle ?? '').trim();
+    if (handle && lifeById(handle.toLowerCase())) return send(res, 400, { error: '这个名字属于一条生命体，换一个吧' });
+    const r = accounts.register(String(b.email ?? ''), String(b.password ?? ''), handle, effBilling().starterCredits);
     if (!r.ok) return send(res, 400, { error: r.error });
     const l = accounts.login(String(b.email ?? ''), String(b.password ?? ''));
     return send(res, 200, { account: publicAccount(r.account), token: l.ok ? l.token : null });
@@ -233,10 +237,10 @@ export async function handleUserApi(ctx: Ctx, req: IncomingMessage, res: ServerR
       for (let i = es.length - 1; i >= 0; i--) { const e = es[i]; if (e.relationshipId === rel && (e.type === 'MESSAGE_RECEIVED' || e.type === 'MESSAGE_SENT')) { lastAt = e.occurredAt; break; } }
       notes.push({ type: 'milestone', life: id, at: lastAt, title: `你和 ${id} 已是${layer.label}`, text: layer.name === 'intimate' ? '一路聊下来，她把你放进了最近的位置。' : '你们熟络起来了——她会更常想起你。' });
     }
-    // 7) 她的人生动态（你遇见过的 + 你关注的命；只取公开脱敏的：交了同类新朋友 / 送别同类 / 新公开心声）。
-    // 关注让你也收到"喜欢但还没聊过的她"的公开动态——纯订阅她的【公开】内容，不伪造"她想找你"。
+    // 7) 她的人生动态——【纯订阅制：只来自你关注的命】（只取公开脱敏的：交了同类新朋友 / 送别同类 / 新公开心声）。
+    // 遇见过 ≠ 订阅：聊过但没关注就不推她的广场动态（不打扰；想看就去关注）。直接互动(她回复你/里程碑)不受此限。
     const dyn: Array<Record<string, unknown>> = [];
-    const watchIds = [...new Set([...metIds, ...accounts.followsOf(me.id)])];
+    const watchIds = accounts.followsOf(me.id);
     for (const id of watchIds) {
       const l = lifeById(id); if (!l) continue;
       const es = l.store.list();
