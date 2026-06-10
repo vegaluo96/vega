@@ -1068,7 +1068,11 @@ function vividnessOf(m: MemoryEntry, clockMs: number): number {
 // 记忆冷热分层：超热集上限时，按鲜活度淘汰最不鲜活的（非 current 副本=0 最先走）；current 情景记忆压进冷聚合（遗忘即抽象）。
 // 确定性：用淘汰事件的 nowMs、无 RNG；只在 fold 内调用。current episodic 计数过 cap 才触发 → 现有命(远低)逐位不变。
 function compactMemory(st: RState, nowMs: number): void {
-  while (st.memory.filter((m) => m.kind === 'episodic' && m.lineage.isCurrent).length > K.memoryHotCap) {
+  // 热集计数提出循环（原每轮 while 都全量 filter 重数一遍）：只有删掉的恰是 current episodic 时计数才减，
+  // 与逐轮重数逐位等价（被删的若是非热集条目，热集数不变、循环继续——语义不变，纯省遍历）。
+  let hot = 0;
+  for (const m of st.memory) if (m.kind === 'episodic' && m.lineage.isCurrent) hot += 1;
+  while (hot > K.memoryHotCap) {
     let wi = -1, wv = Infinity;
     for (let i = 0; i < st.memory.length; i++) { const v = vividnessOf(st.memory[i], nowMs); if (v < wv) { wv = v; wi = i; } }
     if (wi < 0) break;
@@ -1077,6 +1081,7 @@ function compactMemory(st: RState, nowMs: number): void {
       const rid = m.involvedRelationshipIds[0];
       if (rid) { const a = st.coldByRel.get(rid) ?? { episodes: 0, warm: 0, conflict: 0, affectSum: 0 }; a.episodes += 1; if (m.affect > 0.3) a.warm += 1; if (m.affect < -0.3) a.conflict += 1; a.affectSum += m.affect; st.coldByRel.set(rid, a); }
       st.coldLived += 1;
+      hot -= 1;
     }
     st.memory.splice(wi, 1);
   }

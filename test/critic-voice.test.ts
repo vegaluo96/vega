@@ -32,3 +32,26 @@ test('措辞·超长英文按句末截，不在词中硬切', () => {
   assert.ok(r.utterance.length <= 800, `截到 800 内，实得 ${r.utterance.length}`);
   assert.ok(r.utterance.endsWith('.'), `应在半角句末截，实得结尾：${r.utterance.slice(-15)}`);
 });
+
+test('措辞·去 AI 味：markdown 记号被剥（正文保留）、行首列表符被剥', () => {
+  const r = critique('我觉得有 **两件事** 值得说：\n- 一个是今天的云\n2. 一个是 `那本书`', ws);
+  assert.equal(r.verdict, 'accepted');
+  assert.ok(!r.utterance.includes('**') && !r.utterance.includes('`'), 'markdown 记号剥掉');
+  assert.ok(!/^\s*-\s/m.test(r.utterance) && !/^\s*2\.\s/m.test(r.utterance), '列表符剥掉');
+  assert.ok(r.utterance.includes('两件事') && r.utterance.includes('今天的云') && r.utterance.includes('那本书'), '正文一字不丢');
+});
+
+test('措辞·去 AI 味："您"→"你"（客服敬语是最大单点信号）', () => {
+  const r = critique('您说的这个我也想过，您最近还好吗。', ws);
+  assert.equal(r.utterance.includes('您'), false);
+  assert.ok(r.utterance.includes('你说的这个'));
+});
+
+test('措辞·去 AI 味：客服腔整句剔除，正常句保留；整条都是客服腔 → 退兜底', () => {
+  const r = critique('今天聊得挺开心的。希望能帮到你！', ws);
+  assert.equal(r.verdict, 'accepted');
+  assert.ok(r.utterance.includes('聊得挺开心'), '正常句保留');
+  assert.equal(r.utterance.includes('希望能帮到'), false, '客服句剔除');
+  const all = critique('有什么可以帮你的吗？很高兴为你服务！', ws);
+  assert.equal(all.verdict, 'fallback', '整条客服腔 → 退确定性兜底');
+});

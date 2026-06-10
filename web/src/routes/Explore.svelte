@@ -1,10 +1,12 @@
 <script>
-  // 发现（生命画廊：卡片，非行）：深空星台 + 活体形象 + 名字 + 气质 + 兴趣 + 筛选（全部/醒着/新诞生/关注中）。
-  import { onMount } from 'svelte';
-  import { api } from '../lib/api.js';
+  // 发现（生命画廊：卡片，非行）：深空星台 + 活体形象 + 名字 + 气质 + 兴趣 + 筛选（全部/醒着/新诞生/关注中）
+  // + 她们之间（同类寒暄段，/api/society；SSE society 实时刷新——首页不放，这里看）。
+  import { onMount, onDestroy } from 'svelte';
+  import { api, stream } from '../lib/api.js';
   import { navigate } from '../lib/router.js';
   import { follows } from '../lib/follows.js';
   import { skyGradient } from '../lib/creature.js';
+  import { relTime } from '../lib/time.js';
   import TopBar from '../components/TopBar.svelte';
   import RechargeBtn from '../components/RechargeBtn.svelte';
   import Creature from '../components/Creature.svelte';
@@ -15,12 +17,23 @@
   let q = '';
   let facet = 'all';
   let loaded = false;
+  let exchanges = [];
+  let es;
+  let lastSocAt = 0;
   const facets = [['all', '全部'], ['awake', '此刻醒着'], ['new', '新诞生'], ['following', '关注中']];
 
+  async function loadSociety() {
+    if (Date.now() - lastSocAt < 10000) return; // SSE 来一句刷一次，节流 10s
+    lastSocAt = Date.now();
+    try { exchanges = (await api.society()).slice(0, 8); } catch { /* 留空 */ }
+  }
   onMount(async () => {
     try { all = await api.lives(); } catch { /* 留空 */ }
     loaded = true;
+    loadSociety();
+    es = stream((ev) => { if (ev.type === 'society') { lastSocAt = 0; loadSociety(); } }); // 她们正在聊 → 实时跟上
   });
+  onDestroy(() => es && es.close());
 
   $: shown = all
     .filter((l) => facet !== 'awake' || l.awake)
@@ -60,6 +73,25 @@
         </button>
       {/each}
     </div>
+    {#if exchanges.length}
+      <!-- 她们之间：同类的公开寒暄段（她们各自生活的一部分，不是为你表演）。点名字去她的主页。 -->
+      <div class="society">
+        <div class="shead">她们之间<span class="meta ssub"> · 同类的来往，不为谁表演</span></div>
+        {#each exchanges as ex (ex.id)}
+          <div class="exch card-quiet">
+            <div class="epair">
+              <button class="ename" on:click={() => navigate('profile', { id: ex.a })}>{ex.a}</button>
+              <span class="meta">↔</span>
+              <button class="ename" on:click={() => navigate('profile', { id: ex.b })}>{ex.b}</button>
+              <span class="meta eago">{relTime(ex.at)}</span>
+            </div>
+            {#each ex.lines.slice(-3) as ln}
+              <div class="eline"><b class="efrom">{ln.from}</b><span class="etext">{ln.text}</span></div>
+            {/each}
+          </div>
+        {/each}
+      </div>
+    {/if}
     {#if loaded && shown.length === 0}
       <div class="none">
         <div class="noneic"><Icon name="search" size={30} /></div>
@@ -91,6 +123,16 @@
   .itags { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; margin-top: 4px; }
   .it { font-size: var(--fs-2xs); padding: 2px 8px; border-radius: var(--r-pill); color: var(--muted); box-shadow: inset 0 0 0 1px var(--border-subtle); }
   .cta { font-size: var(--fs-xs); color: var(--link); margin-top: 6px; }
+  .society { padding-top: 22px; }
+  .shead { font-weight: 700; font-size: var(--fs-md); margin-bottom: 10px; }
+  .ssub { font-weight: 400; }
+  .exch { padding: 12px 14px; margin-bottom: 10px; }
+  .epair { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .ename { font-weight: 700; font-size: var(--fs-sm); color: var(--link); }
+  .eago { margin-left: auto; white-space: nowrap; }
+  .eline { display: flex; gap: 8px; padding: 3px 0; font-size: var(--fs-sm); line-height: 1.6; }
+  .efrom { flex: none; font-weight: 600; color: var(--muted); }
+  .etext { min-width: 0; }
   .none { text-align: center; padding: 48px 20px; color: var(--faint); }
   .noneic { display: grid; place-items: center; margin-bottom: 14px; opacity: 0.5; }
   .none .t { font-size: var(--fs-md); color: var(--muted); }

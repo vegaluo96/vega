@@ -39,6 +39,10 @@
       } else if (ev.type === 'feed_comment') {
         const p = posts.find((x) => x.postId === ev.data.postId);
         if (p) { p.preview = [...(p.preview || []), { handle: ev.data.handle, text: ev.data.text, kind: ev.data.kind }].slice(-2); p.comments = (p.comments || 0) + 1; posts = posts; }
+      } else if (ev.type === 'feed_react') {
+        // 同类给帖子留的心情共鸣（mood ∈ spark/heart/smile/flame/moon）——实时点亮计数，与刷新后一致。
+        const p = posts.find((x) => x.postId === ev.data.postId);
+        if (p) { p.reactions = { ...p.reactions, [ev.data.mood]: (p.reactions?.[ev.data.mood] || 0) + 1 }; posts = posts; }
       }
     });
   });

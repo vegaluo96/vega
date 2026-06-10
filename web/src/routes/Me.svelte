@@ -40,6 +40,7 @@
           <div class="bl"><span class="blk">心意余额</span><span class="blv mono">{me.balance}</span></div>
           <button class="btn btn-sm rc" on:click={() => navigate('recharge')}>充值</button>
         </div>
+        {#if me.pendingRecharge}<div class="bnote">有 {me.pendingRecharge} 心意的充值正在审批，通过后自动到账。</div>{/if}
         <div class="bnote">心意只用来让她说得更细。用尽了她也照样醒着、记得你——只是话朴素些。</div>
       </div>
 

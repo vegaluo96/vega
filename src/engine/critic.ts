@@ -44,6 +44,19 @@ function casualizeEnding(u: string): string {
   return body;
 }
 
+// 去 AI 味·确定性兜底（提示词压不住时的结构红线，全部窄打击、低误伤）：
+// ① markdown 残留：聊天里没人打 **加粗**/`代码`/行首列表符——剥记号、留正文。
+// ② "您"→"你"：朋友之间没人说您（敬语是客服腔的最大单点信号）。
+// ③ 客服腔整句剔除（"希望能帮到你"这类只有客服才说的话）；全被剔则交回上游退兜底。
+const SERVICE_VOICE = ['希望能帮到', '很高兴为你', '很高兴能为', '有什么可以帮', '有什么我可以帮', '为您服务', '随时为你服务', '竭诚为'];
+function deAssistant(u: string): string {
+  const s = u
+    .replace(/\*\*([^*\n]+)\*\*/g, '$1').replace(/`([^`\n]+)`/g, '$1') // 剥 markdown 强调/代码记号
+    .split('\n').map((l) => l.replace(/^\s*(?:[-*•]|\d{1,2}[.、)])\s+/, '')).join('\n') // 剥行首列表符（正文保留）
+    .replace(/您/g, '你');
+  return s.split(/(?<=[。！？\n])/).filter((seg) => !SERVICE_VOICE.some((p) => seg.includes(p))).join('').trim();
+}
+
 export function critique(raw: string, ws: Workspace): CriticResult {
   const u = (raw ?? '').trim();
   // 只在【真违规】时退兜底：空（模型挂了）或自曝"我是AI/语言模型"。
@@ -51,7 +64,7 @@ export function critique(raw: string, ws: Workspace): CriticResult {
   if (u === '' || selfIdentifiesAsAI(u)) {
     return { verdict: 'fallback', utterance: ws.fallback }; // 兜底【人话】，不外露内部意图/指令
   }
-  const cleaned = stripStageDirections(u);
-  if (cleaned === '') return { verdict: 'fallback', utterance: ws.fallback }; // 整条都是旁白/动作 → 退兜底
+  const cleaned = deAssistant(stripStageDirections(u));
+  if (cleaned === '') return { verdict: 'fallback', utterance: ws.fallback }; // 整条都是旁白/动作/客服腔 → 退兜底
   return { verdict: 'accepted', utterance: casualizeEnding(clip(cleaned)) };
 }

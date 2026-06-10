@@ -40,7 +40,7 @@
 
 - **总览/健康**：`GET /admin/overview` · `GET /admin/health` · `GET /admin/activity?limit=`
 - **用户**：`GET /admin/users` · `GET /admin/users/:id` · `GET /admin/users/:id/conversations`（按用户读其与各命的私聊线程，仅 owner、留痕审计）· `POST /admin/users/block {userId,unblock}`（留痕）· `POST /admin/users/recharge {userId,amount,note?}`（手动充/扣，仅 owner；备注随审计留痕）
-- **充值**：`GET /admin/recharges` · `POST /admin/recharges {id,approve}`（留痕）
+- **充值**：`GET /admin/recharges` · `POST /admin/recharges {id,approve}`（留痕）· `GET /admin/recharges/history?limit=`（全局已处理历史）
 - **生命**：`POST /admin/lives {id, archetype?}`（接生；archetype 可选、出生时冻结）· `GET /admin/archetypes`（先天原型清单）· `GET /admin/lives/:id`（深观，全派生字段）· `GET /admin/lives/:id/wellbeing`（健康时间线）· `GET /admin/lives/:id/relations`（附对话标记 flag/flagReason）· `GET /admin/lives/:id/thread?rel=&reason=`（对话监督，仅 owner；查看理由随请求上送、留痕审计）· `GET /admin/lives/:id/events?limit=`（原始事件日志=真相源）
 - **监督/审计**：`GET/POST /admin/flags`（对话标记：关注=watch / 已拦截=blocked + 原因；读 owner+steward、写仅 owner；安全词命中自动标红 by=safety）· `GET /admin/audit?limit=` + `POST /admin/audit {action}`（审计日志，服务端持久化：敏感操作后端自记，POST 供前端补录占位动作留痕）
 - **财务**：`GET /admin/ledger?limit=&user=`（credit_ledger 流水查询 + 近 7 日按命消耗聚合 byLife，仅 owner）

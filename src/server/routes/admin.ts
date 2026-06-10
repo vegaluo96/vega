@@ -359,6 +359,11 @@ export async function handleAdmin(ctx: Ctx, req: IncomingMessage, res: ServerRes
       wechat: wc ? { lifeId: wc.lifeId } : (accounts.wechatBindingFor(uid) ?? null),
     });
   }
+  // —— 充值已处理历史（全局，owner+steward）：审批留痕不再只活在前端会话里。
+  if (req.method === 'GET' && path === '/admin/recharges/history') {
+    const lim = Math.min(200, Math.max(1, Number(new URLSearchParams((req.url ?? '').split('?')[1] ?? '').get('limit') ?? 50)));
+    return send(res, 200, { rows: accounts.decidedRecharges(lim) });
+  }
   if (req.method === 'GET' && path === '/admin/recharges') return send(res, 200, accounts.pendingRecharges());
   if (req.method === 'POST' && path === '/admin/recharges') {
     const b = await readJson(req);

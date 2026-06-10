@@ -335,3 +335,24 @@ test('安全拦截记录：落库倒序可查；超 180 天的旧记录在新插
     s.close();
   }
 });
+
+test('充值已处理历史：全局倒序、带昵称与经手人；待审不混入', () => {
+  const s = createAccountStore(':memory:', { starterCredits: 0 });
+  try {
+    const u = s.register('u@x.com', 'password1', 'Tam');
+    const uid = u.ok ? u.account.id : '';
+    const a = s.requestRecharge(uid, 100);
+    const b = s.requestRecharge(uid, 50);
+    s.requestRecharge(uid, 30); // 留一笔待审
+    s.decideRecharge(a, true, 'owner@x');
+    s.decideRecharge(b, false, 'owner@x');
+    const rows = s.decidedRecharges(10);
+    assert.equal(rows.length, 2, '只含已处理，待审不混入');
+    assert.equal(rows[0].handle, 'Tam');
+    assert.equal(rows[0].decidedBy, 'owner@x');
+    assert.ok(rows.some((r) => r.status === 'approved' && r.amount === 100));
+    assert.ok(rows.some((r) => r.status === 'rejected' && r.amount === 50));
+  } finally {
+    s.close();
+  }
+});

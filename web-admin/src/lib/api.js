@@ -21,6 +21,7 @@ export const api = {
   users: () => req('GET', '/admin/users'),
   recharges: () => req('GET', '/admin/recharges'),
   decideRecharge: (id, approve) => req('POST', '/admin/recharges', { id, approve }),
+  rechargeHistory: (limit = 30) => req('GET', `/admin/recharges/history?limit=${limit}`),
   rechargeUser: (userId, amount, note) => req('POST', '/admin/users/recharge', note ? { userId, amount, note } : { userId, amount }),
   block: (userId, unblock) => req('POST', '/admin/users/block', { userId, unblock }),
   life: (id) => req('GET', `/admin/lives/${id}`),

@@ -71,6 +71,7 @@ export interface AccountStore {
   pendingRecharges(): RechargeRequest[];
   pendingRechargesFor(userId: string): Array<{ id: number; amount: number; requestedAt: string }>;
   recentRechargeResults(userId: string, limit: number): Array<{ id: number; amount: number; status: 'approved' | 'rejected'; decidedAt: string }>;
+  decidedRecharges(limit: number): Array<{ id: number; userId: string; handle: string; amount: number; status: 'approved' | 'rejected'; decidedBy: string; decidedAt: string }>; // 全局已处理列表（后台「已处理」页签）
   decideRecharge(id: number, approve: boolean, by: string): boolean;
   issueEmailVerification(userId: string): string;
   verifyEmail(token: string): boolean;
@@ -277,6 +278,11 @@ export function createAccountStore(path = ':memory:', opts: AccountStoreOptions 
     recentRechargeResults(userId, limit) {
       const rows = db.prepare("SELECT id,amount,status,decided_at FROM recharge_requests WHERE user_id=? AND status!='pending' AND decided_at IS NOT NULL ORDER BY decided_at DESC LIMIT ?").all(userId, limit) as Array<{ id: number; amount: number; status: string; decided_at: string }>;
       return rows.map((r) => ({ id: Number(r.id), amount: Number(r.amount), status: r.status as 'approved' | 'rejected', decidedAt: r.decided_at }));
+    },
+    decidedRecharges(limit) {
+      const rows = db.prepare("SELECT r.id,r.user_id,u.handle,r.amount,r.status,r.decided_by,r.decided_at FROM recharge_requests r LEFT JOIN users u ON u.id=r.user_id WHERE r.status!='pending' AND r.decided_at IS NOT NULL ORDER BY r.decided_at DESC LIMIT ?")
+        .all(limit) as Array<{ id: number; user_id: string; handle: string | null; amount: number; status: string; decided_by: string | null; decided_at: string }>;
+      return rows.map((r) => ({ id: Number(r.id), userId: r.user_id, handle: r.handle ?? r.user_id, amount: Number(r.amount), status: r.status as 'approved' | 'rejected', decidedBy: r.decided_by ?? '', decidedAt: r.decided_at }));
     },
     decideRecharge(id, approve, by) {
       const r = db.prepare("SELECT user_id,amount,status FROM recharge_requests WHERE id=?").get(id) as { user_id: string; amount: number; status: string } | undefined;

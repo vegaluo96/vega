@@ -1,16 +1,16 @@
 <script>
   // 充值审批（人工审批制 = 最高频动作）：一笔一卡，金额大数字；通过时金色迸发。
-  // 「已处理」为本次会话留痕；TODO(后端)：全局已处理列表接口暂无（recharge_requests 已落库，缺查询端点）。
+  // 「已处理」走真实历史（GET /admin/recharges/history）——审批留痕不再只活在本次会话里。
   import { onMount } from 'svelte';
   import { api } from '../lib/api.js';
-  import { authGuard, pendingCount, me } from '../lib/admin.js';
+  import { authGuard, pendingCount } from '../lib/admin.js';
   import { relTime } from '../lib/time.js';
   import { FX } from '../lib/fx.js';
   import PageHead from '../components/PageHead.svelte';
   import Icon from '../components/Icon.svelte';
 
   let pending = [];
-  let done = []; // 会话内留痕：{id, userId, amount, status, doneAt, by}
+  let done = []; // 已处理历史（服务端）：{id, userId, handle, amount, status, decidedBy, decidedAt}
   let handles = {};
   let error = '';
 
@@ -23,16 +23,17 @@
       pendingCount.set(pending.length);
       const users = await api.users();
       handles = Object.fromEntries(users.map((u) => [u.id, u.handle]));
+      done = (await api.rechargeHistory(30)).rows || [];
     } catch (e) { error = e.message; authGuard(e); }
   }
 
   async function act(r, approve, ev) {
     try {
-      await api.decideRecharge(r.id, approve);
+      await api.decideRecharge(r.id, approve); // 留痕由后端自记（审计日志 + 已处理历史）
       if (approve && ev) FX.burst(ev.currentTarget, { count: 10, color: '#e8c87a', spread: 60 });
-      done = [{ ...r, status: approve ? 'approved' : 'rejected', doneAt: new Date().toISOString(), by: $me.handle || 'admin' }, ...done]; // 留痕由后端自记（审计日志）
       pending = pending.filter((x) => x.id !== r.id);
       pendingCount.set(pending.length);
+      try { done = (await api.rechargeHistory(30)).rows || []; } catch { /* 历史刷新失败不挡审批 */ }
     } catch (e) { error = e.message; authGuard(e); }
   }
   onMount(load);
@@ -68,13 +69,13 @@
 
 {#if done.length > 0}
   <div class="donewrap">
-    <div class="section-title dtitle">已处理（本次会话留痕）</div>
+    <div class="section-title dtitle">已处理 · 最近 {done.length} 笔</div>
     {#each done as r (r.id)}
       <div class="lrow">
         <span class="damt mono">{r.amount} 心意</span>
-        <span class="dwho muted">{who(r.userId)} · {r.userId} · 经手 {r.by}</span>
+        <span class="dwho muted">{r.handle || who(r.userId)} · {r.userId} · 经手 {r.decidedBy}</span>
         <span class="pill" style:color={r.status === 'approved' ? 'var(--success)' : 'var(--danger)'}>{r.status === 'approved' ? '已通过' : '已驳回'}</span>
-        <span class="meta dago">{relTime(r.doneAt)}</span>
+        <span class="meta dago">{relTime(r.decidedAt)}</span>
       </div>
     {/each}
   </div>
