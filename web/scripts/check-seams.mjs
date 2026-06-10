@@ -20,7 +20,10 @@ const WHOLE_FILES = [
 // 按规则块扫描（这些文件别处有合法真 border，只查 fixed/sticky 的那几条规则）。
 const RULE_BLOCKS = [
   { file: 'src/app.css', selectors: ['.sticktop', '.list-row'] },
-  { file: '../web-admin/src/routes/Dashboard.svelte', selectors: ['.topbar', '.sidebar'] },
+  // 后台外壳：侧栏 sticky；抽屉/弹层 fixed（.overlay/.drawer）——边线一律 inset box-shadow。
+  { file: '../web-admin/src/routes/Shell.svelte', selectors: ['.sidebar'] },
+  { file: '../web-admin/src/app.css', selectors: ['.overlay'] },
+  { file: '../web-admin/src/components/UserDrawer.svelte', selectors: ['.drawer'] },
 ];
 
 const BORDER_RE = /border(?:-top|-bottom|-left|-right)?\s*:\s*([^;}]+)/g;
