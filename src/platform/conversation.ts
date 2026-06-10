@@ -55,6 +55,29 @@ export function resourceAwareMouth(mouth: Mouth, band: ResourceBand): Mouth {
   };
 }
 
+// —— 聊天节奏（反 AI 味·确定性）：把一条完整回复拆成 1–3 段「聊天气泡」——
+// 真人发微信是一句一句蹦的，"一口气一整块"本身就是最大的 AI 标记。
+// 纯展示层拆分：神圣日志仍存完整 utterance（她说过的话一字不改），这里只决定"怎么递给你看"。
+// 确定性：在句末（。！？…/换行）断开、相邻碎段合并、封顶 3 段；很短或单句 → 不拆。无任何随机。
+export function splitUtterance(text: string): string[] {
+  const t = (text ?? '').trim();
+  if (!t || t.length <= 26) return t ? [t] : [];
+  const rough = t
+    .split(/\n+/)
+    .flatMap((line) => line.split(/(?<=[。！？…])/))
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (rough.length <= 1) return [t];
+  const merged: string[] = [];
+  for (const seg of rough) {
+    // 碎段并进前一段（前段太短没说完整、或本段只是个小尾巴）
+    if (merged.length && (merged[merged.length - 1].length < 6 || seg.length < 4)) merged[merged.length - 1] += seg;
+    else merged.push(seg);
+  }
+  while (merged.length > 3) { const last = merged.pop() as string; merged[merged.length - 1] += last; }
+  return merged.length ? merged : [t];
+}
+
 // 一个具体用户对一条命说话：确保关系 → 走神圣链路 converse（用 u_<userId>，不再是写死的 r_creator）。
 export async function userSay(
   store: DurableEventStore,

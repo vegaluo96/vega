@@ -1,7 +1,7 @@
 // 写链路（神圣链路·用户侧入口）：一个具体用户对一条命说话——计费 + 串行 + 资源感知 + 渠道标记。
 // /api/say 与微信 /api/wechat/say 共用。这是"模型只当嘴、派生状态由内核确定性推"的交汇点：
 // 余额耗尽自动回落免费模板嘴（她照样回应、照样记得你），资源紧时话更精炼/坦诚（绝不催费）。
-import { resourceBand, meterMouth, resourceAwareMouth, userSay, type Account } from '../index.ts';
+import { resourceBand, meterMouth, resourceAwareMouth, userSay, splitUtterance, type Account } from '../index.ts';
 import type { Ctx, Life } from './context.ts';
 
 const now = (): string => new Date().toISOString();
@@ -30,7 +30,9 @@ export function createResponder(d: RespondDeps): Pick<Ctx, 'respondAsUser'> {
       // 走付费路径就算已交付（fallback 也算，Fix B）→ 不退；只有这轮没落库（乐观锁/磁盘错抛出）才退回预扣，保账实一致。
       const r = await userSay(life.store, useMouth, accounts.relIdFor(me.id), me.handle, content, now(), charge > 0 ? perceiver : undefined, channel, cached)
         .catch((e: unknown) => { if (charge > 0) accounts.credit(me.id, charge, 'refund', life.id); throw e; });
-      return { utterance: r.utterance, verdict: r.verdict, emotion: r.snapshot.emotion, balance: accounts.balance(me.id), voice: useMouth.id === 'template' ? 'plain' : 'rich', resource: band };
+      // parts：把完整回复拆成 1–3 段「聊天气泡」（确定性、纯展示层）——网页端逐条递出，像真人一句一句发；
+      // 神圣日志/微信仍是完整一条（utterance 一字不改），不破 V2。
+      return { utterance: r.utterance, parts: splitUtterance(r.utterance), verdict: r.verdict, emotion: r.snapshot.emotion, balance: accounts.balance(me.id), voice: useMouth.id === 'template' ? 'plain' : 'rich', resource: band };
     });
   }
 

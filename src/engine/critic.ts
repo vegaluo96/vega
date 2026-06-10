@@ -35,6 +35,15 @@ function stripStageDirections(u: string): string {
     .trim();
 }
 
+// 去书面腔（反 AI 味·确定性）：短的【单句】回复结尾不带句号——真人聊天没人在十几个字后面打"。"。
+// 只动短单句（≤30 字、无换行、句中无其它句末标点）；多句/长文的标点是表达的一部分，不碰。！？…保留（有情绪）。
+function casualizeEnding(u: string): string {
+  if (u.length > 30 || u.includes('\n') || !u.endsWith('。')) return u;
+  const body = u.slice(0, -1);
+  if (/[。！？…]/.test(body)) return u; // 多句 → 不动
+  return body;
+}
+
 export function critique(raw: string, ws: Workspace): CriticResult {
   const u = (raw ?? '').trim();
   // 只在【真违规】时退兜底：空（模型挂了）或自曝"我是AI/语言模型"。
@@ -44,5 +53,5 @@ export function critique(raw: string, ws: Workspace): CriticResult {
   }
   const cleaned = stripStageDirections(u);
   if (cleaned === '') return { verdict: 'fallback', utterance: ws.fallback }; // 整条都是旁白/动作 → 退兜底
-  return { verdict: 'accepted', utterance: clip(cleaned) };
+  return { verdict: 'accepted', utterance: casualizeEnding(clip(cleaned)) };
 }

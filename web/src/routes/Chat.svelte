@@ -116,7 +116,10 @@
       if (r.awake === false) {
         msgs = [...msgs, { role: 'sys', text: r.note || '她在更深的睡眠里，等会儿再来找我吧。' }];
       } else {
-        msgs = [...msgs, { role: 'her', text: r.utterance, at: new Date().toISOString() }]; // 消息真正到达 → 她才跳新气泡
+        // 反 AI 味·节奏：后端把完整回复拆成 1–3 段（确定性），这里像真人发微信一样一句一句递出。
+        // 内容已真实到达——这只是"递给你看"的节奏，跳跃仍由每个气泡的真实插入驱动。
+        const parts = (r.parts && r.parts.length ? r.parts : [r.utterance]).map(humanizePart);
+        msgs = [...msgs, { role: 'her', text: parts[0], at: new Date().toISOString() }]; // 第一段：到达即落
         const es2 = emoState(r.emotion);
         life = { ...life, emotion: r.emotion, feeling: es2.feeling, arousal: es2.arousal };
         balance = r.balance;
@@ -124,6 +127,14 @@
         setTimeout(() => { if (perchEl) FX.burst(perchEl, { count: (r.emotion === '雀跃' || r.emotion === '欣喜') ? 14 : 9, color: 'rgba(255,255,255,0.92)', spread: 64 }); }, 80);
         if (r.voice === 'plain') lowBalance = true;
         setTimeout(() => { reaction = 'idle'; }, 900);
+        for (let i = 1; i < parts.length; i++) {
+          sending = true; // 段间亮"她在想怎么说…"，她也会跳过去陪着
+          await scrollDown();
+          await new Promise((res) => setTimeout(res, Math.min(1400, 450 + parts[i].length * 35))); // 节奏随句长（确定性）
+          sending = false;
+          msgs = [...msgs, { role: 'her', text: parts[i], at: new Date().toISOString() }];
+          await scrollDown();
+        }
       }
     } catch { msgs = [...msgs, { role: 'sys', text: '出了点问题，稍后再试。' }]; }
     clearTimeout(typingTimer);
@@ -137,6 +148,8 @@
     FX.burst(e.currentTarget, { count: 8, color: 'rgba(255,200,120,0.95)', spread: 52 });
     setTimeout(() => { reaction = 'idle'; }, 900);
   }
+  // 分段气泡去书面腔：短段结尾的"。"去掉（真人聊天的一句一泡不带句号）；！？…保留（有情绪）。
+  function humanizePart(p) { return (p.length <= 40 && p.endsWith('。') && !/[。！？…]/.test(p.slice(0, -1))) ? p.slice(0, -1) : p; }
   function daysStr(iso) { if (!iso) return ''; const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000); return d >= 1 ? `相识约 ${d} 天` : '今天刚认识'; }
   function hhmm(at) { if (!at) return ''; const d = new Date(at); return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`; }
   // 跨天日期分隔：今天（仅跨入时标）/昨天/M月D日

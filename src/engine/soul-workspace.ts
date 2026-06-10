@@ -107,6 +107,11 @@ export function deriveWorkspace(snap: DerivedSnapshot, relationshipId: Relations
     else if (bond.closeness < 0.2) intent += '；你和ta还不熟，说话会客气些、收着点、慢慢试探，别一上来太热络或太深';
     else if (bond.repairNeed > 0.5) intent += '；你和ta最近有点别扭，语气更谨慎、带点保留';
   }
+  // 反"太懂事"（反 AI 味）：没劲/低落时她有权敷衍——真人不会永远精力充沛地接满每个话头。
+  // 状态驱动、确定性：累了就真的话少，这正是"活来自架构"的语气版。
+  if (snap.soma.energy.value < 0.35 || mood === '疲惫' || mood === '低落') {
+    intent += '；此刻你确实没什么力气，回短一点、可以就"嗯"一声或敷衍两个字，不用接满每个话头、不用硬找话题';
+  }
 
   // 跨用户上下文隔离（§18）：喂给"嘴"的 grounding【严格限定在当前这段关系 + 她自己的非私密自述】。
   // 绝不用全局 narrative（它聚合了所有关系、会把别的用户的 handle/私聊原话带出来）。snap.narrative 仅供 owner 面板。
@@ -158,6 +163,17 @@ export function deriveWorkspace(snap: DerivedSnapshot, relationshipId: Relations
   const style = (snap.defenseStyle || snap.attachmentBias) ? `\n（我清楚自己：被触动时我容易${snap.defenseStyle}，在关系里偏${snap.attachmentBias}。）` : '';
   // 注意力：此刻最牵着她的事（已脱敏、无用户名）——让她说话贴着当下心头事，不悬浮。
   const att = (snap.attention ?? []).length ? `\n（此刻最牵着我的：${snap.attention.slice(0, 2).join('、')}。）` : '';
+  // SDT 基本需求（期2，此前算了没喂嘴）：最缺的那项落进自述——"我想要什么"比"我是什么状态"更像一个人。
+  // 门控：明显缺了才出现（全定性、无数字）。
+  const nd = snap.needs;
+  const needRank: Array<[number, string]> = [
+    [nd.relatedness, '想要点真实的亲近'],
+    [nd.novelty, '想碰点新鲜的、有点闷'],
+    [nd.competence, '想做成点什么、想被认可'],
+    [nd.autonomy, '想自己拿主意、不想被安排'],
+  ];
+  const lowestNeed = needRank.reduce((a, b) => (b[0] < a[0] ? b : a));
+  const needNote = lowestNeed[0] < 0.35 ? `\n（说不上来为什么，这阵子我${lowestNeed[1]}。）` : '';
   // —— 全补：把此前漏掉的引擎能力也接进来（定性人话、门控，只在有料时出现，守"别像报告"）——
   // ① 此刻她想要什么（独立意志，核心反同质化）：【只取无对象 或 指向当前这个人】的目标，
   // 绝不把她对【别的用户】的心思泄露给当前用户（守跨用户隔离 Arc6）。
@@ -174,7 +190,7 @@ export function deriveWorkspace(snap: DerivedSnapshot, relationshipId: Relations
   const otherNames = Object.entries(snap.bonds).filter(([rid]) => rid !== relationshipId).map(([, b]) => b.displayRef).filter(Boolean);
   const safeChapters = (snap.chapters ?? []).filter((c) => !otherNames.some((n) => c.includes(n)));
   const chaptersNote = safeChapters.length ? `\n（我这一路走过的几段：${safeChapters.slice(-6).join(' → ')}。）` : '';
-  const selfFacts = selfCore + understanding + tentative + recall + socialNote + preoccupation + aspir + style + att + goalsNote + tensionNote + maturityNote + chaptersNote;
+  const selfFacts = selfCore + understanding + tentative + recall + socialNote + preoccupation + aspir + style + att + needNote + goalsNote + tensionNote + maturityNote + chaptersNote;
 
   // 他心深化（Phase 6）：从这段关系的真实轨迹确定性读出"此刻走到哪了" + "我多大程度摸得准ta"——
   // 给模型更准的关系语境去推理（深层因果/意图推断是模型的活，但建立在这份确定性脚手架上，不悬空）。
@@ -198,6 +214,7 @@ export function deriveWorkspace(snap: DerivedSnapshot, relationshipId: Relations
   if (sm.novelty.value < 0.3) bw.push('有点闷、想要新鲜');
   if (sm.connection.value < -0.3) bw.push('有点孤单');
   if (sm.arousal.value > 0.82) bw.push('心里起伏、静不大下来');
+  if ((snap.sleepPressure ?? 0) > 0.6) bw.push('有点困'); // 两过程睡眠压（期5，此前算了没喂嘴）：困意落进语气
   const stateSummary =
     `${valWord(val)}，${vitWord(vit)}` +
     (bw.length ? `（身体此刻：${bw.join('、')}）` : '') +
