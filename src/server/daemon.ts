@@ -77,6 +77,7 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 // 生效配置解析器（settings ⊕ env ⊕ 默认）：嘴/耳/世界/社交/计费——实现见 ./config.ts。mouth/perceiver/respond/world/路由都消费它。
 const config = createConfig(settings);
 const mouth = governedMouth(createDynamicMouth(config.effMouthConfig)); // 治理层（#24）：所有真模型对外措辞过一遍反操控收口
+const museMouth = governedMouth(createDynamicMouth(config.effMuseMouthConfig)); // 公开心声的嘴（按用途路由：museModel ?? 同嘴），同样过治理收口
 const templateMouth = createTemplateMouth(); // 余额耗尽时的免费兜底嘴（她仍回应；确定性、不会操控）
 // 自主资源预算（#24 反失控/反自我扩张）：限全局自主模型调用速率（真人对话不受限、那走用户余额计费）。
 const autoBudget = createAutonomousBudget(Number(process.env.VEGA_AUTONOMOUS_CAP ?? 240), Number(process.env.VEGA_AUTONOMOUS_WINDOW_MS ?? 3_600_000));
@@ -125,7 +126,7 @@ const {
 } = createLives({ accounts, serializer, peerId, REL, HOST_CONN, userName, HOST, PORT, MUSE_MS, DATA_DIR, LIFE_PATH });
 
 // 写链路（神圣链路·用户侧入口，实现见 ./respond.ts）：计费 + 串行 + 资源感知。/api/say 与微信 /api/wechat/say 共用。
-const { respondAsUser } = createResponder({ accounts, serializer, snapOf, mouth, templateMouth, perceiver, effBilling: config.effBilling, lifeById, touch: presence.touch });
+const { respondAsUser } = createResponder({ accounts, serializer, snapOf, mouth, templateMouth, perceiver, effBilling: config.effBilling, effSafety: config.effSafety, lifeById, touch: presence.touch });
 
 // 微信 / iLink 通道（实现见 ./wechat.ts）：长轮询收发 + 统一应答。写链路 respondAsUser 仍在本文件、注入进去。
 const { runChannel, wechatReply } = createWechat({
@@ -143,9 +144,9 @@ const authed = (req: IncomingMessage): boolean => !AUTH || req.headers.authoriza
 const world = createWorld({ effWorld: config.effWorld, worldEnabled: config.worldEnabled, lives, snapOf, serializer, backupMs: BACKUP_MS });
 
 const ctx: Ctx = {
-  settings, feed, announce, accounts, ilink, bus, serializer, autoBudget, mouth, templateMouth, perceiver,
+  settings, feed, announce, accounts, ilink, bus, serializer, autoBudget, mouth, museMouth, templateMouth, perceiver,
   lives, lifeById, snapOf, buildThread, livesMetBy, recomputePeers, saveCheckpoint, meetPeer, partPeer,
-  ...config, // effWorld/worldStatus/worldEnabled/effMouthConfig/effPerceiveConfig/modelStatus/effSocial/layerOf/effBilling（见 ./config.ts）
+  ...config, // effWorld/worldStatus/worldEnabled/effMouthConfig/effPerceiveConfig/effMuseMouthConfig/modelStatus/effSocial/layerOf/effBilling/effSafety（见 ./config.ts）
   respondAsUser, wechatReply, runChannel, birthLife, cleanBindToken,
   allFeedPosts, feedPosts, allPeerExchanges,
   reachState, pickRecentWorld, pickInsightPair, lastUserMsgMs, adminActivity,

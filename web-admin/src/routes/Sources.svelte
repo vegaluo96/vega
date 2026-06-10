@@ -6,7 +6,7 @@
   // 本地保留停用项的灰显（保存时不写入）——停用源不删她们已长出的兴趣。
   import { onMount } from 'svelte';
   import { api } from '../lib/api.js';
-  import { authGuard, addAudit } from '../lib/admin.js';
+  import { authGuard } from '../lib/admin.js';
   import { rosterVisual, roster } from '../lib/lives.js';
   import { relTime } from '../lib/time.js';
   import PageHead from '../components/PageHead.svelte';
@@ -57,8 +57,7 @@
     saving = true; saveMsg = '';
     try {
       const w = await api.saveWorldConfig({ sources: rows.filter((r) => r.on).map((r) => r.url), everyMs: Math.max(1, Number(everyMin)) * 60000 });
-      from = w.from; saveMsg = '已保存 · 几秒后自动试读一遍（无需重启）';
-      addAudit(`保存世界源（${rows.filter((r) => r.on).length} 个源 · 每 ${everyMin} 分钟）`);
+      from = w.from; saveMsg = '已保存 · 几秒后自动试读一遍（无需重启）'; // 留痕由后端自记（审计日志）
       setTimeout(refreshStats, 12000); // 自动试读（3 秒后开抓）跑完后拉一次真实统计 → 健康点/今日条数跟上
     } catch (e) { saveMsg = '✗ ' + e.message; authGuard(e); } finally { saving = false; }
   }

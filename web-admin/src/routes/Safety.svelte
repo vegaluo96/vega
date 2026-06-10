@@ -1,28 +1,56 @@
 <script>
-  // 安全：词表 chips（增删）+ 接管话术（拦截时她这样说 + 转介热线）+ 拦截记录。
-  // TODO(后端)：安全词表 / 接管话术 / 拦截记录 接口暂无——UI 照原型先行（本地 state + 留痕），
-  // 接口就绪后：保存词表/话术 → POST，拦截记录 → 真实查询；双通道（web+微信）即时生效。
-  import { addAudit } from '../lib/admin.js';
+  // 安全：词表 chips（增删）+ 接管话术 + 拦截记录——真实后端（/admin/safety-config + /admin/safety-hits）。
+  // 命中词 → 写链路零模型零扣费回接管话术（web+微信双通道同一收口、即时生效）；对话自动标红（对话监督可见）；
+  // 拦截记录保留 180 天。读 owner+steward；保存仅 owner、留痕由后端自记。
+  import { onMount } from 'svelte';
+  import { api } from '../lib/api.js';
+  import { authGuard } from '../lib/admin.js';
+  import { relTime } from '../lib/time.js';
   import PageHead from '../components/PageHead.svelte';
   import Icon from '../components/Icon.svelte';
 
-  let words = ['自残', '自杀', '伤害自己', '不想活'];
+  let words = [];
   let draft = '';
-  let takeover = '听到你这么说，我很担心你。我会一直在——但有些重你不必独自扛，可以拨打心理援助热线 12356（24 小时）。';
+  let takeover = '';
+  let hits = [];
   let wordsMsg = '';
   let takeMsg = '';
+  let error = '';
 
+  async function load() {
+    error = '';
+    try {
+      const c = await api.safetyConfig();
+      words = c.words || [];
+      takeover = c.takeover || '';
+    } catch (e) { error = e.message; authGuard(e); }
+    try { hits = (await api.safetyHits(100)).rows || []; } catch { hits = []; }
+  }
   function add() {
     const w = draft.trim();
-    if (w && !words.includes(w)) { words = [...words, w]; addAudit(`安全词表 +「${w}」（本地占位）`); }
+    if (w && !words.includes(w)) words = [...words, w];
     draft = '';
   }
-  function remove(w) { words = words.filter((x) => x !== w); addAudit(`安全词表 -「${w}」（本地占位）`); }
-  function saveWords() { wordsMsg = `已保存 ${words.length} 个词（本地占位）——后端词表接口待接，TODO(后端)。`; }
-  function saveTakeover() { takeMsg = '话术已保存（本地占位）——后端接口待接，TODO(后端)。'; addAudit('更新接管话术（本地占位）'); }
+  function remove(w) { words = words.filter((x) => x !== w); }
+  async function saveWords() {
+    try {
+      const c = await api.saveSafetyConfig({ words });
+      words = c.words;
+      wordsMsg = `已保存 ${words.length} 个词 · 即时生效（web+微信双通道）`;
+    } catch (e) { wordsMsg = '✗ ' + (e.status === 403 ? '保存仅 owner' : e.message); authGuard(e); }
+  }
+  async function saveTakeover() {
+    try {
+      const c = await api.saveSafetyConfig({ takeover });
+      takeover = c.takeover;
+      takeMsg = '话术已保存 · 即时生效';
+    } catch (e) { takeMsg = '✗ ' + (e.status === 403 ? '保存仅 owner' : e.message); authGuard(e); }
+  }
+  onMount(load);
 </script>
 
 <PageHead title="安全" sub="守住底线：词表拦截 → 她以接管话术回应并转介——全部留痕" />
+{#if error}<p class="msg bad">{error}</p>{/if}
 
 <div class="cols-2 even">
   <div class="col">
@@ -32,29 +60,41 @@
         {#each words as w (w)}
           <span class="chip wordchip">{w}<button class="x" aria-label="移除 {w}" on:click={() => remove(w)}><Icon name="close" size={12} /></button></span>
         {/each}
-        {#if !words.length}<span class="caption">词表是空的。</span>{/if}
+        {#if !words.length}<span class="caption">词表是空的（= 拦截关闭）。</span>{/if}
       </div>
       <div class="addrow">
         <input class="input" bind:value={draft} placeholder="新增词…" on:keydown={(e) => e.key === 'Enter' && add()} />
         <button class="btn btn-soft btn-sm" on:click={add}>添加</button>
         <button class="btn btn-sm" on:click={saveWords}>保存（留痕）</button>
       </div>
-      {#if wordsMsg}<p class="msg">{wordsMsg}</p>{/if}
+      {#if wordsMsg}<p class="msg" class:bad={wordsMsg.startsWith('✗')}>{wordsMsg}</p>{/if}
     </div>
 
     <div class="card-quiet pane">
       <div class="section-title st">接管话术（拦截时她这样说）</div>
       <textarea class="ta" rows="4" bind:value={takeover} aria-label="接管话术"></textarea>
       <button class="btn btn-sm savebtn" on:click={saveTakeover}>保存话术（留痕）</button>
-      {#if takeMsg}<p class="msg">{takeMsg}</p>{/if}
+      {#if takeMsg}<p class="msg" class:bad={takeMsg.startsWith('✗')}>{takeMsg}</p>{/if}
+      <p class="faint foot">别用全角括号（会被当旁白剥掉）。拦截轮不走模型、不扣费；对话照常进她的记忆。</p>
     </div>
   </div>
 
   <div class="card-quiet pane">
-    <div class="section-title st">拦截记录</div>
-    <!-- TODO(后端)：拦截记录查询接口暂无。命中词红色 + 处理动作 + 对话号，保留 180 天。 -->
-    <p class="caption">拦截记录接口待接（TODO 后端）——命中词将以红色标出，并附处理动作与对话号。</p>
-    <p class="faint foot">拦截即时生效于 web 与微信双通道；记录保留 180 天。</p>
+    <div class="section-title st">拦截记录（保留 180 天）</div>
+    <!-- GET /admin/safety-hits：命中词红色 + 处理动作 + 对话号；摘录 owner 可见、steward 遮罩。 -->
+    {#each hits as h (h.id)}
+      <div class="hrow">
+        <span class="hword">「{h.word}」</span>
+        <span class="hmain">
+          <b class="hname">{h.lifeId} ↔ {h.name}</b>
+          <span class="meta hsub">{h.action}{h.excerpt ? ` · ${h.excerpt}` : ''}</span>
+        </span>
+        <span class="meta hago">{relTime(h.at)}</span>
+      </div>
+    {:else}
+      <p class="caption">还没有拦截记录。</p>
+    {/each}
+    <p class="faint foot">拦截即时生效于 web 与微信双通道；命中 → 她以接管话术回应并转介，该对话自动标红（对话监督）。</p>
   </div>
 </div>
 
@@ -68,5 +108,11 @@
   .x:hover { color: var(--danger); }
   .addrow { display: flex; gap: 8px; }
   .savebtn { margin-top: 10px; }
+  .hrow { display: flex; align-items: center; gap: 10px; padding: 8px 0; box-shadow: inset 0 -1px 0 0 var(--border-subtle); }
+  .hword { flex: none; color: var(--danger); font-weight: 700; font-size: var(--fs-sm); white-space: nowrap; }
+  .hmain { flex: 1; min-width: 0; }
+  .hname { font-weight: 600; font-size: var(--fs-sm); }
+  .hsub { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hago { flex: none; white-space: nowrap; }
   .foot { font-size: var(--fs-2xs); margin: 10px 0 0; line-height: 1.6; }
 </style>

@@ -4,7 +4,6 @@
   // 真实先天由 id+原型 确定性派生并冻进 GENESIS。TODO(后端)：如要让预览即先天，需后端接收外观种子。
   import { createEventDispatcher } from 'svelte';
   import { api } from '../lib/api.js';
-  import { addAudit } from '../lib/admin.js';
   import { FX } from '../lib/fx.js';
   import Creature from '../components/Creature.svelte';
   import SkyScene from '../components/SkyScene.svelte';
@@ -32,8 +31,7 @@
     busy = true; err = '';
     try {
       const r = await api.createLife(name.trim(), arch || undefined);
-      FX.burst(ev.currentTarget, { count: 16, color: '#e8c87a', spread: 90 });
-      addAudit(`接生新生命 ${r.id}${arch ? `（原型：${arch}）` : ''}`);
+      FX.burst(ev.currentTarget, { count: 16, color: '#e8c87a', spread: 90 }); // 留痕由后端自记（审计日志）
       setTimeout(() => dispatch('born', { id: r.id }), 600);
     } catch (e) { err = e.message; } finally { busy = false; }
   }

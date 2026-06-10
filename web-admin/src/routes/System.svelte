@@ -1,8 +1,8 @@
 <script>
-  // 系统诊断：4 KPI + 事件流（三色点）+ 通道与策略 + 链路检查（chain-trace）+ 审计日志（本地占位）。
+  // 系统诊断：4 KPI + 事件流（三色点）+ 通道与策略 + 链路检查（chain-trace）+ 审计日志（服务端持久化）。
   import { onMount, onDestroy } from 'svelte';
   import { api } from '../lib/api.js';
-  import { authGuard, audit } from '../lib/admin.js';
+  import { authGuard } from '../lib/admin.js';
   import { roster } from '../lib/lives.js';
   import { relTime } from '../lib/time.js';
   import PageHead from '../components/PageHead.svelte';
@@ -11,6 +11,7 @@
 
   let h = null;
   let activity = [];
+  let auditRows = [];
   let error = '';
   let timer;
 
@@ -25,6 +26,7 @@
       h = hh; activity = ac || [];
       if (!$roster.length) roster.set((await api.overview()).lives || []);
     } catch (e) { error = e.message; authGuard(e); }
+    try { auditRows = (await api.audit(50)).rows || []; } catch { /* 审计读取失败不挡诊断页 */ }
   }
   async function runTrace() {
     ctRunning = true; ctErr = ''; ct = null;
@@ -101,12 +103,12 @@
     </div>
 
     <div class="card-quiet pane">
-      <div class="section-title st">审计日志（本地占位）</div>
-      <!-- TODO(后端)：审计日志接口暂无——这里展示前端留痕（敏感操作均已写入）；接口就绪后切真实数据。 -->
-      {#each $audit.slice(0, 12) as a}
-        <div class="lrow"><span class="awho">{a.who}</span><span class="aact">{a.act}</span><span class="meta aago">{relTime(a.t)}</span></div>
+      <div class="section-title st">审计日志</div>
+      <!-- 服务端持久化（GET /admin/audit）：敏感操作（查看全文/封禁/调余额/配置变更/标记/安全）后端自记。 -->
+      {#each auditRows.slice(0, 12) as a (a.id)}
+        <div class="lrow"><span class="awho">{a.who}</span><span class="aact">{a.action}</span><span class="meta aago">{relTime(a.at)}</span></div>
       {:else}
-        <p class="caption">本次还没有敏感操作留痕。</p>
+        <p class="caption">还没有敏感操作留痕。</p>
       {/each}
     </div>
   </div>

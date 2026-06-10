@@ -63,6 +63,7 @@ export interface Ctx {
   settings: SettingsStore; feed: FeedStore; announce: AnnounceStore; accounts: AccountStore; ilink: Ilink;
   bus: EventBus; serializer: Serializer; autoBudget: AutonomousBudget;
   mouth: Mouth; templateMouth: TemplateMouth; perceiver: Perceiver;
+  museMouth: Mouth; // 公开心声的嘴（按用途路由：museModel ?? 同嘴）——muse/洞见帖走它，对话仍走 mouth
 
   // —— 生命体 ——
   lives: Life[];
@@ -78,9 +79,11 @@ export interface Ctx {
   // —— 生效配置解析器（settings ⊕ env ⊕ 默认）——
   effWorld(): EffWorld; worldStatus(): Record<string, unknown>; worldEnabled(w?: EffWorld): boolean;
   effMouthConfig(): ApiyiConfig | null; effPerceiveConfig(): PerceiverConfig | null;
+  effMuseMouthConfig(): ApiyiConfig | null; // 公开心声独立选型（museModel ?? 同嘴）
   modelStatus(): Record<string, unknown>;
   effSocial(): EffSocial; layerOf(closeness: number, sc: EffSocial): LayerInfo;
   effBilling(): { costPerReply: number; starterCredits: number };
+  effSafety(): { words: string[]; takeover: string }; // 安全词表接管（守底线；words 空=关闭）
 
   // —— 操作（写链路 / 渠道 / 接生）——
   respondAsUser(life: Life, me: Account, content: string, channel: string): Promise<Record<string, unknown>>;

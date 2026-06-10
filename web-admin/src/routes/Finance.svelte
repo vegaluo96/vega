@@ -1,11 +1,11 @@
 <script>
-  // 财务：心意的进与出——充值审批在工作台，这里看 KPI、定价、平台对账与全站余额分布。
+  // 财务：心意的进与出——充值审批在工作台，这里看 KPI、流水账本、心意流向、定价、平台对账与全站余额分布。
   // 真实数据：/admin/billing-config（每条成本/初始额度/对账 token）+ /admin/platform-balance（模型账户余额）
-  // + /admin/users（余额分布）。TODO(后端)：流水账本（credit_ledger 已落库，缺查询端点）、
-  // 心意流向（近7日·每条命）、每日免费额度配置。
+  // + /admin/users（余额分布）+ /admin/ledger（credit_ledger 流水 + 近7日按命消耗，仅 owner）。
+  // TODO(后端)：每日免费额度配置暂无。
   import { onMount } from 'svelte';
   import { api } from '../lib/api.js';
-  import { authGuard, addAudit } from '../lib/admin.js';
+  import { authGuard } from '../lib/admin.js';
   import { relTime } from '../lib/time.js';
   import PageHead from '../components/PageHead.svelte';
   import Kpi from '../components/Kpi.svelte';
@@ -13,6 +13,7 @@
   let users = [];
   let billing = null;
   let pb = null;
+  let led = null; // { rows: 流水, byLife: 近7日按命消耗 }（仅 owner；steward 为 null）
   let bform = { costPerReply: 1, starterCredits: 100, apiyiToken: '', balanceUrl: '' };
   let saveMsg = '';
   let saving = false, checking = false;
@@ -23,6 +24,10 @@
   $: pool = users.reduce((s, u) => s + (u.balance || 0), 0);
   $: zeroN = users.filter((u) => u.balance === 0).length;
   $: sorted = [...users].sort((a, b) => b.balance - a.balance);
+  $: maxSpent = led && led.byLife.length ? Math.max(...led.byLife.map((r) => r.spent), 1) : 1;
+
+  const REASON = { starter_grant: '初始赠送', recharge_approved: '充值到账', admin_grant: '手动调整', model: '对话消耗', refund: '失败退回' };
+  const reasonLabel = (r) => REASON[r] || r;
 
   async function load() {
     error = ''; denied = '';
@@ -31,6 +36,7 @@
       billing = await api.billingConfig();
       bform = { costPerReply: billing.costPerReply, starterCredits: billing.starterCredits, apiyiToken: '', balanceUrl: billing.balanceUrl || '' };
     } catch (e) { if (e.status === 403) denied = '计费配置仅 owner。'; else error = e.message; }
+    try { led = await api.ledger(60); } catch { led = null; /* steward 403 → 不渲染流水 */ }
     refreshBalance();
   }
   async function refreshBalance() {
@@ -46,8 +52,7 @@
       if (bform.apiyiToken.trim()) patch.apiyiToken = bform.apiyiToken.trim();
       billing = await api.saveBillingConfig(patch);
       bform.apiyiToken = '';
-      saveMsg = '已保存 · 即时生效（无需重启）';
-      addAudit(`保存计费配置（每条 ${patch.costPerReply} 心意 · 初始 ${patch.starterCredits}）`);
+      saveMsg = '已保存 · 即时生效（无需重启）'; // 留痕由后端自记（审计日志）
     } catch (e) { saveMsg = '✗ ' + e.message; authGuard(e); } finally { saving = false; }
   }
   onMount(load);
@@ -68,9 +73,23 @@
 
 <div class="cols-2 vgap">
   <div class="card-quiet pane">
-    <div class="section-title st">流水</div>
-    <!-- TODO(后端)：credit_ledger 已落库（充值到账/对话消耗/手动调整），缺查询端点；接上后这里渲染 +绿/-灰 账本。 -->
-    <p class="caption">流水账本接口待接（credit_ledger 已留痕，缺查询端点）——TODO(后端)。先到「用户 · 详情」看单人充值记录。</p>
+    <div class="section-title st">流水{#if led}<span class="meta dmeta"> · 最近 {led.rows.length} 笔</span>{/if}</div>
+    <!-- credit_ledger（GET /admin/ledger，仅 owner）：充值到账/对话消耗/手动调整，+绿 / −灰。 -->
+    {#if led}
+      <div class="ledger">
+        {#each led.rows as r (r.id)}
+          <div class="lrow">
+            <span class="ldelta mono" class:pos={r.delta > 0}>{r.delta > 0 ? '+' : ''}{r.delta}</span>
+            <span class="lmain"><b class="lname">{r.handle}</b><span class="meta lsub">{reasonLabel(r.reason)}{r.reason === 'model' && r.ref ? ` · ${r.ref}` : ''}</span></span>
+            <span class="meta lago">{relTime(r.at)}</span>
+          </div>
+        {:else}
+          <p class="caption">还没有流水。</p>
+        {/each}
+      </div>
+    {:else}
+      <p class="caption">流水账本仅 owner 可见。</p>
+    {/if}
 
     <div class="section-title st gap">全站余额分布<span class="meta dmeta"> · 实时 · 总池 {pool} · 零余额 {zeroN} 人 · 人均 {users.length ? Math.round(pool / users.length) : 0}</span></div>
     {#each sorted as u (u.id)}
@@ -82,8 +101,18 @@
     {:else}
       <p class="caption">还没有用户。</p>
     {/each}
-    <!-- TODO(后端)：「心意流向（近7日·每条命）」需按命聚合的消耗统计端点。 -->
-    <p class="faint foot">「被说话最多的命」≠「最好」——心意流向统计待后端按命聚合端点（TODO 后端）。</p>
+
+    {#if led && led.byLife.length}
+      <div class="section-title st gap">心意流向 · 近 7 日 · 每条命</div>
+      {#each led.byLife as r (r.life)}
+        <div class="brow">
+          <span class="bname">{r.life}</span>
+          <span class="meter grow"><i style:width="{Math.round((r.spent / maxSpent) * 100)}%" style:background="var(--life-reaching)"></i></span>
+          <span class="meta mono bval">{r.spent} · {r.replies} 条</span>
+        </div>
+      {/each}
+      <p class="faint foot">「被说话最多的命」≠「最好」——这是消耗统计，不是排行榜。</p>
+    {/if}
   </div>
 
   <div class="col">
@@ -134,6 +163,14 @@
   .st { margin-bottom: 8px; }
   .st.gap { margin: 16px 0 8px; }
   .dmeta { font-weight: 400; }
+  .ledger { max-height: 320px; overflow-y: auto; }
+  .lrow { display: flex; align-items: center; gap: 10px; padding: 6px 0; box-shadow: inset 0 -1px 0 0 var(--border-subtle); }
+  .ldelta { flex: none; width: 48px; text-align: right; font-weight: 700; color: var(--muted); }
+  .ldelta.pos { color: var(--success); }
+  .lmain { flex: 1; min-width: 0; }
+  .lname { font-weight: 600; font-size: var(--fs-sm); }
+  .lsub { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lago { flex: none; white-space: nowrap; }
   .brow { display: flex; align-items: center; gap: 10px; padding: 7px 0; }
   .bname { flex: none; width: 64px; font-size: var(--fs-sm); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .grow { flex: 1; }

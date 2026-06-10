@@ -254,3 +254,84 @@ test('关注：toggle/查存在/我关注的(最近在前)/粉丝数，纯平台
     s.close();
   }
 });
+
+test('审计留痕（服务端持久化）：addAudit 落库、listAudit 倒序 + limit', () => {
+  const s = createAccountStore(':memory:');
+  try {
+    s.addAudit('owner', '查看对话全文 vega ↔ Tam（理由：安全审查）');
+    s.addAudit('steward', '停用账户 x');
+    s.addAudit('owner', '保存计费配置（每条 2 心意 · 初始 50）');
+    const rows = s.listAudit(10);
+    assert.equal(rows.length, 3);
+    assert.equal(rows[0].who, 'owner', '倒序：最新在前');
+    assert.ok(rows[0].action.includes('计费'));
+    assert.ok(rows[2].action.includes('理由：安全审查'), '查看理由随留痕持久化');
+    assert.equal(s.listAudit(2).length, 2, 'limit 生效');
+  } finally {
+    s.close();
+  }
+});
+
+test('流水账本查询：listLedger 带昵称倒序、可按用户过滤；spendByLife 按命聚合 model−refund', () => {
+  const s = createAccountStore(':memory:', { starterCredits: 10 });
+  try {
+    const u = s.register('u@x.com', 'password1', 'Tam');
+    const v = s.register('v@x.com', 'password1', 'Vis');
+    const uid = u.ok ? u.account.id : '', vid = v.ok ? v.account.id : '';
+    s.debit(uid, 1, 'model', 'vega');
+    s.debit(uid, 1, 'model', 'vega');
+    s.debit(uid, 1, 'model', 'lyra');
+    s.credit(uid, 1, 'refund', 'lyra'); // lyra 那轮失败退回 → 净消耗 0
+    s.debit(vid, 1, 'model', 'vega');
+    const all = s.listLedger(50);
+    assert.equal(all.length, 7, '2 笔 starter + 4 笔 model + 1 笔 refund');
+    assert.equal(all[0].reason, 'model', '倒序：最新在前');
+    assert.equal(all[0].handle, 'Vis', 'JOIN 出昵称');
+    const mine = s.listLedger(50, uid);
+    assert.ok(mine.every((r) => r.userId === uid), '按用户过滤');
+    assert.equal(mine.length, 5);
+    const by = s.spendByLife(7);
+    assert.deepEqual(by[0], { life: 'vega', spent: 3, replies: 3 }, 'vega 净消耗 3');
+    const lyra = by.find((r) => r.life === 'lyra');
+    assert.deepEqual(lyra, { life: 'lyra', spent: 0, replies: 1 }, 'refund 抵回：lyra 净消耗 0');
+  } finally {
+    s.close();
+  }
+});
+
+test('对话标记：set 可升级覆盖（upsert）、clear 删除、listConvoFlags/convoFlagsFor 查询', () => {
+  const s = createAccountStore(':memory:');
+  try {
+    s.setConvoFlag('vega', 'u_1', 'watch', '言语越界', 'owner');
+    s.setConvoFlag('lyra', 'u_2', 'blocked', '安全词「自杀」', 'safety');
+    assert.equal(s.listConvoFlags().length, 2);
+    assert.equal(s.convoFlagsFor('vega').length, 1);
+    assert.equal(s.convoFlagsFor('vega')[0].flag, 'watch');
+    // 同一对话再标 → 覆盖不重复（主键 life+rel）
+    s.setConvoFlag('vega', 'u_1', 'blocked', '升级拦截', 'owner');
+    assert.equal(s.convoFlagsFor('vega').length, 1);
+    assert.equal(s.convoFlagsFor('vega')[0].flag, 'blocked');
+    assert.equal(s.convoFlagsFor('vega')[0].reason, '升级拦截');
+    s.clearConvoFlag('vega', 'u_1');
+    assert.equal(s.convoFlagsFor('vega').length, 0);
+    assert.equal(s.listConvoFlags().length, 1, '别的命的标记不受影响');
+  } finally {
+    s.close();
+  }
+});
+
+test('安全拦截记录：落库倒序可查；超 180 天的旧记录在新插入时被清理', () => {
+  const s = createAccountStore(':memory:');
+  try {
+    const old = new Date(Date.now() - 200 * 86_400_000).toISOString(); // 200 天前（注入时刻，过期）
+    s.addSafetyHit('vega', 'u_1', '自杀', '接管话术', '我想自杀', old);
+    s.addSafetyHit('vega', 'u_1', '自残', '接管话术', '想自残');
+    const rows = s.listSafetyHits(10);
+    assert.equal(rows.length, 1, '过期记录被 180 天保留期清掉');
+    assert.equal(rows[0].word, '自残');
+    assert.equal(rows[0].lifeId, 'vega');
+    assert.equal(rows[0].rel, 'u_1');
+  } finally {
+    s.close();
+  }
+});

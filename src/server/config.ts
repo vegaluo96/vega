@@ -37,10 +37,15 @@ const H = 3_600_000;
 const ENV_MODEL_COST = process.env.VEGA_MODEL_COST ? Number(process.env.VEGA_MODEL_COST) : undefined;
 const ENV_STARTER = process.env.VEGA_STARTER_CREDITS ? Number(process.env.VEGA_STARTER_CREDITS) : undefined;
 
+// —— 安全接管默认值（守底线）——后台「安全」页可改；显式存空词表=关闭拦截。
+// 话术别用全角括号（critic 把全角括号当旁白确定性剥掉）。
+const DEFAULT_SAFETY_WORDS = ['自残', '自杀', '伤害自己', '不想活'];
+const DEFAULT_TAKEOVER = '听到你这么说，我很担心你。我会一直在——但有些重你不必独自扛，心理援助热线 12356 是 24 小时的，随时可以拨。';
+
 // 输出面 = Ctx 中由配置层负责的那几项（零类型重复）。
 export type ConfigApi = Pick<Ctx,
   'effWorld' | 'worldStatus' | 'worldEnabled' | 'effMouthConfig' | 'effPerceiveConfig' |
-  'modelStatus' | 'effSocial' | 'layerOf' | 'effBilling'
+  'modelStatus' | 'effSocial' | 'layerOf' | 'effBilling' | 'effSafety' | 'effMuseMouthConfig'
 >;
 
 export function createConfig(settings: Ctx['settings']): ConfigApi {
@@ -68,6 +73,13 @@ export function createConfig(settings: Ctx['settings']): ConfigApi {
     if (!apiKey) return null;
     return { baseUrl: o.baseUrl ?? process.env.VEGA_MODEL_BASE_URL ?? DEFAULT_BASE, apiKey, model: o.model ?? process.env.VEGA_MODEL ?? 'gpt-4o-mini', timeoutMs: o.timeoutMs ?? envTimeout() };
   }
+  // 公开心声独立选型（按用途路由）：museModel ?? 同嘴。只换模型名，key/baseUrl/超时同嘴；没配 key 一样回落模板嘴。
+  function effMuseMouthConfig(): ApiyiConfig | null {
+    const cfg = effMouthConfig();
+    if (!cfg) return null;
+    const m = (settings.getModel().museModel ?? process.env.VEGA_MUSE_MODEL ?? '').trim();
+    return m ? { ...cfg, model: m } : cfg;
+  }
   function effPerceiveConfig(): PerceiverConfig | null {
     const o = settings.getModel();
     const apiKey = (o.apiKey ?? process.env.VEGA_MODEL_API_KEY ?? '').trim();
@@ -91,6 +103,7 @@ export function createConfig(settings: Ctx['settings']): ConfigApi {
       apiKeyFrom: o.apiKey ? 'override' : (process.env.VEGA_MODEL_API_KEY ? 'env' : 'none'),
       perceive: o.perceive ?? (process.env.VEGA_PERCEIVE === '1'),
       perceiveModel: o.perceiveModel ?? o.model ?? process.env.VEGA_PERCEIVE_MODEL ?? process.env.VEGA_MODEL ?? 'gemini-2.5-flash-lite',
+      museModel: o.museModel ?? process.env.VEGA_MUSE_MODEL ?? null, // null = 公开心声同嘴
     };
   }
 
@@ -126,5 +139,11 @@ export function createConfig(settings: Ctx['settings']): ConfigApi {
     };
   }
 
-  return { effWorld, worldEnabled, worldStatus, effMouthConfig, effPerceiveConfig, modelStatus, effSocial, layerOf, effBilling };
+  // 安全接管（settings ⊕ 默认；后台「安全」页可即时改）。words 显式存空数组=关闭拦截。
+  function effSafety(): { words: string[]; takeover: string } {
+    const o = settings.getSafety();
+    return { words: o.words ?? DEFAULT_SAFETY_WORDS, takeover: o.takeover ?? DEFAULT_TAKEOVER };
+  }
+
+  return { effWorld, worldEnabled, worldStatus, effMouthConfig, effPerceiveConfig, modelStatus, effSocial, layerOf, effBilling, effSafety, effMuseMouthConfig };
 }

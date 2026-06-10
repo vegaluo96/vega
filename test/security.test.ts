@@ -195,3 +195,37 @@ test('通知时间戳稳定：lastLedgerAt 返回最后一笔流水时间（"心
   assert.equal(acc.lastLedgerAt(uid), t1, '重复读取不变（不是 now()）');
   acc.close();
 });
+
+test('后台角色门（新端点）：流水账本 / 安全配置写 / 对话标记写 仅 owner——steward 一律 403；审计读写 steward 放行', async () => {
+  const acc = createAccountStore(':memory:');
+  const ctx = {
+    accounts: acc,
+    sessionAccount: () => ({ role: 'steward', email: 's@x.com', handle: 'Stew' }),
+  } as unknown as Ctx;
+  const get = (url: string): IncomingMessage => ({ headers: {}, method: 'GET', url } as unknown as IncomingMessage);
+  const post = (url: string, body: unknown): IncomingMessage => ({
+    method: 'POST', url, headers: {},
+    on(ev: string, cb: (chunk?: string) => void) { if (ev === 'data') cb(JSON.stringify(body)); if (ev === 'end') cb(); },
+  } as unknown as IncomingMessage);
+
+  const a = mockRes();
+  await handleAdmin(ctx, get('/admin/ledger'), a.res, '/admin/ledger');
+  assert.equal(a.cap.status, 403, '流水账本（财务敏感）steward 403');
+
+  const b = mockRes();
+  await handleAdmin(ctx, post('/admin/safety-config', { words: ['x'] }), b.res, '/admin/safety-config');
+  assert.equal(b.cap.status, 403, '安全配置写 steward 403');
+
+  const c = mockRes();
+  await handleAdmin(ctx, post('/admin/flags', { lifeId: 'vega', rel: 'u_1', flag: 'watch' }), c.res, '/admin/flags');
+  assert.equal(c.cap.status, 403, '对话标记写 steward 403');
+
+  const d = mockRes();
+  await handleAdmin(ctx, post('/admin/audit', { action: '测试留痕' }), d.res, '/admin/audit');
+  assert.equal(d.cap.status, 200, '审计补录 steward 放行（各自留痕）');
+  const e = mockRes();
+  await handleAdmin(ctx, get('/admin/audit'), e.res, '/admin/audit');
+  assert.equal(e.cap.status, 200, '审计读取 steward 放行');
+  assert.ok(e.cap.body.includes('测试留痕') && e.cap.body.includes('Stew'), '留痕带操作者');
+  acc.close();
+});

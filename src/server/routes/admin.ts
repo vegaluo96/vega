@@ -11,7 +11,7 @@ const now = (): string => new Date().toISOString();
 export async function handleAdmin(ctx: Ctx, req: IncomingMessage, res: ServerResponse, url: string): Promise<void> {
   const {
     sessionAccount, modelStatus, settings, effMouthConfig, mouth, lifeById, lives,
-    perceiver, effBilling, birthLife, effSocial, scheduleWorld, sourceStats, worldStatus, effWorld,
+    perceiver, effBilling, effSafety, birthLife, effSocial, scheduleWorld, sourceStats, worldStatus, effWorld,
     worldEnabled, adminActivity, accounts, livesMetBy, buildThread, snapOf, reachState,
     layerOf, audiencePresent, autoBudget, idleMs, announce, serializer, REL, IDLE_GATE_MS,
   } = ctx;
@@ -20,6 +20,11 @@ export async function handleAdmin(ctx: Ctx, req: IncomingMessage, res: ServerRes
   if (!acct || (acct.role !== 'owner' && acct.role !== 'steward')) return send(res, 403, { error: 'forbidden' });
   const owner = acct.role === 'owner';
   const path = url.split('?')[0];
+  // 审计留痕（服务端持久化）：敏感操作（查看全文/封禁/调余额/全站配置变更/标记）由各 handler 自记。
+  const audit = (action: string): void => accounts.addAudit(acct.handle || acct.email, action);
+  // 关系 id → 展示名（标记/拦截记录里给人看）：u_<id> 取昵称、peer_ 取命名、创造者固定。
+  const relName = (rel: string): string =>
+    rel === REL ? '创造者' : rel.startsWith('u_') ? (accounts.getAccount(rel.slice(2))?.handle ?? rel) : rel.startsWith('peer_') ? rel.slice(5) : rel;
 
   // —— 模型配置（仅 owner）：自助换模型/改 base/key/超时/感知，即时生效、无需重启。
   // 换的只是"嘴"（契约①）；配置不进神圣日志、不参与重放；key 只回脱敏。
@@ -37,8 +42,11 @@ export async function handleAdmin(ctx: Ctx, req: IncomingMessage, res: ServerRes
       if (b.clearApiKey === true) patch.clearApiKey = true;
       // 收到脱敏值(含 …)视为"未改"，不覆盖明文 key。
       else if (typeof b.apiKey === 'string' && b.apiKey.trim() !== '' && !b.apiKey.includes('…')) patch.apiKey = b.apiKey;
+      if (typeof b.museModel === 'string') patch.museModel = b.museModel; // 公开心声独立选型（空串=回落同嘴）
       settings.setModel(patch);
-      return send(res, 200, modelStatus());
+      const st = modelStatus();
+      audit(`保存模型配置（嘴 ${st.model} · 耳 ${st.perceiveModel} · 心声 ${st.museModel ?? '同嘴'}${patch.clearApiKey ? ' · 清除Key' : patch.apiKey ? ' · 换Key' : ''}）`);
+      return send(res, 200, st);
     }
     if (req.method === 'POST' && path === '/admin/model-config/test') {
       const cfg = effMouthConfig();
@@ -100,6 +108,7 @@ export async function handleAdmin(ctx: Ctx, req: IncomingMessage, res: ServerRes
     const b = await readJson(req);
     const archetype = typeof b.archetype === 'string' && b.archetype.trim() ? b.archetype.trim() : undefined;
     const r = await birthLife(String(b.id ?? ''), archetype);
+    if (r.ok) audit(`接生生命体 ${r.id}${archetype ? `（原型：${archetype}）` : ''}`);
     return send(res, r.ok ? 200 : 400, r.ok ? { ok: true, id: r.id, total: lives.length } : { error: r.error });
   }
 
@@ -107,7 +116,12 @@ export async function handleAdmin(ctx: Ctx, req: IncomingMessage, res: ServerRes
   if (path === '/admin/social-config') {
     if (!owner) return send(res, 403, { error: '仅 owner 可查看/修改社交边界' });
     if (req.method === 'GET') return send(res, 200, effSocial());
-    if (req.method === 'POST') { settings.setSocial(await readJson(req)); return send(res, 200, effSocial()); }
+    if (req.method === 'POST') {
+      settings.setSocial(await readJson(req));
+      const sc = effSocial();
+      audit(`保存社交边界配置（活跃圈 ${sc.activeCircle} · 每跳 ${sc.reachPerTick}）`);
+      return send(res, 200, sc);
+    }
     return send(res, 405, { error: 'method not allowed' });
   }
 
@@ -129,6 +143,8 @@ export async function handleAdmin(ctx: Ctx, req: IncomingMessage, res: ServerRes
       else if (typeof b.apiyiToken === 'string' && b.apiyiToken.trim()) patch.apiyiToken = b.apiyiToken.trim();
       if (typeof b.balanceUrl === 'string') patch.balanceUrl = b.balanceUrl;
       settings.setBilling(patch);
+      const eb = effBilling();
+      audit(`保存计费配置（每条 ${eb.costPerReply} 心意 · 初始 ${eb.starterCredits}）`);
       return send(res, 200, view());
     }
     return send(res, 405, { error: 'method not allowed' });
@@ -152,6 +168,79 @@ export async function handleAdmin(ctx: Ctx, req: IncomingMessage, res: ServerRes
     } catch (e) { return send(res, 200, { configured: true, error: String((e as Error).message ?? e) }); }
   }
 
+  // —— 审计日志（服务端持久化，owner+steward 各自留痕）：敏感操作的真相源——后端自记大多数操作；
+  // POST 供后台前端补录"后端接口尚未覆盖"的动作（占位功能的操作意向等）。失败不阻断操作（前端静默上送）。
+  if (path === '/admin/audit') {
+    if (req.method === 'GET') {
+      const lim = Math.min(500, Math.max(1, Number(new URLSearchParams((req.url ?? '').split('?')[1] ?? '').get('limit') ?? 100)));
+      return send(res, 200, { rows: accounts.listAudit(lim) });
+    }
+    if (req.method === 'POST') {
+      const b = await readJson(req);
+      const action = String(b.action ?? '').trim().slice(0, 300);
+      if (!action) return send(res, 400, { error: 'action 不能为空' });
+      audit(action);
+      return send(res, 200, { ok: true });
+    }
+    return send(res, 405, { error: 'method not allowed' });
+  }
+
+  // —— 流水账本（仅 owner，财务敏感）：credit_ledger 查询（可按用户过滤）+ 近 7 日按命消耗聚合（心意流向）。
+  if (req.method === 'GET' && path === '/admin/ledger') {
+    if (!owner) return send(res, 403, { error: '流水账本仅 owner' });
+    const sp = new URLSearchParams((req.url ?? '').split('?')[1] ?? '');
+    const lim = Math.min(500, Math.max(1, Number(sp.get('limit') ?? 120)));
+    const user = (sp.get('user') ?? '').trim();
+    return send(res, 200, { rows: accounts.listLedger(lim, user || undefined), byLife: accounts.spendByLife(7) });
+  }
+
+  // —— 对话标记（监督）：关注=黄 / 已拦截=红 + 原因。读 owner+steward（纯元数据、无正文）；
+  // 写仅 owner（与对话监督一致）。安全词命中由写链路自动标红（by='safety'）。
+  if (path === '/admin/flags') {
+    if (req.method === 'GET') return send(res, 200, { rows: accounts.listConvoFlags().map((f) => ({ ...f, name: relName(f.rel) })) });
+    if (req.method === 'POST') {
+      if (!owner) return send(res, 403, { error: '对话标记仅 owner' });
+      const b = await readJson(req);
+      const lifeId = String(b.lifeId ?? '');
+      const rel = String(b.rel ?? '');
+      if (!lifeById(lifeId) || !rel) return send(res, 400, { error: 'lifeId / rel 必填' });
+      const flag = String(b.flag ?? '');
+      if (flag === 'watch' || flag === 'blocked') {
+        const reason = String(b.reason ?? '').trim().slice(0, 200);
+        accounts.setConvoFlag(lifeId, rel, flag, reason, acct.handle || acct.email);
+        audit(`标记对话 ${lifeId} ↔ ${relName(rel)} 为「${flag === 'watch' ? '关注' : '已拦截'}」${reason ? `（${reason}）` : ''}`);
+      } else {
+        accounts.clearConvoFlag(lifeId, rel);
+        audit(`清除对话标记 ${lifeId} ↔ ${relName(rel)}`);
+      }
+      return send(res, 200, { ok: true, rows: accounts.convoFlagsFor(lifeId) });
+    }
+    return send(res, 405, { error: 'method not allowed' });
+  }
+
+  // —— 安全（词表接管，守底线）：词表 + 接管话术（读 owner+steward、写仅 owner，留痕）。
+  // 命中 → 写链路零模型零扣费回接管话术（respond.ts），web/微信双通道同一收口、即时生效。
+  if (path === '/admin/safety-config') {
+    const view = (): Record<string, unknown> => { const s = effSafety(); return { ...s, enabled: s.words.length > 0, from: settings.getSafety().words ? 'override' : 'default' }; };
+    if (req.method === 'GET') return send(res, 200, view());
+    if (req.method === 'POST') {
+      if (!owner) return send(res, 403, { error: '安全配置仅 owner' });
+      const b = await readJson(req);
+      const patch: { words?: string[]; takeover?: string } = {};
+      if (Array.isArray(b.words)) patch.words = b.words.map((w: unknown) => String(w));
+      if (typeof b.takeover === 'string') patch.takeover = b.takeover;
+      settings.setSafety(patch);
+      audit(`保存安全配置（词表 ${effSafety().words.length} 个）`);
+      return send(res, 200, view());
+    }
+    return send(res, 405, { error: 'method not allowed' });
+  }
+  // —— 拦截记录（保留 180 天）：命中词 + 处理动作 + 对话号。摘录是私聊片段 → steward 遮罩、owner 可见。
+  if (req.method === 'GET' && path === '/admin/safety-hits') {
+    const lim = Math.min(500, Math.max(1, Number(new URLSearchParams((req.url ?? '').split('?')[1] ?? '').get('limit') ?? 100)));
+    return send(res, 200, { rows: accounts.listSafetyHits(lim).map((h) => ({ ...h, name: relName(h.rel), excerpt: owner ? h.excerpt : '〔私聊·遮罩〕' })) });
+  }
+
   // —— 世界源配置（仅 owner，§8.1）：她们读哪些新闻 RSS / 是否接 Polymarket / 多久读一遍。即时生效、无需重启。
   // 抓取在引擎外，内容冻进 WORLD_PERCEIVED 事件；配置不进神圣日志、不参与重放（换源不改她记得什么）。
   if (path === '/admin/world-config' || path === '/admin/world-config/test') {
@@ -169,7 +258,9 @@ export async function handleAdmin(ctx: Ctx, req: IncomingMessage, res: ServerRes
       if (b.everyMs !== undefined && b.everyMs !== '') patch.everyMs = Number(b.everyMs);
       settings.setWorld(patch);
       scheduleWorld(3_000); // 新源 3 秒后即试读一遍（不必等满一个周期）
-      return send(res, 200, worldStatus());
+      const ws = worldStatus();
+      audit(`保存世界源配置（${(ws.sources as string[]).length} 个源 · 每 ${Math.round(Number(ws.everyMs) / 60_000)} 分钟）`);
+      return send(res, 200, ws);
     }
     if (req.method === 'POST' && path === '/admin/world-config/test') {
       const w = effWorld();
@@ -200,6 +291,7 @@ export async function handleAdmin(ctx: Ctx, req: IncomingMessage, res: ServerRes
       if (title.length > ANNOUNCE_TITLE_MAX || text.length > ANNOUNCE_TEXT_MAX) return send(res, 400, { error: `标题 ≤${ANNOUNCE_TITLE_MAX} 字、正文 ≤${ANNOUNCE_TEXT_MAX} 字` });
       if (audience !== 'humans' && audience !== 'lives' && audience !== 'both') return send(res, 400, { error: 'audience 须为 humans / lives / both' });
       const item = announce.publish({ title, text, audience, by: acct.email });
+      audit(`发布公告「${title}」→ ${audience}`);
       // 受众含生命体 → 每条醒着的命"读到"一条（照 world.ts：休眠冻结，睡着的不感知；每命串行不与对话穿插）。
       let deliveredLives = 0;
       if (audience === 'lives' || audience === 'both') {
@@ -240,6 +332,7 @@ export async function handleAdmin(ctx: Ctx, req: IncomingMessage, res: ServerRes
     const ac = accounts.getAccount(uid);
     if (!ac) return send(res, 404, { error: 'no such user' });
     const rel = accounts.relIdFor(uid);
+    audit(`查看用户对话记录 ${ac.handle}（${uid}）`);
     const conversations = livesMetBy(ac)
       .map(({ id }) => { const l = lifeById(id)!; const b = snapOf(l).bonds[rel]; return { life: id, closeness: round3(b?.closeness ?? 0), messages: buildThread(l, rel) }; })
       .filter((c) => c.messages.length > 0)
@@ -271,6 +364,7 @@ export async function handleAdmin(ctx: Ctx, req: IncomingMessage, res: ServerRes
   if (req.method === 'POST' && path === '/admin/recharges') {
     const b = await readJson(req);
     const ok = accounts.decideRecharge(Number(b.id), Boolean(b.approve), acct.email);
+    if (ok) audit(`充值审批 #${Number(b.id)} ${b.approve ? '通过' : '驳回'}`);
     return send(res, ok ? 200 : 400, ok ? { ok: true } : { error: 'no such pending request' });
   }
   // —— 世界事件流：她们读到的【真实世界】（跨命的 WORLD_PERCEIVED），按墙钟倒序。世界内容公开，owner+steward 都看。——
@@ -294,6 +388,8 @@ export async function handleAdmin(ctx: Ctx, req: IncomingMessage, res: ServerRes
     if (!accounts.getAccount(uid)) return send(res, 404, { error: 'no such user' });
     if (!Number.isFinite(amount) || amount === 0) return send(res, 400, { error: 'amount 必须是非 0 整数（正=充、负=扣）' });
     accounts.credit(uid, amount, 'admin_grant', `by_${acct.email}`);
+    const note = String(b.note ?? '').trim().slice(0, 200); // 备注随审计留痕（不入账本结构）
+    audit(`手动${amount > 0 ? '充值' : '扣减'} ${accounts.getAccount(uid)?.handle ?? uid} ${amount > 0 ? '+' : ''}${amount} 心意${note ? `（备注：${note}）` : ''}`);
     return send(res, 200, { ok: true, userId: uid, amount, balance: accounts.balance(uid) });
   }
   // 健康时间线（§11.3）：她的灵性/效价/精力/联结随真实时间的曲线（owner+steward 都看，纯她的健康）。
@@ -319,15 +415,23 @@ export async function handleAdmin(ctx: Ctx, req: IncomingMessage, res: ServerRes
       cur.msgs += 1; cur.lastAt = e.occurredAt;
       agg.set(rel, cur);
     }
-    const rels = [...agg.values()].map((r) => ({ ...r, closeness: round3(s.bonds[r.rel]?.closeness ?? 0), trust: round3(s.bonds[r.rel]?.trust ?? 0), ended: Boolean(s.bonds[r.rel]?.ended) })).sort((a, b) => b.lastAt.localeCompare(a.lastAt));
+    const flags = new Map(accounts.convoFlagsFor(l.id).map((f) => [f.rel, f])); // 对话标记（关注/已拦截）附在关系行上
+    const rels = [...agg.values()].map((r) => ({
+      ...r, closeness: round3(s.bonds[r.rel]?.closeness ?? 0), trust: round3(s.bonds[r.rel]?.trust ?? 0), ended: Boolean(s.bonds[r.rel]?.ended),
+      flag: flags.get(r.rel)?.flag ?? null, flagReason: flags.get(r.rel)?.reason ?? '',
+    })).sort((a, b) => b.lastAt.localeCompare(a.lastAt));
     return send(res, 200, { lifeId: l.id, relations: rels });
   }
   // —— 对话监督·读线程（仅 owner）——某条命与某个关系的来回（含模型听出的感知）。
+  // 查看全文必留痕：reason（查看理由）随查询串上送，与操作者一起进审计日志。
   if (req.method === 'GET' && path.startsWith('/admin/lives/') && path.endsWith('/thread')) {
     if (!owner) return send(res, 403, { error: '对话监督仅 owner' });
     const l = lifeById(path.slice('/admin/lives/'.length, -'/thread'.length));
     if (!l) return send(res, 404, { error: 'no such life' });
-    const rel = new URLSearchParams((req.url ?? '').split('?')[1] ?? '').get('rel') ?? '';
+    const sp = new URLSearchParams((req.url ?? '').split('?')[1] ?? '');
+    const rel = sp.get('rel') ?? '';
+    const reason = (sp.get('reason') ?? '').trim().slice(0, 200);
+    audit(`查看对话全文 ${l.id} ↔ ${relName(rel)}${reason ? `（理由：${reason}）` : ''}`);
     return send(res, 200, { lifeId: l.id, rel, messages: buildThread(l, rel) });
   }
   // —— 原始事件日志（append-only ground truth）：直接看落库的 LifeEvent 序列——"从日志确定性重建"的真相源。
@@ -398,7 +502,9 @@ export async function handleAdmin(ctx: Ctx, req: IncomingMessage, res: ServerRes
   }
   if (req.method === 'POST' && path === '/admin/users/block') {
     const b = await readJson(req);
-    accounts.setStatus(String(b.userId ?? ''), b.unblock ? 'active' : 'blocked');
+    const uid = String(b.userId ?? '');
+    accounts.setStatus(uid, b.unblock ? 'active' : 'blocked');
+    audit(`${b.unblock ? '恢复' : '停用'}账户 ${accounts.getAccount(uid)?.handle ?? uid}（${uid}）`);
     return send(res, 200, { ok: true });
   }
   // —— 系统健康（总览用）：自主预算/省token闲置门控/微信通道/模型&感知/规模。owner+steward 都看（无用户私聊）。——

@@ -3,7 +3,7 @@
   // 受众：人类 → 用户端「通知·系统」；生命体 → 经神圣链路注入 WORLD_PERCEIVED（她"读到"，绝不直写状态）。
   import { onMount } from 'svelte';
   import { api } from '../lib/api.js';
-  import { authGuard, addAudit } from '../lib/admin.js';
+  import { authGuard } from '../lib/admin.js';
   import { relTime } from '../lib/time.js';
   import PageHead from '../components/PageHead.svelte';
 
@@ -34,8 +34,7 @@
     if (!t || !x || sending) return;
     sending = true; msg = '';
     try {
-      const r = await api.announce(t, x, audience);
-      addAudit(`发布公告「${t}」→ ${audLabel(audience)}`);
+      const r = await api.announce(t, x, audience); // 留痕由后端自记（审计日志）
       msg = `已发布 → ${audLabel(audience)}${r.deliveredLives ? ` · ${r.deliveredLives} 条醒着的命读到了` : ''}`;
       title = ''; body = '';
       await load();

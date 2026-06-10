@@ -37,8 +37,7 @@
     if (!confirm(`确定给 ${u.handle} ${amt > 0 ? '充值' : '扣除'} ${Math.abs(amt)} 心意？\n备注：${note.trim()}`)) return;
     busy = true; balMsg = '';
     try {
-      const r = await api.rechargeUser(userId, amt); // TODO(后端)：接口暂不收备注——备注先记入本地审计
-      addAudit(`余额调整 ${u.handle} ${amt > 0 ? '+' : ''}${amt} 心意（备注：${note.trim()}）`);
+      const r = await api.rechargeUser(userId, amt, note.trim()); // 备注随请求上送 → 服务端审计留痕
       balMsg = `✓ 当前余额 ${r.balance}`;
       delta = ''; note = '';
       await load(); dispatch('changed');
@@ -50,8 +49,7 @@
     if (!confirm(`⚠️ 确定${verb}账户 ${u.handle}（${userId}）？\n停用不删她们与他的关系数据，仅阻止登录与对话。`)) return;
     if (block && !confirm(`再次确认：${verb} ${u.handle}。该动作将记入审计。`)) return;
     try {
-      await api.block(userId, !block);
-      addAudit(`${verb}账户 ${u.handle}（${userId}）`);
+      await api.block(userId, !block); // 留痕由后端自记（审计日志）
       await load(); dispatch('changed');
     } catch (e) { error = e.message; authGuard(e); }
   }

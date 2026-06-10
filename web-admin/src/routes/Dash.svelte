@@ -18,6 +18,7 @@
   let users = 0;
   let pending = [];
   let activity = [];
+  let flagged = []; // 需要留意的对话（标记：关注/已拦截）
   let health = null;
   let error = '';
   let timer;
@@ -41,11 +42,11 @@
       pending = rc || [];
       activity = ac || [];
       try { health = await api.health(); } catch { health = null; }
+      try { flagged = (await api.flags()).rows || []; } catch { flagged = []; }
     } catch (e) { error = e.message; authGuard(e); }
   }
   onMount(() => { load(); timer = setInterval(load, 15_000); });
   onDestroy(() => clearInterval(timer));
-  /* TODO(后端)：「需要留意的对话」需要对话标记（关注/已拦截）接口——后端暂无 flag 机制，先不渲染该区。 */
 </script>
 
 <PageHead title="总览" {sub} />
@@ -57,6 +58,20 @@
     <span class="btx"><b>{pending.length} 笔充值等待审批</b><span class="caption bwait">最早一笔已等 {oldestWait}</span></span>
     <span class="bgo">去处理 ›</span>
   </button>
+{/if}
+
+{#if flagged.length > 0}
+  <!-- 需要留意的对话（GET /admin/flags）：已拦截=红（含安全词自动标红）/ 关注=黄。点击进对话监督。 -->
+  <div class="card-quiet pane vgap">
+    <div class="section-title st">需要留意的对话 · {flagged.length}</div>
+    {#each flagged.slice(0, 6) as f (`${f.lifeId}|${f.rel}`)}
+      <button class="frow" on:click={() => nav('convos', f.lifeId)}>
+        <span class="pill" style:color={f.flag === 'blocked' ? 'var(--danger)' : 'var(--warning)'}>{f.flag === 'blocked' ? '已拦截' : '关注'}</span>
+        <span class="fmain"><b class="fname">{f.lifeId} ↔ {f.name}</b>{#if f.reason}<span class="meta freason">{f.reason}</span>{/if}</span>
+        <span class="meta fago">{relTime(f.at)} · {f.by}</span>
+      </button>
+    {/each}
+  </div>
 {/if}
 
 <div class="grid-kpi">
@@ -101,6 +116,13 @@
   .bwait { margin-left: 10px; }
   .bgo { color: var(--link); font-size: var(--fs-sm); font-weight: 600; }
   .pane { padding: 18px; }
+  .pane.vgap { margin-bottom: 18px; }
+  .st { margin-bottom: 8px; }
+  .frow { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 8px 0; box-shadow: inset 0 -1px 0 0 var(--border-subtle); }
+  .fmain { flex: 1; min-width: 0; }
+  .fname { font-weight: 600; font-size: var(--fs-sm); }
+  .freason { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fago { flex: none; white-space: nowrap; }
   .ptop { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
   .plink { font-size: var(--fs-xs); color: var(--link); }
   .row { display: flex; gap: 14px; flex-wrap: wrap; }

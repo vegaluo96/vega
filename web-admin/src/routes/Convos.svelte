@@ -1,11 +1,10 @@
 <script>
-  // 对话监督（隐私纪律是设计核心）：默认只见摘要与标记；查看全文必须写明理由 → 留痕审计。
-  // 真实数据：/admin/lives/:id/relations（她和谁聊过）+ /admin/lives/:id/thread?rel=（来回原文，仅 owner）。
-  // TODO(后端)：对话标记（关注=黄 / 已拦截=红 + 原因）需要安全/标记机制——后端暂无 flag 字段，签位保留。
-  // TODO(后端)：thread 接口暂不收「查看理由」参数——理由先记入本地审计占位（System · 审计日志）。
+  // 对话监督（隐私纪律是设计核心）：默认只见摘要与标记；查看全文必须写明理由 → 理由随 thread 请求上送、服务端留痕审计。
+  // 真实数据：/admin/lives/:id/relations（她和谁聊过，附 flag）+ /admin/lives/:id/thread?rel=&reason=（来回原文，仅 owner）。
+  // 对话标记（关注=黄 / 已拦截=红 + 原因）：POST /admin/flags；安全词命中由后端自动标红（by=safety）。
   import { onMount } from 'svelte';
   import { api } from '../lib/api.js';
-  import { authGuard, addAudit } from '../lib/admin.js';
+  import { authGuard } from '../lib/admin.js';
   import { roster, lifeVisual } from '../lib/lives.js';
   import { relTime } from '../lib/time.js';
   import PageHead from '../components/PageHead.svelte';
@@ -17,6 +16,7 @@
   let rels = [];
   let sel = null;       // 选中的关系
   let reason = '';
+  let flagReason = '';  // 标记原因（可选）
   let thread = null;    // 申请通过后才拉全文
   let denied = '';
   let error = '';
@@ -24,18 +24,28 @@
   $: lives = $roster;
 
   async function pick(id) {
-    life = id; rels = []; sel = null; thread = null; reason = ''; denied = ''; error = '';
+    life = id; rels = []; sel = null; thread = null; reason = ''; flagReason = ''; denied = ''; error = '';
     try { rels = (await api.relations(id)).relations || []; }
     catch (e) { if (e.status === 403) denied = '对话监督仅 owner——steward 不可读私聊。'; else error = e.message; authGuard(e); }
   }
-  function open(r) { sel = r; thread = null; reason = ''; }
+  function open(r) { sel = r; thread = null; reason = ''; flagReason = ''; }
 
   async function readFull() {
     if (!sel || !reason.trim()) return;
     try {
-      const t = await api.thread(life, sel.rel);
+      const t = await api.thread(life, sel.rel, reason.trim()); // 理由随请求上送 → 服务端审计留痕
       thread = t.messages || [];
-      addAudit(`查看对话全文 ${life} ↔ ${sel.name}（理由：${reason.trim()}）`); // TODO(后端)：理由上送审计接口
+    } catch (e) { error = e.message; authGuard(e); }
+  }
+
+  // 标记：关注=watch / 已拦截=blocked / 空=清除。保存后刷新关系列表（保持选中项）。
+  async function setFlag(f) {
+    if (!sel) return;
+    try {
+      await api.setFlag(life, sel.rel, f, flagReason.trim());
+      rels = (await api.relations(life)).relations || [];
+      sel = rels.find((r) => r.rel === sel.rel) || sel;
+      flagReason = '';
     } catch (e) { error = e.message; authGuard(e); }
   }
 
@@ -71,6 +81,7 @@
           <span class="imain">
             <span class="iline">
               <b class="iname">{r.name} ↔ {life}</b>
+              {#if r.flag}<span class="pill flagpill" style:color={r.flag === 'blocked' ? 'var(--danger)' : 'var(--warning)'}>{r.flag === 'blocked' ? '已拦截' : '关注'}</span>{/if}
               <span class="meta">{r.msgs} 条 · 亲近 {Math.round(r.closeness * 100)}{r.ended ? ' · 已离' : ''}</span>
             </span>
             <span class="isub">最近往来 {relTime(r.lastAt)}</span>
@@ -86,7 +97,17 @@
       {#if sel}
         <div class="section-title st">{sel.name} ↔ {life}</div>
         <div class="caption summary">摘要：累计 {sel.msgs} 条来回 · 亲近 {Math.round(sel.closeness * 100)} · 信任 {Math.round((sel.trust || 0) * 100)} · 最近 {relTime(sel.lastAt)}{sel.ended ? ' · 关系已结束' : ''}。</div>
-        <!-- 标记签位：关注=黄 / 已拦截=红。TODO(后端)：flag 字段暂无。 -->
+        <!-- 标记：关注=黄 / 已拦截=红 + 原因（POST /admin/flags，留痕）。安全词命中由后端自动标红。 -->
+        <div class="section-title st gap">标记</div>
+        {#if sel.flag}
+          <p class="caption flagnow">当前：<span style:color={sel.flag === 'blocked' ? 'var(--danger)' : 'var(--warning)'}>{sel.flag === 'blocked' ? '已拦截' : '关注'}</span>{sel.flagReason ? ` · ${sel.flagReason}` : ''}</p>
+        {/if}
+        <input class="input" bind:value={flagReason} placeholder="标记原因（可选，随审计留痕）" />
+        <div class="flagacts">
+          <button class="btn btn-soft btn-sm" on:click={() => setFlag('watch')}>标关注</button>
+          <button class="btn btn-soft btn-sm" on:click={() => setFlag('blocked')}>标拦截</button>
+          {#if sel.flag}<button class="btn btn-ghost btn-sm" on:click={() => setFlag('')}>清除标记</button>{/if}
+        </div>
         {#if thread === null}
           <div class="section-title st gap">查看全文（需留痕）</div>
           <input class="input" bind:value={reason} placeholder="写明查看理由，如：安全审查 #{sel.rel}" on:keydown={(e) => e.key === 'Enter' && readFull()} />
@@ -125,6 +146,9 @@
   .imain { flex: 1; min-width: 0; }
   .iline { display: flex; gap: 8px; align-items: center; }
   .iname { font-weight: 700; font-size: var(--fs-sm); white-space: nowrap; }
+  .flagpill { flex: none; }
+  .flagnow { margin: 0 0 8px; }
+  .flagacts { display: flex; gap: 8px; margin-top: 8px; }
   .isub { display: block; font-size: var(--fs-sm); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
   .iago { flex: none; white-space: nowrap; }
   .side { padding: 18px; }

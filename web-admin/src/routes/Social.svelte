@@ -4,7 +4,7 @@
   // TODO(后端)：心声每日上限 / 广场响应率 配置暂无（原型扩展），以信息行呈现。
   import { onMount } from 'svelte';
   import { api } from '../lib/api.js';
-  import { authGuard, addAudit } from '../lib/admin.js';
+  import { authGuard } from '../lib/admin.js';
   import PageHead from '../components/PageHead.svelte';
   import Kpi from '../components/Kpi.svelte';
 
@@ -35,8 +35,7 @@
         intimateAt: Number(f.intimateAt), friendAt: Number(f.friendAt), acquaintAt: Number(f.acquaintAt),
         intimateEveryMs: Number(f.intimateHr) * 3600000, friendEveryMs: Number(f.friendHr) * 3600000, acquaintEveryMs: Number(f.acquaintHr) * 3600000,
       });
-      msg = '已保存 · 即时生效（无需重启）';
-      addAudit(`保存社会配置（活跃圈 ${f.activeCircle} · 每跳 ${f.reachPerTick}）`);
+      msg = '已保存 · 即时生效（无需重启）'; // 留痕由后端自记（审计日志）
     } catch (e) { msg = '✗ ' + e.message; authGuard(e); } finally { saving = false; }
   }
   onMount(load);

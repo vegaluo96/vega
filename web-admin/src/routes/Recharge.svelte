@@ -3,7 +3,7 @@
   // 「已处理」为本次会话留痕；TODO(后端)：全局已处理列表接口暂无（recharge_requests 已落库，缺查询端点）。
   import { onMount } from 'svelte';
   import { api } from '../lib/api.js';
-  import { authGuard, pendingCount, addAudit, me } from '../lib/admin.js';
+  import { authGuard, pendingCount, me } from '../lib/admin.js';
   import { relTime } from '../lib/time.js';
   import { FX } from '../lib/fx.js';
   import PageHead from '../components/PageHead.svelte';
@@ -30,8 +30,7 @@
     try {
       await api.decideRecharge(r.id, approve);
       if (approve && ev) FX.burst(ev.currentTarget, { count: 10, color: '#e8c87a', spread: 60 });
-      done = [{ ...r, status: approve ? 'approved' : 'rejected', doneAt: new Date().toISOString(), by: $me.handle || 'admin' }, ...done];
-      addAudit(`${approve ? '通过' : '驳回'}充值 #${r.id}（${r.amount} 心意 · ${who(r.userId)}）`);
+      done = [{ ...r, status: approve ? 'approved' : 'rejected', doneAt: new Date().toISOString(), by: $me.handle || 'admin' }, ...done]; // 留痕由后端自记（审计日志）
       pending = pending.filter((x) => x.id !== r.id);
       pendingCount.set(pending.length);
     } catch (e) { error = e.message; authGuard(e); }

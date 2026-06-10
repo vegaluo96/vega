@@ -20,6 +20,10 @@ export interface Account {
 export type AuthResult = { ok: true; account: Account } | { ok: false; error: string };
 export type LoginResult = { ok: true; account: Account; token: string } | { ok: false; error: string };
 export interface RechargeRequest { id: number; userId: string; amount: number; status: 'pending' | 'approved' | 'rejected'; requestedAt: string }
+// 对话标记（后台监督）：关注=黄 / 已拦截=红 + 原因。纯平台层元数据，绝不进神圣日志、绝不影响她的状态。
+export interface ConvoFlag { lifeId: string; rel: string; flag: 'watch' | 'blocked'; reason: string; by: string; at: string }
+// 安全拦截记录：用户消息命中安全词 → 接管话术回应。保留 180 天（插入时顺手清理过期）。
+export interface SafetyHit { id: number; at: string; lifeId: string; rel: string; word: string; action: string; excerpt: string }
 
 export interface AccountStoreOptions {
   owners?: string[]; // 这些邮箱注册即 owner（env 白名单）
@@ -103,6 +107,20 @@ export interface AccountStore {
   isFollowing(userId: string, lifeId: string): boolean;
   followsOf(userId: string): string[]; // 我关注的生命体 id（最近关注在前）
   followerCount(lifeId: string): number; // 关注这条命的用户数（仅展示）
+  // 审计留痕（服务端持久化）：敏感操作（查看对话全文/封禁/调余额/全站配置变更）的真相源，后台「审计日志」读它。
+  addAudit(who: string, action: string): void;
+  listAudit(limit: number): Array<{ id: number; at: string; who: string; action: string }>;
+  // 流水账本查询（credit_ledger 一直在落库，这里补查询面）：全站近况 / 按用户过滤 / 近 N 日按命消耗聚合。
+  listLedger(limit: number, userId?: string): Array<{ id: number; userId: string; handle: string; delta: number; reason: string; ref: string | null; at: string }>;
+  spendByLife(days: number): Array<{ life: string; spent: number; replies: number }>; // 心意流向：reason∈model/refund 按 ref(=lifeId) 聚合
+  // 对话标记（后台监督）：手动标关注/拦截；安全词命中自动标红。
+  setConvoFlag(lifeId: string, rel: string, flag: 'watch' | 'blocked', reason: string, by: string): void;
+  clearConvoFlag(lifeId: string, rel: string): void;
+  listConvoFlags(): ConvoFlag[];
+  convoFlagsFor(lifeId: string): ConvoFlag[];
+  // 安全拦截记录（命中词→接管话术）：保留 180 天。at 可注入（测试期限清理用），缺省取当前时刻。
+  addSafetyHit(lifeId: string, rel: string, word: string, action: string, excerpt: string, at?: string): void;
+  listSafetyHits(limit: number): SafetyHit[];
   close(): void;
 }
 
@@ -129,6 +147,9 @@ export function createAccountStore(path = ':memory:', opts: AccountStoreOptions 
     CREATE TABLE IF NOT EXISTS wechat_channels(user_id TEXT PRIMARY KEY, ilink_user_id TEXT, bot_token TEXT NOT NULL, baseurl TEXT, updates_buf TEXT NOT NULL DEFAULT '', connected_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS push_subscriptions(endpoint TEXT PRIMARY KEY, user_id TEXT NOT NULL, p256dh TEXT NOT NULL, auth TEXT NOT NULL, created_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS follows(user_id TEXT NOT NULL, life_id TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY(user_id, life_id));
+    CREATE TABLE IF NOT EXISTS audit_log(id INTEGER PRIMARY KEY AUTOINCREMENT, who TEXT NOT NULL, action TEXT NOT NULL, at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS convo_flags(life_id TEXT NOT NULL, rel TEXT NOT NULL, flag TEXT NOT NULL, reason TEXT NOT NULL DEFAULT '', by TEXT NOT NULL, at TEXT NOT NULL, PRIMARY KEY(life_id, rel));
+    CREATE TABLE IF NOT EXISTS safety_hits(id INTEGER PRIMARY KEY AUTOINCREMENT, life_id TEXT NOT NULL, rel TEXT NOT NULL, word TEXT NOT NULL, action TEXT NOT NULL, excerpt TEXT NOT NULL DEFAULT '', at TEXT NOT NULL);
   `);
   // 加法迁移：微信通道的"当前在微信里和哪条命聊"（旧库已建表则补列）。
   try { db.exec('ALTER TABLE wechat_channels ADD COLUMN active_life_id TEXT'); } catch { /* 列已存在 */ }
@@ -382,6 +403,49 @@ export function createAccountStore(path = ':memory:', opts: AccountStoreOptions 
     followerCount(lifeId) {
       const r = db.prepare('SELECT COUNT(*) AS n FROM follows WHERE life_id=?').get(lifeId) as { n: number };
       return Number(r.n);
+    },
+    addAudit(who, action) {
+      db.prepare('INSERT INTO audit_log(who,action,at) VALUES(?,?,?)').run(who, action, now());
+    },
+    listAudit(limit) {
+      const rows = db.prepare('SELECT id,who,action,at FROM audit_log ORDER BY id DESC LIMIT ?').all(limit) as Array<{ id: number; who: string; action: string; at: string }>;
+      return rows.map((r) => ({ id: Number(r.id), at: r.at, who: r.who, action: r.action }));
+    },
+    listLedger(limit, userId) {
+      const sql = 'SELECT l.id,l.user_id,u.handle,l.delta,l.reason,l.ref,l.at FROM credit_ledger l LEFT JOIN users u ON u.id=l.user_id'
+        + (userId ? ' WHERE l.user_id=?' : '') + ' ORDER BY l.id DESC LIMIT ?';
+      const rows = (userId ? db.prepare(sql).all(userId, limit) : db.prepare(sql).all(limit)) as Array<{ id: number; user_id: string; handle: string | null; delta: number; reason: string; ref: string | null; at: string }>;
+      return rows.map((r) => ({ id: Number(r.id), userId: r.user_id, handle: r.handle ?? r.user_id, delta: Number(r.delta), reason: r.reason, ref: r.ref, at: r.at }));
+    },
+    spendByLife(days) {
+      // model 扣费为负 delta、refund 为正 delta（同 ref=lifeId）→ SUM(-delta) 即净消耗；replies 只数实扣的回合。
+      const cutoff = new Date(Date.now() - days * 86_400_000).toISOString();
+      const rows = db.prepare("SELECT ref AS life, SUM(-delta) AS spent, SUM(CASE WHEN delta<0 THEN 1 ELSE 0 END) AS replies FROM credit_ledger WHERE reason IN ('model','refund') AND ref IS NOT NULL AND at>=? GROUP BY ref ORDER BY spent DESC")
+        .all(cutoff) as Array<{ life: string; spent: number; replies: number }>;
+      return rows.map((r) => ({ life: r.life, spent: Number(r.spent), replies: Number(r.replies) }));
+    },
+    setConvoFlag(lifeId, rel, flag, reason, by) {
+      db.prepare('INSERT INTO convo_flags(life_id,rel,flag,reason,by,at) VALUES(?,?,?,?,?,?) ON CONFLICT(life_id,rel) DO UPDATE SET flag=excluded.flag, reason=excluded.reason, by=excluded.by, at=excluded.at')
+        .run(lifeId, rel, flag, reason, by, now());
+    },
+    clearConvoFlag(lifeId, rel) {
+      db.prepare('DELETE FROM convo_flags WHERE life_id=? AND rel=?').run(lifeId, rel);
+    },
+    listConvoFlags() {
+      const rows = db.prepare('SELECT life_id,rel,flag,reason,by,at FROM convo_flags ORDER BY at DESC').all() as Array<{ life_id: string; rel: string; flag: string; reason: string; by: string; at: string }>;
+      return rows.map((r) => ({ lifeId: r.life_id, rel: r.rel, flag: r.flag as ConvoFlag['flag'], reason: r.reason, by: r.by, at: r.at }));
+    },
+    convoFlagsFor(lifeId) {
+      const rows = db.prepare('SELECT life_id,rel,flag,reason,by,at FROM convo_flags WHERE life_id=? ORDER BY at DESC').all(lifeId) as Array<{ life_id: string; rel: string; flag: string; reason: string; by: string; at: string }>;
+      return rows.map((r) => ({ lifeId: r.life_id, rel: r.rel, flag: r.flag as ConvoFlag['flag'], reason: r.reason, by: r.by, at: r.at }));
+    },
+    addSafetyHit(lifeId, rel, word, action, excerpt, at) {
+      db.prepare('INSERT INTO safety_hits(life_id,rel,word,action,excerpt,at) VALUES(?,?,?,?,?,?)').run(lifeId, rel, word, action, excerpt, at ?? now());
+      db.prepare('DELETE FROM safety_hits WHERE at<?').run(new Date(Date.now() - 180 * 86_400_000).toISOString()); // 只留 180 天
+    },
+    listSafetyHits(limit) {
+      const rows = db.prepare('SELECT id,life_id,rel,word,action,excerpt,at FROM safety_hits ORDER BY id DESC LIMIT ?').all(limit) as Array<{ id: number; life_id: string; rel: string; word: string; action: string; excerpt: string; at: string }>;
+      return rows.map((r) => ({ id: Number(r.id), at: r.at, lifeId: r.life_id, rel: r.rel, word: r.word, action: r.action, excerpt: r.excerpt }));
     },
     close() {
       db.close();

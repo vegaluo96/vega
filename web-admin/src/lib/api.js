@@ -21,7 +21,7 @@ export const api = {
   users: () => req('GET', '/admin/users'),
   recharges: () => req('GET', '/admin/recharges'),
   decideRecharge: (id, approve) => req('POST', '/admin/recharges', { id, approve }),
-  rechargeUser: (userId, amount) => req('POST', '/admin/users/recharge', { userId, amount }),
+  rechargeUser: (userId, amount, note) => req('POST', '/admin/users/recharge', note ? { userId, amount, note } : { userId, amount }),
   block: (userId, unblock) => req('POST', '/admin/users/block', { userId, unblock }),
   life: (id) => req('GET', `/admin/lives/${id}`),
   wellbeing: (id) => req('GET', `/admin/lives/${id}/wellbeing`),
@@ -38,7 +38,7 @@ export const api = {
   chainTrace: (body) => req('POST', '/admin/chain-trace', body),
   health: () => req('GET', '/admin/health'),
   relations: (id) => req('GET', `/admin/lives/${id}/relations`),
-  thread: (id, rel) => req('GET', `/admin/lives/${id}/thread?rel=${encodeURIComponent(rel)}`),
+  thread: (id, rel, reason) => req('GET', `/admin/lives/${id}/thread?rel=${encodeURIComponent(rel)}${reason ? `&reason=${encodeURIComponent(reason)}` : ''}`),
   user: (id) => req('GET', `/admin/users/${encodeURIComponent(id)}`),
   lifeEvents: (id, limit = 120) => req('GET', `/admin/lives/${encodeURIComponent(id)}/events?limit=${limit}`),
   worldFeed: (limit = 80) => req('GET', `/admin/world-feed?limit=${limit}`),
@@ -48,6 +48,14 @@ export const api = {
   userConversations: (id) => req('GET', `/admin/users/${encodeURIComponent(id)}/conversations`),
   announces: () => req('GET', '/admin/announce'),
   announce: (title, text, audience) => req('POST', '/admin/announce', { title, text, audience }),
+  audit: (limit = 100) => req('GET', `/admin/audit?limit=${limit}`),
+  addAudit: (action) => req('POST', '/admin/audit', { action }),
+  ledger: (limit = 120, user) => req('GET', `/admin/ledger?limit=${limit}${user ? `&user=${encodeURIComponent(user)}` : ''}`),
+  flags: () => req('GET', '/admin/flags'),
+  setFlag: (lifeId, rel, flag, reason) => req('POST', '/admin/flags', { lifeId, rel, flag, reason }),
+  safetyConfig: () => req('GET', '/admin/safety-config'),
+  saveSafetyConfig: (patch) => req('POST', '/admin/safety-config', patch),
+  safetyHits: (limit = 100) => req('GET', `/admin/safety-hits?limit=${limit}`),
 };
 export const setSession = (t) => session.set(t || '');
 export const clearSession = () => session.set('');

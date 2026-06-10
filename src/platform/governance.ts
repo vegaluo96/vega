@@ -26,6 +26,19 @@ export function governedMouth(mouth: Mouth): Mouth {
   return { get id(): string { return mouth.id; }, speak: async (input) => scrubManipulation(await mouth.speak(input)) };
 }
 
+// —— 安全词表接管（守底线：自伤/危机词 → 她以接管话术回应并转介）——平台层，web/微信双通道同一收口（respondAsUser）。
+// 命中 → 这一轮不走模型、不扣费；对话仍走神圣链路照常落库（MESSAGE_SENT.modelId='safety' 可审计、她记得这件事），
+// 不改她是谁——和 scrubManipulation 一样只约束【对外输出】。词表/话术由 owner 在后台「安全」页配置。
+export function safetyHit(text: string, words: string[]): string | null {
+  if (!text) return null;
+  for (const w of words) if (w && text.includes(w)) return w;
+  return null;
+}
+// 接管嘴：固定话术，确定性、零模型。话术别含全角括号（critic 会当旁白剥掉）。
+export function safetyMouth(takeover: string): Mouth {
+  return { id: 'safety', speak: () => Promise.resolve(takeover) };
+}
+
 // —— 自主资源预算（#24 反失控/反自我扩张）——全局限自主模型调用（心声/主动/评论/洞见/同类）的速率。
 // 真人对话不受此限（那由用户余额计费，Phase 2）；这里只防"无人时自主回路无界烧钱/扩张"。
 export interface AutonomousBudget { tryConsume(): boolean; status(): { used: number; cap: number; windowMs: number } }

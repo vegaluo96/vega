@@ -11,6 +11,7 @@ export interface ModelOverride {
   timeoutMs?: number;
   perceive?: boolean;
   perceiveModel?: string;
+  museModel?: string; // 公开心声独立选型（按用途路由）；留空=同嘴。只换模型名，key/baseUrl/超时同嘴
 }
 
 // 社交边界（Dunbar 灵感）：分亲密/好友/相识三层，各自不同的主动频率 + 总上限。
@@ -45,7 +46,14 @@ export interface BillingConfig {
   balanceUrl?: string;      // 平台余额查询地址覆盖（默认由模型 baseUrl 推出）
 }
 
-interface SettingsState { model: ModelOverride; social: SocialConfig; world: WorldConfig; billing: BillingConfig }
+// 安全词表接管（守底线）：用户消息命中词 → 她以接管话术回应并转介。运营配置，绝不进神圣日志。
+// words 显式存空数组=关闭拦截；未存=回落默认词表（默认在 config.ts 解析层）。
+export interface SafetyConfig {
+  words?: string[];   // 安全词表（命中→接管话术）
+  takeover?: string;  // 接管话术（拦截时她这样说）。注意：critic 会剥全角括号旁白，话术别用全角括号
+}
+
+interface SettingsState { model: ModelOverride; social: SocialConfig; world: WorldConfig; billing: BillingConfig; safety: SafetyConfig }
 
 export interface SettingsStore {
   getModel(): ModelOverride;
@@ -56,14 +64,16 @@ export interface SettingsStore {
   setWorld(patch: Partial<WorldConfig>): WorldConfig;
   getBilling(): BillingConfig;
   setBilling(patch: Partial<BillingConfig> & { clearApiyiToken?: boolean }): BillingConfig;
+  getSafety(): SafetyConfig;
+  setSafety(patch: Partial<SafetyConfig>): SafetyConfig;
 }
 
 export function createSettingsStore(path: string): SettingsStore {
-  let state: SettingsState = { model: {}, social: {}, world: {}, billing: {} };
+  let state: SettingsState = { model: {}, social: {}, world: {}, billing: {}, safety: {} };
   if (existsSync(path)) {
     try {
       const loaded = JSON.parse(readFileSync(path, 'utf8')) as Partial<SettingsState>;
-      if (loaded && typeof loaded === 'object') state = { model: loaded.model ?? {}, social: loaded.social ?? {}, world: loaded.world ?? {}, billing: loaded.billing ?? {} };
+      if (loaded && typeof loaded === 'object') state = { model: loaded.model ?? {}, social: loaded.social ?? {}, world: loaded.world ?? {}, billing: loaded.billing ?? {}, safety: loaded.safety ?? {} };
     } catch {
       /* 配置坏了就用空，回落默认/环境变量，不影响她活着 */
     }
@@ -84,6 +94,7 @@ export function createSettingsStore(path: string): SettingsStore {
       if (typeof patch.timeoutMs === 'number' && Number.isFinite(patch.timeoutMs) && patch.timeoutMs > 0) next.timeoutMs = Math.round(patch.timeoutMs);
       if (typeof patch.perceive === 'boolean') next.perceive = patch.perceive;
       if (typeof patch.perceiveModel === 'string') next.perceiveModel = patch.perceiveModel.trim() || undefined;
+      if (typeof patch.museModel === 'string') next.museModel = patch.museModel.trim() || undefined;
       state = { ...state, model: next };
       persist();
       return state.model;
@@ -129,6 +140,17 @@ export function createSettingsStore(path: string): SettingsStore {
       state = { ...state, billing: next };
       persist();
       return state.billing;
+    },
+    getSafety: () => state.safety,
+    setSafety: (patch) => {
+      const next: SafetyConfig = { ...state.safety };
+      // 词表：trim+去重+单词 ≤32 字、总数 ≤200（防超长写库）；显式存空数组=关闭拦截。
+      if (Array.isArray(patch.words)) next.words = [...new Set(patch.words.map((w) => String(w).trim().slice(0, 32)).filter(Boolean))].slice(0, 200);
+      // 话术：trim、≤500 字；存空串=回落默认话术。
+      if (typeof patch.takeover === 'string') next.takeover = patch.takeover.trim().slice(0, 500) || undefined;
+      state = { ...state, safety: next };
+      persist();
+      return state.safety;
     },
   };
 }

@@ -33,7 +33,7 @@ export function startLoops(ctx: Ctx, t: LoopTiming): LoopHandles {
     lives, snapOf, serializer, audiencePresent, effSocial, layerOf, autoBudget, bus,
     reachOutPending, pickInsightPair, pickRecentWorld, feed, lifeById, meetPeer, partPeer,
     allFeedPosts, feedPosts, reachState, lastUserMsgMs, accounts, saveCheckpoint,
-    peerId, REL, mouth, perceiver,
+    peerId, REL, mouth, museMouth, perceiver,
   } = ctx;
   const { TICK_MS, PRESENCE_MS, REFLECT_MS, CHECKPOINT_MS, SOCIAL_MS, DISCOVER_MS,
     COMMENT_MS, COMMENT_CAP, FEEDBACK_MS, REACT_MS, SILENCE_MS, nextMuseGap } = t;
@@ -109,11 +109,12 @@ export function startLoops(ctx: Ctx, t: LoopTiming): LoopHandles {
           life.museEveryMs = nextMuseGap(); // 下一条心声重新抽间隔 → 节奏持续变化，不形成固定周期
           if (pair && Math.random() < 0.3) {
             // 三成几率：不发新头条，而是把她在意/读到的两件事连起来——"独自想通了点什么"。
-            const o = await reflectInsight(life.store, mouth, mt, pair.a, pair.b, snapOf(life)); // 缓存快照，免全量重放
+            // 公开心声走 museMouth（按用途路由：museModel ?? 同嘴）——对话仍走 mouth。
+            const o = await reflectInsight(life.store, museMouth, mt, pair.a, pair.b, snapOf(life)); // 缓存快照，免全量重放
             if (o) bus.publish('musing', 'public', { life: life.id, text: o.utterance, at: mt, source: null });
           } else {
             const w = pickRecentWorld(life); // 随机一条她最近读到的世界事件 → 就着它发帖；没有则发自己的念头
-            const o = await muse(life.store, mouth, mt, w, snapOf(life)); // 公开心声：不针对任何人、不含私密；缓存快照免全量重放
+            const o = await muse(life.store, museMouth, mt, w, snapOf(life)); // 公开心声：不针对任何人、不含私密；缓存快照免全量重放
             if (o) {
               const src = w ? { title: w.title, source: w.source, url: w.url } : null;
               if (src) feed.setSource(`${life.id}|${mt}`, src); // 帖子出处（展示用，平台层，不进神圣日志）

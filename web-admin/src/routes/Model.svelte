@@ -1,44 +1,42 @@
 <script>
   // 模型配置（哲学：模型只当嘴——人格/记忆/情绪由引擎注入，禁止在此写人设 prompt）。
-  // 真实后端是单一配置（/admin/model-config：嘴 model + 耳 perceiveModel + baseUrl/key/超时）：
-  // 用途路由里「对话/听懂」映射到真实字段；「公开心声/读世界/安全复核」独立选型为 TODO(后端)。
+  // 真实后端是单一配置（/admin/model-config：嘴 model + 耳 perceiveModel + 心声 museModel + baseUrl/key/超时）：
+  // 用途路由里「对话/听懂/公开心声」映射到真实字段；「读世界/安全复核」本就是零模型确定性环节（免费），如实标注。
   import { onMount } from 'svelte';
   import { api } from '../lib/api.js';
-  import { authGuard, addAudit } from '../lib/admin.js';
+  import { authGuard } from '../lib/admin.js';
   import PageHead from '../components/PageHead.svelte';
   import Kpi from '../components/Kpi.svelte';
 
   let m = null;
-  let form = { baseUrl: '', model: '', perceiveModel: '', apiKey: '', timeoutMs: 20000 };
+  let form = { baseUrl: '', model: '', perceiveModel: '', museModel: '', apiKey: '', timeoutMs: 20000 };
   let saveMsg = '', testMsg = '';
   let saving = false, testing = false;
   let denied = '';
   let error = '';
 
-  // 仅原型扩展的用途（每途独立选型）：后端暂为同一张嘴。
-  const TODO_ROUTES = [
-    ['公开心声（每日数条）', '文学性更高'],
-    ['读世界（兴趣生长）', '批量摘要，省'],
-    ['安全复核（拦截后）', '低温确定性'],
+  // 架构上零模型的用途（确定性、免费）——不是 TODO，是设计：活来自架构，不来自模型。
+  const ZERO_MODEL_ROUTES = [
+    ['读世界（兴趣生长）', '引擎外抓取 + 确定性染色，零模型', '零模型 · 免费'],
+    ['安全复核（拦截后）', '词表确定性接管（见「安全」页），零模型', '零模型 · 确定性'],
   ];
 
   async function load() {
     error = ''; denied = '';
     try {
       m = await api.modelConfig();
-      form = { baseUrl: m.baseUrl, model: m.model, perceiveModel: m.perceiveModel || '', apiKey: '', timeoutMs: m.timeoutMs };
+      form = { baseUrl: m.baseUrl, model: m.model, perceiveModel: m.perceiveModel || '', museModel: m.museModel || '', apiKey: '', timeoutMs: m.timeoutMs };
     } catch (e) { if (e.status === 403) denied = '模型配置仅 owner。'; else error = e.message; authGuard(e); }
   }
   async function save() {
     if (!confirm('⚠️ 这是【全站生效】的模型配置：保存后立即影响所有生命体的「嘴」与「耳」。确定保存？')) return;
     saving = true; saveMsg = ''; testMsg = '';
     try {
-      const patch = { baseUrl: form.baseUrl, model: form.model, timeoutMs: Number(form.timeoutMs), perceive: true, perceiveModel: form.perceiveModel };
+      const patch = { baseUrl: form.baseUrl, model: form.model, timeoutMs: Number(form.timeoutMs), perceive: true, perceiveModel: form.perceiveModel, museModel: form.museModel };
       if (form.apiKey.trim()) patch.apiKey = form.apiKey.trim();
       m = await api.saveModelConfig(patch);
       form.apiKey = '';
-      saveMsg = '已保存 · 即时生效（无需重启）';
-      addAudit(`保存模型配置（嘴 ${patch.model} · 耳 ${patch.perceiveModel || '同嘴'}）`);
+      saveMsg = '已保存 · 即时生效（无需重启）'; // 留痕由后端自记（审计日志）
     } catch (e) { saveMsg = '✗ ' + e.message; authGuard(e); } finally { saving = false; }
   }
   async function test() {
@@ -50,7 +48,7 @@
   }
   async function clearKey() {
     if (!confirm('清除后台 Key 覆盖、回落到环境变量？')) return;
-    try { m = await api.saveModelConfig({ clearApiKey: true }); saveMsg = '已清除后台 Key 覆盖 · 回落到环境变量'; addAudit('清除模型 API Key（后台覆盖）'); }
+    try { m = await api.saveModelConfig({ clearApiKey: true }); saveMsg = '已清除后台 Key 覆盖 · 回落到环境变量'; }
     catch (e) { saveMsg = '✗ ' + e.message; }
   }
   onMount(load);
@@ -78,11 +76,14 @@
       <span class="rmain">听懂自然语言（耳 · 9 维感知）<span class="meta rnote">建议快模型；留空＝同嘴 → perceiveModel</span></span>
       <input class="input rinput" bind:value={form.perceiveModel} placeholder={form.model || '同嘴'} />
     </div>
-    {#each TODO_ROUTES as [use, note]}
+    <div class="route">
+      <span class="rmain">公开心声（每日数条）<span class="meta rnote">可选更有文学性的模型；留空＝同嘴 → museModel</span></span>
+      <input class="input rinput" bind:value={form.museModel} placeholder={form.model || '同嘴'} />
+    </div>
+    {#each ZERO_MODEL_ROUTES as [use, note, pill]}
       <div class="route todo">
         <span class="rmain">{use}<span class="meta rnote">{note}</span></span>
-        <!-- TODO(后端)：按用途独立选型/温度/token 预算暂无——现走同一张嘴。 -->
-        <span class="pill todopill">同嘴 · 独立选型 TODO(后端)</span>
+        <span class="pill todopill">{pill}</span>
       </div>
     {/each}
     <label class="fld gap"><span class="eyebrow flab">Base URL（OpenAI 兼容中转）</span>
