@@ -3,6 +3,7 @@
 import { type RelationshipId } from '../domain/events.ts';
 import { type DerivedSnapshot, type Temperament } from '../domain/snapshot.ts';
 import { valueZh } from '../kernel/reconstruct.ts';
+import { describeAppearance } from './appearance.ts';
 
 export interface Workspace {
   intent: string;
@@ -122,6 +123,9 @@ export function deriveWorkspace(snap: DerivedSnapshot, relationshipId: Relations
     // 演化中的独立自我（脱敏、不含任何用户）——让她说话带着"在成为谁、活了多少"的连续自我，不千篇一律。
     (snap.becoming ? `我正在成为${snap.becoming}。` : '') +
     (snap.growth ? `（${snap.growth}）` : '');
+  // 外观自知：她知道自己长什么样（与前端活体形象【同一套】确定性基因推导，见 appearance.ts）——
+  // 被问「你长什么样」答得对、不再答非所问。脱敏、无数字，不喂任何可复述的指标。
+  const appearanceNote = '\n（' + describeAppearance(snap.lifeId, snap.temperament) + '）';
   // 只取【和当前这个人】的语义理解（per-relationship，绝不串到别人）。
   const sem = snap.semanticMemory.find((x) => x.relationshipId === relationshipId);
   const understanding = sem ? `我对${name}的理解：${sem.understanding}。` : '';
@@ -207,7 +211,7 @@ export function deriveWorkspace(snap: DerivedSnapshot, relationshipId: Relations
   const otherNames = Object.entries(snap.bonds).filter(([rid]) => rid !== relationshipId).map(([, b]) => b.displayRef).filter(Boolean);
   const safeChapters = (snap.chapters ?? []).filter((c) => !otherNames.some((n) => c.includes(n)));
   const chaptersNote = safeChapters.length ? `\n（我这一路走过的几段：${safeChapters.slice(-6).join(' → ')}。）` : '';
-  const selfFacts = selfCore + understanding + tentative + recall + socialNote + preoccupation + aspir + style + att + needNote + valuesNote + baselineNote + goalsNote + tensionNote + maturityNote + chaptersNote;
+  const selfFacts = selfCore + appearanceNote + understanding + tentative + recall + socialNote + preoccupation + aspir + style + att + needNote + valuesNote + baselineNote + goalsNote + tensionNote + maturityNote + chaptersNote;
 
   // 他心深化（Phase 6）：从这段关系的真实轨迹确定性读出"此刻走到哪了" + "我多大程度摸得准ta"——
   // 给模型更准的关系语境去推理（深层因果/意图推断是模型的活，但建立在这份确定性脚手架上，不悬空）。
