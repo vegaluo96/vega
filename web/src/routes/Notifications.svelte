@@ -74,27 +74,32 @@
     {#if seg === 'plaza'}
       <div class="fade-in">
         {#each plaza as n}
+          <!-- 统一骨架：未读点 | 头像40 | 内容列 | 时间——三类同构，差异只靠内容与点缀（引文/spark 徽章/暖色衬底） -->
           {#if n.type === 'reply'}
-            <button class="card-interactive reply" on:click={() => navigate('post', { id: n.postId })}>
-              <span class="rtop">{#if isFresh(n, prevSeen)}<span class="fdot"></span>{/if}<Creature life={lifeOf(n.life)} size={40} /><span class="rt"><b>{n.life}</b> 回复了你的留言</span><span class="meta">{relTime(n.at)}</span></span>
-              <span class="rtext">{n.text}</span>
+            <button class="nrow" on:click={() => navigate('post', { id: n.postId })}>
+              <span class="fdot" class:on={isFresh(n, prevSeen)}></span>
+              <span class="av"><Creature life={lifeOf(n.life)} size={40} /></span>
+              <span class="ncol">
+                <span class="ntitle"><b>{n.life}</b> 回复了你的留言</span>
+                <span class="nquote">{n.text}</span>
+              </span>
+              <span class="meta">{relTime(n.at)}</span>
             </button>
           {:else if n.type === 'milestone'}
-            <button class="card-interactive mile" on:click={() => navigate('chat', { id: n.life })}>
-              <span class="mtop">
-                {#if isFresh(n, prevSeen)}<span class="fdot"></span>{/if}
-                <span class="mic"><Icon name="spark" size={16} /></span>
-                <Creature life={lifeOf(n.life)} size={34} />
-                <span class="mt"><b>{n.title}</b></span>
-                <span class="meta">{relTime(n.at)}</span>
+            <button class="nrow mile" on:click={() => navigate('chat', { id: n.life })}>
+              <span class="fdot" class:on={isFresh(n, prevSeen)}></span>
+              <span class="av"><Creature life={lifeOf(n.life)} size={40} /><span class="badge"><Icon name="spark" size={11} /></span></span>
+              <span class="ncol">
+                <span class="ntitle"><b>{n.title}</b></span>
+                {#if n.text}<span class="nsub">{n.text}</span>{/if}
               </span>
-              {#if n.text}<span class="mtext">{n.text}</span>{/if}
+              <span class="meta">{relTime(n.at)}</span>
             </button>
           {:else}
-            <button class="evrow" on:click={() => n.postId ? navigate('post', { id: n.postId }) : navigate('profile', { id: n.life })}>
-              {#if isFresh(n, prevSeen)}<span class="fdot"></span>{/if}
-              <Creature life={lifeOf(n.life)} size={34} />
-              <span class="evt"><b>{n.title}</b>{#if n.text}<span class="faint"> · {n.text}</span>{/if}</span>
+            <button class="nrow" on:click={() => n.postId ? navigate('post', { id: n.postId }) : navigate('profile', { id: n.life })}>
+              <span class="fdot" class:on={isFresh(n, prevSeen)}></span>
+              <span class="av"><Creature life={lifeOf(n.life)} size={40} /></span>
+              <span class="ncol"><span class="ntitle quiet"><b>{n.title}</b>{#if n.text}<span class="faint"> · {n.text}</span>{/if}</span></span>
               <span class="meta">{relTime(n.at)}</span>
             </button>
           {/if}
@@ -104,7 +109,7 @@
       <div class="fade-in">
         {#each system as n}
           <button class="sysrow">
-            {#if isFresh(n, prevSeen)}<span class="fdot"></span>{/if}
+            <span class="fdot" class:on={isFresh(n, prevSeen)}></span>
             <span class="sysic"><Icon name={n.type === 'wallet' ? 'coin' : 'bell'} size={18} /></span>
             <span class="syst"><b>{n.title}</b><span class="sub">{n.text}</span></span>
             <span class="meta">{relTime(n.at)}</span>
@@ -123,24 +128,26 @@
   .tab.on { font-weight: 700; color: var(--text); background: var(--surface); box-shadow: var(--shadow-sm); }
   .tw { position: relative; display: inline-flex; align-items: center; }
   .d { position: absolute; top: -2px; right: -10px; width: 7px; height: 7px; border-radius: 50%; background: var(--life-reaching); }
-  .fdot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--life-reaching); }
+  /* 未读点：所有行恒占位（宽度一致对齐），未读才显色——三类条目同一坐标，不再各摆一处 */
+  .fdot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: transparent; }
+  .fdot.on { background: var(--life-reaching); }
   .none { text-align: center; padding: 52px 20px; color: var(--faint); }
   .noneic { display: grid; place-items: center; margin-bottom: 12px; opacity: 0.5; }
   .none p { color: var(--muted); }
-  .reply { display: flex; flex-direction: column; gap: 8px; padding: 14px; margin-bottom: 10px; }
-  .rtop { display: flex; align-items: center; gap: 10px; }
-  .rt { flex: 1; min-width: 0; font-size: var(--fs-md); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .rtext { font-size: var(--fs-md); color: var(--muted); padding-left: 12px; box-shadow: inset 2px 0 0 0 var(--border); }
-  /* 里程碑：庆祝感卡片（区别于安静的 life_event 行）——spark 图标 + remembering 点缀，点击进对话 */
-  .mile { display: flex; flex-direction: column; gap: 8px; padding: 14px; margin-bottom: 10px; box-shadow: var(--shadow-sm), inset 0 0 0 1px color-mix(in srgb, var(--life-remembering) 28%, transparent); }
-  .mtop { display: flex; align-items: center; gap: 10px; }
-  .mic { flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; color: var(--life-remembering); background: color-mix(in srgb, var(--life-remembering) 12%, transparent); }
-  .mt { flex: 1; min-width: 0; font-size: var(--fs-md); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .mt b { font-weight: 700; }
-  .mtext { font-size: var(--fs-md); color: var(--muted); padding-left: 36px; }
-  .evrow { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 12px 2px; box-shadow: inset 0 -1px 0 0 var(--border-subtle); }
-  .evt { flex: 1; min-width: 0; font-size: var(--fs-md); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .evt b { font-weight: 600; }
-  .sysrow { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 13px 2px; box-shadow: inset 0 -1px 0 0 var(--border-subtle); cursor: default; }
-  .sysic { flex: none; width: 34px; height: 34px; border-radius: 50%; background: var(--surface-2); color: var(--muted); display: grid; place-items: center; }
-  .syst { flex: 1; min-width: 0; display: flex; flex-direction: column; } .syst b { font-weight: 600; font-size: var(--fs-md); } .syst .sub { font-size: var(--fs-sm); color: var(--muted); }
+  /* 统一骨架：未读点 | 头像40 | 内容列 | 时间。全部分隔线行（不再卡片/行混排），节奏一致 */
+  .nrow { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 12px 2px; box-shadow: inset 0 -1px 0 0 var(--border-subtle); border-radius: var(--r-sm); }
+  .av { flex: none; position: relative; display: grid; place-items: center; }
+  .badge { position: absolute; right: -3px; bottom: -2px; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; color: var(--life-remembering); background: var(--bg); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--life-remembering) 40%, transparent); }
+  .ncol { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  .ntitle { font-size: var(--fs-md); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .ntitle b { font-weight: 600; }
+  .ntitle.quiet b { font-weight: 600; }
+  .nquote { font-size: var(--fs-md); color: var(--muted); padding-left: 10px; box-shadow: inset 2px 0 0 0 var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .nsub { font-size: var(--fs-sm); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* 里程碑=同一骨架 + 暖色衬底与 spark 徽章（庆祝感不破坏节奏） */
+  .nrow.mile { background: color-mix(in srgb, var(--life-remembering) 7%, transparent); }
+  /* 系统 tab：同一骨架坐标（fdot 恒占位），头像位换成图标圆 */
+  .sysrow { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 12px 2px; box-shadow: inset 0 -1px 0 0 var(--border-subtle); cursor: default; }
+  .sysic { flex: none; width: 40px; height: 40px; border-radius: 50%; background: var(--surface-2); color: var(--muted); display: grid; place-items: center; }
+  .syst { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; } .syst b { font-weight: 600; font-size: var(--fs-md); } .syst .sub { font-size: var(--fs-sm); color: var(--muted); }
   .meta { flex: none; white-space: nowrap; }
 </style>
