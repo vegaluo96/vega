@@ -18,16 +18,28 @@
   import Notifications from './Notifications.svelte';
   import Recharge from './Recharge.svelte';
 
-  const TABS = [['plaza', 'plaza'], ['explore', 'explore'], ['chats', 'chats'], ['notifications', 'notifications'], ['me', 'me']];
+  // [路由键, 图标, 可读标签]——标签同时用于 aria-label / title（无障碍：屏幕阅读器读得出"广场"而非"plaza"）。
+  const TABS = [['plaza', 'plaza', '广场'], ['explore', 'explore', '发现'], ['chats', 'chats', '对话'], ['notifications', 'notifications', '通知'], ['me', 'me', '我']];
   let notes = [];
   let es;
+  let lastNotesAt = 0;
+  // 通知红点实时化：广场/系统类通知在 app 开着时也即时点亮（不必重进才刷新）。节流 12s，避免频繁 musing 刷爆。
+  async function refreshNotes() {
+    if (Date.now() - lastNotesAt < 12000) return;
+    lastNotesAt = Date.now();
+    try { notes = await api.notifications(); } catch { /* ignore */ }
+  }
 
   onMount(async () => {
     hydrateFollows();
     // 种红点：把"她趁你不在时来找你"（未回）填进对话红点；拉通知算系统红点。
     try { const chats = await api.chats(); chats.forEach((c) => { if (c.pending) addReach(c.life); }); } catch { /* ignore */ }
+    lastNotesAt = Date.now();
     try { notes = await api.notifications(); } catch { /* ignore */ }
-    es = stream((ev) => { if (ev.type === 'reach_out') addReach(ev.data.life); });
+    es = stream((ev) => {
+      if (ev.type === 'reach_out') addReach(ev.data.life);            // 私聊：对话红点（绝不进通知）
+      else if (ev.type === 'musing' || ev.type === 'feed_comment') refreshNotes(); // 广场动态/留言回应 → 刷新通知红点
+    });
   });
   onDestroy(() => es && es.close());
 
@@ -41,8 +53,8 @@
 <div class="app" class:immersive>
   <nav>
     <div class="brand">ZSKY</div>
-    {#each TABS as [k, ico]}
-      <button class:active={activeTab === k} class:userentry={k === 'me'} on:click={() => navigate(k)} aria-label={k}>
+    {#each TABS as [k, ico, label]}
+      <button class:active={activeTab === k} class:userentry={k === 'me'} on:click={() => navigate(k)} aria-label={label} title={label}>
         <span class="ic">
           <Icon name={ico} size={25} sw={activeTab === k ? 2.3 : 1.8} />
           {#if dots[k]}<span class="reddot"></span>{/if}
