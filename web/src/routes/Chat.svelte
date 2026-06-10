@@ -38,7 +38,7 @@
       const [prof, me] = await Promise.all([api.lifeProfile(lifeId), api.lifeMe(lifeId)]);
       life = { ...prof };
       rel = (me.relationship) || {};
-      msgs = me.history || [];
+      msgs = (me.history || []).map((m) => (m.role === 'her' ? { ...m, text: humanizePart(m.text) } : m)); // 历史分段与实时同款去书面腔
       balance = me.balance;
       reaction = life.awake === false ? 'asleep' : 'idle';
       await scrollDown();

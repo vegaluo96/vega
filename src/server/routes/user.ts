@@ -3,7 +3,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { send, readJson } from '../http.ts';
 import { round3, tempLabel, mbtiOf } from '../format.ts';
-import { visibleTo, type MessageSentPayload } from '../../index.ts';
+import { visibleTo, splitUtterance, type MessageSentPayload } from '../../index.ts';
 import type { Ctx } from '../context.ts';
 
 const now = (): string => new Date().toISOString();
@@ -181,7 +181,11 @@ export async function handleUserApi(ctx: Ctx, req: IncomingMessage, res: ServerR
     for (const e of life3.store.list()) {
       if (e.relationshipId !== rel) continue;
       if (e.type === 'MESSAGE_RECEIVED') history.push({ role: 'me', text: (e.payload as { content?: string }).content ?? '', at: e.occurredAt });
-      else if (e.type === 'MESSAGE_SENT') history.push({ role: 'her', text: (e.payload as MessageSentPayload).utterance, at: e.occurredAt, unprompted: Boolean((e.payload as MessageSentPayload).unprompted) });
+      else if (e.type === 'MESSAGE_SENT') {
+        // 历史也按同一确定性拆分器分段——重进对话后气泡分段与当时"一句一句递出"逐位一致（日志仍存完整一条；后台监督线程不拆）。
+        const sp = e.payload as MessageSentPayload;
+        for (const part of splitUtterance(sp.utterance)) history.push({ role: 'her', text: part, at: e.occurredAt, unprompted: Boolean(sp.unprompted) });
+      }
     }
     const sem = snap.semanticMemory.find((x) => x.relationshipId === rel);
     return send(res, 200, {
