@@ -241,7 +241,7 @@ export async function handleAdmin(ctx: Ctx, req: IncomingMessage, res: ServerRes
   }
   // —— 世界事件流：她们读到的【真实世界】（跨命的 WORLD_PERCEIVED），按墙钟倒序。世界内容公开，owner+steward 都看。——
   if (req.method === 'GET' && path === '/admin/world-feed') {
-    const lim = Math.min(200, Math.max(1, Number(new URLSearchParams(url.split('?')[1] ?? '').get('limit') ?? 80)));
+    const lim = Math.min(200, Math.max(1, Number(new URLSearchParams((req.url ?? '').split('?')[1] ?? '').get('limit') ?? 80)));
     const rows: Array<Record<string, unknown>> = [];
     for (const l of lives) for (const e of l.store.list()) {
       if (e.type !== 'WORLD_PERCEIVED') continue;
@@ -293,7 +293,7 @@ export async function handleAdmin(ctx: Ctx, req: IncomingMessage, res: ServerRes
     if (!owner) return send(res, 403, { error: '对话监督仅 owner' });
     const l = lifeById(path.slice('/admin/lives/'.length, -'/thread'.length));
     if (!l) return send(res, 404, { error: 'no such life' });
-    const rel = new URLSearchParams(url.split('?')[1] ?? '').get('rel') ?? '';
+    const rel = new URLSearchParams((req.url ?? '').split('?')[1] ?? '').get('rel') ?? '';
     return send(res, 200, { lifeId: l.id, rel, messages: buildThread(l, rel) });
   }
   // —— 原始事件日志（append-only ground truth）：直接看落库的 LifeEvent 序列——"从日志确定性重建"的真相源。
@@ -301,7 +301,7 @@ export async function handleAdmin(ctx: Ctx, req: IncomingMessage, res: ServerRes
   if (req.method === 'GET' && path.startsWith('/admin/lives/') && path.endsWith('/events')) {
     const l = lifeById(path.slice('/admin/lives/'.length, -'/events'.length));
     if (!l) return send(res, 404, { error: 'no such life' });
-    const lim = Math.min(500, Math.max(1, Number(new URLSearchParams(url.split('?')[1] ?? '').get('limit') ?? 120)));
+    const lim = Math.min(500, Math.max(1, Number(new URLSearchParams((req.url ?? '').split('?')[1] ?? '').get('limit') ?? 120)));
     const all = l.store.list();
     const rows = all.slice(-lim).map((e) => {
       const rel = e.relationshipId ?? '';

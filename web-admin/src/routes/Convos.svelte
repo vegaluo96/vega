@@ -40,8 +40,9 @@
   }
 
   onMount(async () => {
-    if (!lives.length) { try { roster.set((await api.overview()).lives || []); } catch (e) { authGuard(e); } }
-    const first = param || lives[0]?.id || $roster[0]?.id;
+    let list = $roster;
+    if (!list.length) { try { list = (await api.overview()).lives || []; roster.set(list); } catch (e) { error = e.message; authGuard(e); } }
+    const first = param || list[0]?.id;
     if (first) pick(first);
   });
   const hm = (at) => new Date(at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });

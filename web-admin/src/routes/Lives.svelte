@@ -68,9 +68,10 @@
   function onBorn(e) { creating = false; reload().then(() => select(e.detail.id)); }
 
   onMount(async () => {
-    if (!lives.length) await reload();
+    let list = $roster;
+    if (!list.length) { try { list = (await api.overview()).lives || []; roster.set(list); } catch (e) { error = e.message; authGuard(e); } }
     if (param) select(param);
-    else if (lives.length) select(lives[0].id);
+    else if (list.length) select(list[0].id);
   });
 </script>
 
