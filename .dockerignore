@@ -1,2 +1,12 @@
-node_modules
+# 镜像只需要：源码（--experimental-strip-types 直跑 TS，运行时零依赖）+ 两个前端的 dist（宿主侧先构建）。
+# 注意 dockerignore 的 `node_modules` 只匹配根目录——子目录要用 **/ 才挡得住（web/ 与 web-admin/ 的工具链是最大头）。
+**/node_modules
 .git
+.github
+.vega
+.env
+.env.*
+*.env
+test
+demo
+docs
