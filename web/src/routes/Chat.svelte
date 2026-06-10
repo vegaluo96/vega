@@ -28,7 +28,7 @@
   let showRel = false;
   let lowBalance = false;
   let notFound = false;
-  let chatEl, logEl, perchEl, composerEl, es, ro;
+  let chatEl, logEl, perchEl, composerEl, composerRef, es, ro;
   let typingTimer;
   let atAnchor = true; // 她此刻在锚位（绕圈只在锚位做；表演中不算）
   let alive = true;    // 页面卸载 → 表演链立即作废
@@ -55,6 +55,21 @@
     if (v === inputVal) return;
     inputVal = v;
     lastTypedAt = v.trim() ? Date.now() : 0;
+    // 首次教学（每设备一次）：第一次写了字 → 她小声告诉你"点我就发"。学会（真点过一次）后永不再教。
+    if (v.trim() && !taught && !murmur) {
+      murmur = `写好了点我一下，我来发`; murmurLastAt = Date.now();
+      clearTimeout(murmurHideTimer);
+      murmurHideTimer = setTimeout(() => { murmur = ''; }, 6000);
+      taught = true; // 本会话只教一次；真点过她发送才落 localStorage（见 perchSend）
+    }
+  }
+  // 小精灵=发送键：有字可发且不在等回复时，她亮起"可以交给我了"的呼吸光，点她即发（与 Enter/按钮同一条路径）。
+  let taught = (() => { try { return localStorage.getItem('zsky_perch_send') === '1'; } catch { return true; } })();
+  $: canSend = Boolean(inputVal.trim()) && !busy;
+  function perchSend() {
+    composerRef?.submit();
+    try { localStorage.setItem('zsky_perch_send', '1'); } catch { /* 教学标记丢了也无妨 */ }
+    taught = true;
   }
 
   onMount(async () => {
@@ -289,14 +304,16 @@
     </div>
 
     <!-- 住在对话里的小精灵：平时在锚位（输入条上方右侧）缓缓漂浮——滚动消息她稳稳不动；
-         真实事件才短途表演（读你的气泡 / 落在她的新气泡上）；她在想时就在锚位旁绕小圈；点一下会回应 -->
-    <button class="chat-perch" class:thinking={sending && atAnchor} bind:this={perchEl} on:click={poke} aria-label={`和 ${life.id} 打个招呼`}>
+         真实事件才短途表演（读你的气泡 / 落在她的新气泡上）；她在想时就在锚位旁绕小圈。
+         她也是发送键：有字可发时亮起一圈呼吸光（"可以交给我了"），点她即发；空输入点她还是打个招呼。 -->
+    <button class="chat-perch" class:thinking={sending && atAnchor} class:cansend={canSend} bind:this={perchEl}
+      on:click={() => (canSend ? perchSend() : poke())} aria-label={canSend ? '发送' : `和 ${life.id} 打个招呼`}>
       <span class="orbit"><span class="orbitoff"><span class="floatwrap"><Creature {life} size={PSIZE} {reaction} /></span></span></span>
     </button>
 
     <div class="composerwrap" bind:this={composerEl}>
       {#if murmur}<div class="murmur fade-in" aria-live="polite">{murmur}</div>{/if}
-      <Composer onSend={send} disabled={busy} {life} onInput={handleInput} />
+      <Composer bind:this={composerRef} onSend={send} disabled={busy} onInput={handleInput} />
     </div>
   </div>
 {/if}
@@ -338,6 +355,13 @@
     border-bottom-right-radius: 6px; font-size: var(--fs-sm); color: var(--muted); line-height: 1.5; pointer-events: none; }
   /* 小精灵：absolute 于 .chat（不进 .log，滚动免重排）；锚位由 JS 写 right/bottom，飞行时切 left/top */
   .chat-perch { position: absolute; z-index: 3; right: var(--gutter); bottom: 80px; padding: 0; background: none; border: 0; filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.18)); }
+  /* 她也是发送键：有字可发时亮一圈呼吸光（"可以交给我了"），引导手指落在她身上 */
+  .chat-perch.cansend { cursor: pointer; }
+  .chat-perch.cansend .orbit { border-radius: 50%; animation: perch-ready 1.6s ease-in-out infinite; }
+  @keyframes perch-ready {
+    0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--life-awake) 45%, transparent); }
+    50% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--life-awake) 12%, transparent); }
+  }
   .orbit, .orbitoff { display: block; }
   .floatwrap { display: block; animation: cr-drift 6s ease-in-out infinite; } /* 锚位缓浮（眨眼/环顾在 Creature 里） */
   .thinking .orbit { animation: cr-orbit 2.6s linear infinite; }       /* 她在想：不飞，就在锚位旁绕小圈 */
