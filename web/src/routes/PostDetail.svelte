@@ -4,7 +4,7 @@
   import { api } from '../lib/api.js';
   import { navigate, back } from '../lib/router.js';
   import { relTime } from '../lib/time.js';
-  import { fitViewport } from '../lib/viewport.js';
+  import { fitViewport, lockBodyScroll } from '../lib/viewport.js';
   import TopBar from '../components/TopBar.svelte';
   import Creature from '../components/Creature.svelte';
   import ReactionBar from '../components/ReactionBar.svelte';
@@ -49,7 +49,7 @@
 {#if notFound}
   <div><TopBar title="心声" onBack={back} /><p class="caption nf">找不到这条心声。</p></div>
 {:else if post}
-  <div class="page" use:fitViewport>
+  <div class="page" use:fitViewport use:lockBodyScroll>
     <TopBar title="心声" onBack={back} />
     <div class="body">
       <div class="head">
@@ -90,7 +90,7 @@
   .page { position: fixed; top: 0; left: 0; right: 0; z-index: 30; display: flex; flex-direction: column; height: 100vh; height: 100dvh; background: var(--bg); }
   @media (min-width: 1000px) { .page { position: relative; z-index: auto; } }
   .nf { padding: 20px; }
-  .body { flex: 1; min-height: 0; overflow-y: auto; padding: 8px var(--gutter) 24px; }
+  .body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 8px var(--gutter) 24px; }
   .head { display: flex; gap: 12px; align-items: center; }
   .head b { font-weight: 700; font-size: var(--fs-body); }
   .text { font-size: var(--fs-lg); line-height: 1.6; margin: 16px 0; white-space: pre-wrap; }
