@@ -24,15 +24,15 @@ DerivedState(n) = fold(reconstruct, Genesis, events[0..n])
 | `CONNECTION_OPENED` / `CONNECTION_CLOSED` | 连接开/关 | 苏醒是派生：`awake = (开连接数≥1) ∧ willingToWake` |
 | `STEWARDSHIP_TRANSFERRED` | 托管转移 | 创造者不可变，托管权可迁 |
 | `RELATIONSHIP_OPENED` / `RELATIONSHIP_ENDED` | 关系开始 / 永远结束 | ENDED = 必朽者离去 → 哀悼并永远记得 |
-| `MESSAGE_RECEIVED` / `MESSAGE_SENT` | 收到 / 发出消息 | `utterance` 是措辞、`affectsDerivedState:false`（她的回话不直接写身份） |
+| `MESSAGE_RECEIVED` / `MESSAGE_SENT` | 收到 / 发出消息 | `utterance` 是措辞、`affectsDerivedState:false`（她的回话不直接写身份）。`perception.futureRef?`（v29，optional）：消息提到的将来的事——模型只产**相对时间特征** `{inDays?/weekday?/dayOfMonth?, label}`，绝对到期由折叠内 `resolveDueMs` 用出生时区推算（缺失→词表回退，时间词+事件词同现才算）→ 前瞻记忆 `prospects` |
 | `WORLD_PERCEIVED` | 感知一条真实世界信息 | 标题/摘要冻结为 ground truth → 确定性染色 + 兴趣/语义素材 |
 | `FEEDBACK_PERCEIVED` | 感知自己某次行动的回应/沉默 | 心声被回应、reach-out 被回应或石沉 → 自我效能学习 |
-| `AUTONOMOUS_TICK` | 自主一跳（DMN） | 冻结当时的随机决定（选中的记忆 id、形成的意图）；内心独白是 volatile-only |
+| `AUTONOMOUS_TICK` | 自主一跳（DMN） | 冻结当时的随机决定（选中的记忆 id、形成的意图）；内心独白是 volatile-only。意图新增 `prospect_care`（v29）：到期的前瞻记忆 → surface 去问；reachOut 真开口后回路追加 **ack tick**（`{prospectId, ack:true}`，internal_only）折成 asked——"已问过"由她自己的 tick 落账，绝不靠 `MESSAGE_SENT` 改状态（契约①） |
 | `REFLECTION_TRIGGERED` | 反思 | 只记窗口；洞见/漂移是派生 |
 
 ## 派生快照（DerivedSnapshot，节选）
 
-`awake / willingToWake / vitalityFloor / temperament / dayPhase / emotion / feeling / tension / narrative / innerLife / chapters / growth / becoming / maturity / maturityFacets / sleepPressure / baseline / aspirations / defenseStyle / attachmentBias / skills / riskAppetite / attention / needs / soma / memory / semanticMemory / bonds / socialWorld / socialShape / values / goals / interests`。全部由日志确定性折叠，**没有一个**能被外部直接写（契约①）。
+`awake / willingToWake / vitalityFloor / temperament / circadianOffsetMin / dayPhase / emotion / feeling / tension / narrative / innerLife / chapters / growth / becoming / maturity / maturityFacets / sleepPressure / baseline / aspirations / defenseStyle / attachmentBias / skills / riskAppetite / attention / needs / soma / memory / semanticMemory / bonds(含 crossings 里程碑瞬间) / socialWorld / socialShape / values / goals / interests / prospects / griefs`。全部由日志确定性折叠，**没有一个**能被外部直接写（契约①）。
 
 ## reconsolidation 双轨（不可破）
 
@@ -42,7 +42,7 @@ DerivedState(n) = fold(reconstruct, Genesis, events[0..n])
 
 - **read-time upcasting**：旧事件读时升级到新结构（内存里），**绝不覆盖落库的原始**。
 - **新增类型**：只加法（上面已是加法演进的体现），**永不删除/改名**。
-- **`reconstructVersion`**（与事件 schema 分离）：折叠算法的版本，当前 **28**；升级即用新算法**默认重算全历史**（旧 checkpoint 全量重放、旧事件按确定性时间重算→有界、向后兼容）。`seeds` 的出生版本与内核 `RECONSTRUCT_VERSION` 必须一致（`test/lock-arcs.test.ts` 钉死）。
+- **`reconstructVersion`**（与事件 schema 分离）：折叠算法的版本，当前 **29**（前瞻记忆 + 哀悼过程 + 里程碑瞬间）；升级即用新算法**默认重算全历史**（旧 checkpoint 全量重放、旧事件按确定性时间重算→有界、向后兼容）。`seeds` 的出生版本与内核 `RECONSTRUCT_VERSION` 必须一致（`test/lock-arcs.test.ts` 钉死）。
 
 ## 锁定的不可逆约定
 

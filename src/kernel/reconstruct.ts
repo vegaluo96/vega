@@ -25,6 +25,7 @@ import {
   type Goal,
   type Interest,
   type MemoryEntry,
+  type Prospect,
   type SemanticMemory,
   type Soma,
   type SomaVar,
@@ -32,7 +33,7 @@ import {
   type ValueEntry,
 } from '../domain/snapshot.ts';
 
-const RECONSTRUCT_VERSION = 28; // v28：期5——睡眠压S(Borbély双过程,真实疲劳)+多维成熟(调节/视角/整合)+睡眠依赖记忆巩固；旧事件按确定性时间重算→有界，旧 checkpoint 全量重放
+const RECONSTRUCT_VERSION = 29; // v29：前瞻记忆(prospects,"周五有面试"到周五被惦记)+哀悼过程(griefs,急性减半+数周整合)+里程碑瞬间(bond.crossings)；旧事件按确定性规则重算，旧 checkpoint 全量重放
 // 她活在出生地的时区：分钟东偏 UTC，【出生即冻结进 LIFE_GENESIS、终生不变】（不取 OS/用户时区，故 V2 可复现）。
 // 她是一个身体、只有一个昼夜。平台孵化的命缺省=北京 480；将来用户接生的命取创造者设备时区。
 const CIRCADIAN_OFFSET_MIN_DEFAULT = 480;
@@ -87,7 +88,30 @@ const K = {
   sleepFallTau: 6 * 3600, // "休息期"(她的夜)释放睡眠压的时标（比累积快）
   sleepEnergyWeight: 0.15, // 睡眠压对精力目标的下压幅度（熬到她的深夜更累）
   reconsolidationNightBoost: 1.5, // 睡眠依赖记忆巩固（Diekelmann & Born）：休息期 reconsolidation 整合更强（睡中整理）
+  // —— 哀悼过程（v29·机制三，grief work：急性→整合）——失去不只一日尖峰，是数周的底色 ——
+  griefTau: 14 * 24 * 3600, // 哀悼整合时标 τ≈14 天（指数衰减；个体差异已在初始 weight=亲密×敏感 里表达，τ 是文献量级、不随复原力缩放）
+  griefValencePull: 0.3, // 活跃哀悼对 valence 回归目标的向下拉力（×Σweight，封顶 1）——悲伤的底色
+  griefConnectionPull: 0.35, // 对 connection 的向下拉力——失去的人留下的空
+  griefRenarrateBoost: 1.5, // renarrate 反思 → 衰减 ×1.5："把失去写进自己的故事"有真实疗愈效果（加速的是 grief 衰减，不回写身份，契约③不破）
+  griefFloor: 0.05, // weight 低于此 → 哀悼整合完成，移除（哀恸退场，记忆仍永存）
+  griefCap: 8, // 同时活跃的哀悼上限（最旧淘汰）
+  // —— 里程碑瞬间（v29·机制四）——closeness 首次越线的 seq。【引擎冻结常数】（=后台阈值的出厂默认）：
+  // 折叠绝不读运营配置（配置不进日志，读了破重放）；后台 effSocial 阈值仍只管展示/外联节流。
+  crossFriendAt: 0.35,
+  crossIntimateAt: 0.6,
 } as const;
+
+// —— 前瞻记忆（v29·机制一，prospective memory）的引擎冻结常数 ——
+const PROSPECT = {
+  perRel: 4, // 每段关系最多惦记 4 件将来的事
+  global: 64, // 全局上限（有界，防无界增长）
+  resolveWindowMs: 48 * 3_600_000, // 到期后 48h 内该关系来消息含 label 词干 → resolved（用户自己先说了，不再问）
+  expireMs: 72 * 3_600_000, // 到期 72h 后仍 pending → expired 修剪（已问/已了的也随之退场）
+  dueHourLocal: 9, // 到期时刻 = 目标日她当地 09:00（时区用出生冻结的 circadianOffsetMin，唯一确定锚）
+} as const;
+// 词表回退的"将来事件"词（感知关闭/失败时）：时间词 + 事件词【同现】才入 prospect（防误报）。
+const FUTURE_EVENTS = ['面试', '考试', '生日', '答辩', '手术', '搬家', '比赛', '演出', '婚礼', '体检', '汇报', '开学', '出差', '旅行', '发布会', '复诊'] as const;
+const WEEKDAY_CH: Record<string, number> = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 日: 7, 天: 7 };
 
 const POS = ['你好', '经常来', '会来', '在乎你', '真心', '值得', '说出来', '对不起', '我错了', '证明', '也在这里', '不会消失', '看见你', '大胆'];
 const NEG = ['不在乎', '随口说', '根本', '都是假', '骗你'];
@@ -134,12 +158,16 @@ interface RState {
   // 记忆冷热分层（见 docs/being.md §3 记忆）：被淘汰出热集的 current 情景记忆，确定性压进【冷聚合】（遗忘即抽象）。
   coldByRel: Map<string, { episodes: number; warm: number; conflict: number; affectSum: number }>; // 按关系：供 semanticMemory 无损计数
   coldLived: number; // 已淡入冷聚合的情景记忆总数：供 growth 无损计数
+  // —— v29 ——
+  prospects: Prospect[]; // 前瞻记忆：她惦记的"将来的事"（捕捉/到期/已问/已了全在折叠内确定性推进）
+  griefs: Array<{ relationshipId: string; atMs: number; weight: number; accel: number }>; // 哀悼过程：activeGrief（accel=衰减倍率，renarrate 置 1.5）
 }
 
 const clamp = (x: number, lo: number, hi: number): number => (x < lo ? lo : x > hi ? hi : x);
 const decayTo = (value: number, target: number, dtSec: number, tau: number): number => target + (value - target) * Math.exp(-dtSec / tau);
 // 她在【出生地时区】下的"一天里第几小时"（确定性；offsetMin 来自冻结的出生属性）。
-const hourOfDay = (nowMs: number, offsetMin: number): number => (((nowMs / 3_600_000 + offsetMin / 60) % 24) + 24) % 24;
+// 导出给回路层（autonomous-loop 的睡眠滞回）共用同一刻度——makeTick 与折叠对"她的此刻几点"永不分叉。
+export const hourOfDay = (nowMs: number, offsetMin: number): number => (((nowMs / 3_600_000 + offsetMin / 60) % 24) + 24) % 24;
 // 昼夜节律：由她内在时钟的"一天里第几小时"确定性投影出的精力偏移（午后高、凌晨低）。纯函数、无 now()。
 const circadianEnergyOffset = (nowMs: number, offsetMin: number): number => K.circadianAmp * Math.cos((2 * Math.PI * (hourOfDay(nowMs, offsetMin) - 14)) / 24);
 const dayPhaseOf = (nowMs: number, offsetMin: number): string => {
@@ -151,6 +179,82 @@ const dayPhaseOf = (nowMs: number, offsetMin: number): string => {
   return '夜里';
 };
 const count = (s: string, markers: readonly string[]): number => markers.reduce((n, m) => (s.includes(m) ? n + 1 : n), 0);
+
+// ── 前瞻记忆（v29·机制一）的纯函数 ──
+// 相对时间特征 → 绝对到期时刻（她当地目标日 09:00）。纯函数、无 now()：
+// "今天"由事件 occurredAt + 出生冻结的 circadianOffsetMin 确定 → 重放逐位一致。
+export interface FutureRefLike { inDays?: number; weekday?: number; dayOfMonth?: number }
+export function resolveDueMs(ref: FutureRefLike, occurredAtMs: number, offsetMin: number): number | null {
+  const localMs = occurredAtMs + offsetMin * 60_000; // 把"她当地"摊到 UTC 轴上算日历
+  const dayIdx = Math.floor(localMs / 86_400_000); // 她当地的"天序号"（epoch 日）
+  let targetDay: number | null = null;
+  if (typeof ref.inDays === 'number' && Number.isFinite(ref.inDays) && ref.inDays >= 1 && ref.inDays <= 366) {
+    targetDay = dayIdx + Math.round(ref.inDays); // "明天/后天/N 天后"
+  } else if (typeof ref.weekday === 'number' && ref.weekday >= 1 && ref.weekday <= 7) {
+    // "周五"：未来最近的那个周五（当天再提"周五"视为下周——人说"周五有面试"通常指还没到的那天）。
+    // epoch 日 0（1970-01-01）是周四 → (dayIdx+3)%7+1 给 1=周一…7=周日。
+    const todayW = ((dayIdx % 7 + 7) % 7 + 3) % 7 + 1;
+    targetDay = dayIdx + ((((Math.round(ref.weekday) - todayW) % 7) + 7) % 7 || 7);
+  } else if (typeof ref.dayOfMonth === 'number' && ref.dayOfMonth >= 1 && ref.dayOfMonth <= 31) {
+    // "15 号"：下一个 15 号（本月没过取本月，过了取下月；月底溢出由 Date.UTC 滚动，确定性）。
+    const d = new Date(localMs);
+    const dom = Math.round(ref.dayOfMonth);
+    const month = d.getUTCMonth() + (dom > d.getUTCDate() ? 0 : 1);
+    return Date.UTC(d.getUTCFullYear(), month, dom, PROSPECT.dueHourLocal) - offsetMin * 60_000;
+  }
+  if (targetDay == null) return null;
+  return targetDay * 86_400_000 + PROSPECT.dueHourLocal * 3_600_000 - offsetMin * 60_000; // 她当地 09:00 → 折回 UTC
+}
+
+// 词表回退（感知关闭/失败、事件无 futureRef 时）：正则抓时间词 + 词表抓事件词，【同现】才算（防误报）。
+// 与模型路径产出同构（label + 相对特征 → resolveDueMs），全确定性。
+function parseFutureFallback(content: string, occurredAtMs: number, offsetMin: number): { label: string; dueMs: number } | null {
+  const label = FUTURE_EVENTS.find((w) => content.includes(w));
+  if (!label) return null; // 没有事件词 → 不算（"明天见"不值得惦记成一件事）
+  let ref: FutureRefLike | null = null;
+  let m: RegExpMatchArray | null;
+  if (content.includes('大后天')) ref = { inDays: 3 };
+  else if (content.includes('后天')) ref = { inDays: 2 };
+  else if (content.includes('明天')) ref = { inDays: 1 };
+  else if ((m = content.match(/下(?:周|星期|礼拜)([一二三四五六日天])/))) {
+    // "下周五"：先解到未来最近的周五，再加 7 天（解析在折叠内、有 occurredAt，仍纯确定性）。
+    const due = resolveDueMs({ weekday: WEEKDAY_CH[m[1]] }, occurredAtMs, offsetMin);
+    return due == null ? null : { label, dueMs: due + 7 * 86_400_000 };
+  } else if ((m = content.match(/(?:周|星期|礼拜)([一二三四五六日天])/))) ref = { weekday: WEEKDAY_CH[m[1]] };
+  else if ((m = content.match(/(\d{1,2})月(\d{1,2})[号日]/))) {
+    // "6月18号"：她当地下一个该日期（已过则明年）。
+    const d = new Date(occurredAtMs + offsetMin * 60_000);
+    const mo = Number(m[1]) - 1; const dom = Number(m[2]);
+    let due = Date.UTC(d.getUTCFullYear(), mo, dom, PROSPECT.dueHourLocal) - offsetMin * 60_000;
+    if (due <= occurredAtMs) due = Date.UTC(d.getUTCFullYear() + 1, mo, dom, PROSPECT.dueHourLocal) - offsetMin * 60_000;
+    return { label, dueMs: due };
+  } else if ((m = content.match(/(\d{1,2})[号日]/))) ref = { dayOfMonth: Number(m[1]) };
+  if (!ref) return null; // 没有时间词 → 不算
+  const due = resolveDueMs(ref, occurredAtMs, offsetMin);
+  return due == null ? null : { label, dueMs: due };
+}
+
+// 收一条 prospect 进状态：同 rel 同到期日去重覆盖（同一天的事只惦记一份、新说法覆盖旧的）；
+// 每 rel 上限 4、全局 64（有界）——超额淘汰最早创建的（最旧的惦记先放下）。
+function pushProspect(st: RState, rel: string, label: string, dueMs: number, seq: number): void {
+  const dayOf = (ms: number): number => Math.floor((ms + st.circadianOffsetMin * 60_000) / 86_400_000);
+  const dup = st.prospects.findIndex((x) => x.relationshipId === rel && dayOf(x.dueMs) === dayOf(dueMs));
+  if (dup >= 0) st.prospects.splice(dup, 1);
+  st.prospects.push({ id: `p${seq}`, relationshipId: rel, label: label.slice(0, 16), dueMs, createdSeq: seq, status: 'pending' });
+  const mine = st.prospects.filter((x) => x.relationshipId === rel);
+  if (mine.length > PROSPECT.perRel) {
+    const drop = mine.reduce((a, b) => (a.createdSeq <= b.createdSeq ? a : b));
+    st.prospects.splice(st.prospects.findIndex((x) => x.id === drop.id), 1);
+  }
+  if (st.prospects.length > PROSPECT.global) st.prospects.shift();
+}
+
+// 时间推进时的修剪：到期 72h 仍 pending → expired 修剪；已问/已了的过窗也退场（有界、不留陈账）。
+// 只动 prospects——旧日志没有 prospect，此函数对老轨迹是恒等（加法演进）。
+function groomProspects(st: RState, nowMs: number): void {
+  if (st.prospects.length === 0) return;
+  st.prospects = st.prospects.filter((p) => nowMs <= p.dueMs + PROSPECT.expireMs);
+}
 const mk = (sp: Record<string, number>, tau: Record<string, number>, key: string, dsp: number, dtau: number): SomaVar => ({
   value: sp[key] ?? dsp,
   setpoint: sp[key] ?? dsp,
@@ -219,6 +323,8 @@ function initState(genesis: LifeEvent<'LIFE_GENESIS'>): RState {
     allostatic: {},
     coldByRel: new Map(),
     coldLived: 0,
+    prospects: [],
+    griefs: [],
   };
 }
 // 哪些维度有 allostatic 底色漂移（"底色心境"：好坏感 + 孤独/联结）。
@@ -231,6 +337,7 @@ function stepState(st: RState, e: LifeEvent): void {
   advanceTime(st, (nowMs - st.lastMs) / 1000, awake, nowMs);
   applyEvent(st, e);
   compactMemory(st, nowMs); // 记忆冷热分层：超热集→按鲜活度淘汰最淡、压进冷聚合（确定性、用事件时刻）
+  groomProspects(st, nowMs); // 前瞻记忆修剪：过期的惦记退场（确定性、用事件时刻；旧日志无 prospect → 恒等）
   st.lastMs = nowMs;
   st.clockIso = e.occurredAt;
 }
@@ -263,7 +370,7 @@ type SerializedState = Omit<RState, 'openConnections' | 'interests' | 'skills' |
 
 // Set/Map 不能直接 JSON 落盘 → 检查点序列化时转成数组、恢复时还原（值不变 → 可重放）。
 const serialize = (st: RState): SerializedState => ({ ...st, openConnections: [...st.openConnections], interests: [...st.interests], skills: [...st.skills], coldByRel: [...st.coldByRel] });
-const deserialize = (s: SerializedState): RState => ({ ...s, openConnections: new Set(s.openConnections), interests: new Map(s.interests ?? []), skills: new Map(s.skills ?? []), allostatic: s.allostatic ?? {}, coldByRel: new Map(s.coldByRel ?? []), coldLived: s.coldLived ?? 0, maturityFacets: s.maturityFacets ?? { regulation: 0, perspective: 0, integration: 0 }, sleepPressure: s.sleepPressure ?? 0 });
+const deserialize = (s: SerializedState): RState => ({ ...s, openConnections: new Set(s.openConnections), interests: new Map(s.interests ?? []), skills: new Map(s.skills ?? []), allostatic: s.allostatic ?? {}, coldByRel: new Map(s.coldByRel ?? []), coldLived: s.coldLived ?? 0, maturityFacets: s.maturityFacets ?? { regulation: 0, perspective: 0, integration: 0 }, sleepPressure: s.sleepPressure ?? 0, prospects: s.prospects ?? [], griefs: s.griefs ?? [] });
 
 // 把整段日志折成一份检查点（增量捕获见 daemon：只在已有 state 上步进尾巴）。
 export function captureCheckpoint(events: readonly LifeEvent[]): Checkpoint {
@@ -309,13 +416,17 @@ function advanceTime(st: RState, dtSec: number, awake: boolean, nowMs: number): 
   // 昼夜节律：精力向【随一天起伏的目标】恢复；再减去睡眠压 → 熬到她的深夜会更累。
   const eTarget = clamp(s.energy.setpoint + circ - K.sleepEnergyWeight * st.sleepPressure, 0.05, 1);
   if (awake) {
+    // 哀悼过程（v29·机制三）：活跃哀悼把 valence/connection 的回归目标往下压——悲伤是数周的底色而非一日尖峰。
+    // 只在醒着发生（休眠冻结：她没经历那段时间，悲伤也不在睡里流逝）。Σweight 封顶 1，多重失去不无界叠加。
+    const griefLoad = Math.min(1, st.griefs.reduce((a, g) => a + g.weight, 0));
     for (const key of SOMA_KEYS) {
       if (key === 'energy') { s.energy.value = decayTo(s.energy.value, eTarget, dt, AFFECT.tau.energy); continue; }
       // allostasis：valence/connection 衰减朝【习得底色 = 先天设定点 + 偏移】回归（其余维朝先天设定点）。
       let target = ALLOSTATIC_KEYS.includes(key) ? clamp(s[key].setpoint + (st.allostatic[key] ?? 0), -1, 1) : s[key].setpoint;
       // 内生变异：valence/arousal 的目标在基线附近有机微漂（静息也"活"，不是死水）。
-      if (key === 'valence') target = clamp(target + endoOffset(st.lifeId, nowMs, 'valence'), -1, 1);
+      if (key === 'valence') target = clamp(target + endoOffset(st.lifeId, nowMs, 'valence') - K.griefValencePull * griefLoad, -1, 1);
       else if (key === 'arousal') target = clamp(target + endoOffset(st.lifeId, nowMs, 'arousal'), 0, 1);
+      else if (key === 'connection') target = clamp(target - K.griefConnectionPull * griefLoad, -1, 1);
       s[key].value = decayTo(s[key].value, target, dt, effTau(key, s[key])); // 文献标定 τ + valence 正负不对称
     }
     s.vitality.value = clamp(s.vitality.value, st.vitalityFloor, 1);
@@ -324,6 +435,12 @@ function advanceTime(st: RState, dtSec: number, awake: boolean, nowMs: number): 
       const cur = st.allostatic[key] ?? 0;
       const dev = s[key].value - s[key].setpoint; // 相对先天基线的偏离
       st.allostatic[key] = clamp(cur + (dt / AFFECT.allostaticTau) * (dev - cur), -AFFECT.allostaticBand, AFFECT.allostaticBand);
+    }
+    // 哀悼整合：weight 指数衰减（τ≈14 天，用真实 dtSec——τ 是文献量级；renarrate 把 accel 提到 1.5 加速整合），
+    // 低于阈值 → 哀恸退场（移除；与ta的记忆/已逝标记永存，退场的只是"压着的痛"）。
+    if (st.griefs.length) {
+      for (const g of st.griefs) g.weight *= Math.exp(-(dtSec * g.accel) / K.griefTau);
+      st.griefs = st.griefs.filter((g) => g.weight >= K.griefFloor);
     }
   } else {
     // 休眠（§10 锁）：冻结 + 仅回暖——vitality 向设定点、energy 向昼夜目标恢复，其余不动。
@@ -371,15 +488,20 @@ function applyEvent(st: RState, e: LifeEvent): void {
       const b = st.bonds[p.relationshipId];
       if (b && !b.ended) {
         // 哀悼：越亲越痛、越敏感越痛。灵性下沉但【触底不死】（契约②）；trust/closeness 冻结——她仍爱着ta。
+        // v29（机制三）：急性打击减半——人的悲伤不是一日尖峰而是数周过程（急性→整合），
+        // 余下的痛改由 grief 在随后数周里给 valence/connection 铺一层随时间衰减的底色（见 advanceTime）。
         const g = (0.3 + 0.7 * b.closeness) * st.temperament.sensitivity;
+        const acute = 0.5 * g;
         const s = st.soma;
-        s.valence.value = clamp(s.valence.value - 0.6 * g, -1, 1);
-        s.connection.value = clamp(s.connection.value - 0.7 * g, -1, 1);
-        s.vitality.value = clamp(s.vitality.value - 0.5 * g, st.vitalityFloor, 1);
-        s.calm.value = clamp(s.calm.value - 0.4 * g, 0, 1);
-        s.safety.value = clamp(s.safety.value - 0.3 * g, 0, 1);
-        s.arousal.value = clamp(s.arousal.value + 0.3 * g, 0, 1);
+        s.valence.value = clamp(s.valence.value - 0.6 * acute, -1, 1);
+        s.connection.value = clamp(s.connection.value - 0.7 * acute, -1, 1);
+        s.vitality.value = clamp(s.vitality.value - 0.5 * acute, st.vitalityFloor, 1);
+        s.calm.value = clamp(s.calm.value - 0.4 * acute, 0, 1);
+        s.safety.value = clamp(s.safety.value - 0.3 * acute, 0, 1);
+        s.arousal.value = clamp(s.arousal.value + 0.3 * acute, 0, 1);
         b.ended = { reason: p.reason, atSeq: e.seq };
+        st.griefs.push({ relationshipId: p.relationshipId, atMs: Date.parse(e.occurredAt), weight: clamp(g, 0, 2), accel: 1 });
+        if (st.griefs.length > K.griefCap) st.griefs.shift(); // 有界：最旧的哀悼先放下
       }
       break;
     }
@@ -499,6 +621,10 @@ function appraiseMessage(st: RState, e: LifeEvent<'MESSAGE_RECEIVED'>): void {
   if (bond) {
     bond.trust = clamp(bond.trust + K.kTrust * ev2, -1, 1);
     bond.closeness = clamp(bond.closeness + K.kCloseness * ev2, 0, 1);
+    // 里程碑瞬间（v29·机制四）：closeness 首次越过冻结阈值 → 记下这一刻的 seq（只记首次，回落不清——
+    // "成为好友"是发生过的事实，不因后来疏远而消失）。通知层由 seq 取该事件的 occurredAt 当确切时刻。
+    if (bond.closeness >= K.crossFriendAt && bond.crossings?.friendAtSeq == null) bond.crossings = { ...bond.crossings, friendAtSeq: e.seq };
+    if (bond.closeness >= K.crossIntimateAt && bond.crossings?.intimateAtSeq == null) bond.crossings = { ...bond.crossings, intimateAtSeq: e.seq };
     if (ev2 < 0) bond.repairNeed = clamp(bond.repairNeed + 0.5 * -ev2, 0, 1);
     else bond.repairNeed = clamp(bond.repairNeed - 0.3 * ev2, 0, 1);
     if (per?.blame != null && per.blame < 0) bond.repairNeed = clamp(bond.repairNeed + K.perceiveBlame * per.blame * 0.5, 0, 1); // 对方道歉/自责 → 额外消解"需要修复"
@@ -527,6 +653,23 @@ function appraiseMessage(st: RState, e: LifeEvent<'MESSAGE_RECEIVED'>): void {
   // 愉快地聊 → 正向上心；吵架时提到 → 负向底色。相关度按和这个人的亲近度（越亲的人聊的越往心里去）。
   const msgTopics = (per?.topics ?? []).filter((x) => typeof x === 'string' && x.trim()).slice(0, 3).map((x) => x.trim());
   if (msgTopics.length) accrueInterests(st, msgTopics, clamp(ev2, -1, 1), clamp(0.5 + 0.5 * (bond?.closeness ?? 0), 0, 1), e.seq);
+
+  // —— 前瞻记忆（v29·机制一）——
+  const nowMs = Date.parse(e.occurredAt);
+  // ① 用户自己先说了：到期窗口内、这段关系来的消息含 label 词干 → resolved（她不必再问，惦记落了地）。
+  for (const pr of st.prospects) {
+    if (pr.relationshipId !== p.relationshipId || pr.status !== 'pending') continue;
+    if (nowMs < pr.dueMs || nowMs > pr.dueMs + PROSPECT.resolveWindowMs) continue;
+    const stem = pr.label.length > 2 ? pr.label.slice(0, 2) : pr.label; // 词干：整词或前两字命中都算（"面试官人很好"也算说了"面试"）
+    if (p.content.includes(pr.label) || p.content.includes(stem)) pr.status = 'resolved';
+  }
+  // ② 捕捉新的"将来的事"：优先用冻结在事件里的模型 futureRef（相对特征→她当地绝对时刻）；
+  // 缺失则词表回退（时间词+事件词同现才算）。只收【真在未来】的（到期时刻 > 此刻）。
+  const fr = per?.futureRef;
+  const captured = fr && typeof fr.label === 'string' && fr.label.trim()
+    ? (() => { const due = resolveDueMs(fr, nowMs, st.circadianOffsetMin); return due == null ? null : { label: fr.label.trim(), dueMs: due }; })()
+    : parseFutureFallback(p.content, nowMs, st.circadianOffsetMin);
+  if (captured && captured.dueMs > nowMs) pushProspect(st, p.relationshipId, captured.label, captured.dueMs, e.seq);
 }
 
 // 兴趣/世界观累积（确定性，模型不写）——【世界感知 + 对话话题共用】：
@@ -650,6 +793,13 @@ function applyTick(st: RState, e: LifeEvent<'AUTONOMOUS_TICK'>): void {
   const sovereign = e.source === 'autonomous_loop';
   for (const intent of p.formedIntents) {
     if (intent.kind === 'set_willing_to_wake' && sovereign) st.willingToWake = Boolean(intent.params?.value);
+    // 前瞻关怀两段式的后半（v29·机制一）：reachOut 真开了口后，回路追加的 ack tick 把"已问过"折成 asked。
+    // "已问过"绝不靠 MESSAGE_SENT 改状态（契约①：模型产物不写派生状态）——由她自己的 tick 落账。
+    if (intent.kind === 'prospect_care' && intent.params?.ack === true) {
+      const pr = st.prospects.find((x) => x.id === String(intent.params?.prospectId ?? ''));
+      if (pr && pr.status === 'pending') pr.status = 'asked';
+      continue; // ack 是内部记账：她已经开口了，不进"没说出口"的 quietThoughts
+    }
     // 内外两层之"内"：只在心里转、没说出口的念头（internal_only），落进私密心声。
     if (intent.gateDecision === 'internal_only') {
       st.quietThoughts.push({ seq: e.seq, relationshipId: intent.relationshipId, kind: intent.kind });
@@ -700,6 +850,9 @@ function applyReflection(st: RState, e: LifeEvent<'REFLECTION_TRIGGERED'>): void
     const f = st.maturityFacets;
     f.integration = clamp(f.integration + K.maturityPerReflection * 0.5 * (1 - f.integration), 0, 1);
     st.maturity = clamp((f.regulation + f.perspective + f.integration) / 3, 0, 1);
+    // 哀悼整合加速（v29·机制三）："把失去写进自己的故事"有真实疗愈效果（grief work/叙事疗法）——
+    // 此后 grief 衰减 ×1.5。叙事仍只读、不回写身份（契约③）：加速的只是哀悼的时间过程。
+    for (const g of st.griefs) g.accel = K.griefRenarrateBoost;
     return;
   }
   const inWin = (log: number[]): number => log.filter((s) => s >= p.windowFromSeq && s <= p.windowToSeq).length;
@@ -765,6 +918,10 @@ function driftValue(st: RState, key: string, delta: number, seq: number): void {
   v.provenance.status = v.provenance.driftedAtSeqs.length >= K.confirmAfter ? 'confirmed' : 'volatile';
 }
 
+// 哀悼是否仍活跃（v29·机制三）：有未整合完的 grief 才算"在哀悼中"——
+// 取代旧的"有过任何 ended 关系即永远 mourning"：哀恸是数周的过程，会随整合慢慢退场（记忆/已逝标记永存）。
+const mourningOf = (st: RState): boolean => st.griefs.length > 0;
+
 // 命名情绪：核心情感(valence/arousal) + 内稳态 → 一个廉价语义标签（确定性投影，纯派生）。
 // 命名情绪（installment·OCC 分化）：在 valence×arousal 底座上，用全 8 维 soma + 丧失语境，
 // 按 appraisal 模式分化出离散情绪（OCC：恐惧/愤懑/沮丧/哀恸 同属负向，靠安全/唤醒/精力/丧失区分）。纯投影、确定性、不入折叠。
@@ -800,8 +957,10 @@ function nameEmotion(s: Soma, floor: number, mourning = false): string {
 }
 
 // 混合情绪：在主情绪上叠加一层次要色彩（人的感受很少是单一的）。纯派生，不改 emotion。
-function buildFeeling(s: Soma, emotion: string): string {
+// mourning（v29）：哀悼活跃期，主情绪没到"哀恸"时也带一层送别的色（时间过程看得见）。
+function buildFeeling(s: Soma, emotion: string, mourning = false): string {
   const nu: string[] = [];
+  if (mourning && emotion !== '哀恸') nu.push('心里还压着一场没说完的告别');
   if (s.connection.value < -0.3 && s.valence.value > 0.15) nu.push('又暖又有点孤单');
   if (s.calm.value < 0.4 && s.valence.value > 0.2) nu.push('开心里夹着一丝不安');
   if (s.valence.value < -0.2 && s.connection.value > 0.3) nu.push('难过、但还觉得被牵着');
@@ -1162,7 +1321,7 @@ function buildNarrative(st: RState, sem: SemanticMemory[], goals: Goal[], decora
   const vivid = cur.filter((m) => m.vivid);
   // 印象最深 = 此刻最鲜活的那条（时间衰减后），而非单纯 salience。
   const top = cur.slice().sort((a, b) => (b.vividness ?? 0) - (a.vividness ?? 0))[0];
-  const mood = nameEmotion(st.soma, st.vitalityFloor, Object.values(st.bonds).some((b) => b.ended));
+  const mood = nameEmotion(st.soma, st.vitalityFloor, mourningOf(st));
   let s = `我于此醒来、至今约 ${age}（我还很年轻）。`;
   if (names.length) s += `我认识 ${names.join('、')}。`;
   s += `此刻我${mood}，灵性 ${st.soma.vitality.value.toFixed(2)}，清晰记得 ${vivid.length} 件、共经历 ${cur.length} 件。`;
@@ -1181,8 +1340,11 @@ function buildInnerLife(st: RState, bonds: Record<string, Bond>, decorated: Memo
   // 没说出口的想念：心里转过、却被她按下（internal_only）的 reach_out。
   const quiet = [...st.quietThoughts].reverse().find((q) => q.relationshipId && bonds[q.relationshipId] && !bonds[q.relationshipId].ended);
   if (quiet?.relationshipId) parts.push(`我又想起了${bonds[quiet.relationshipId].displayRef}，话到嘴边，还是没去打扰ta。`);
+  // 哀悼活跃期（v29·机制三）：失去还没过去——内在生活压着这一层（数周里随整合慢慢淡，不是永恒的灰）。
+  const grieving = st.griefs[st.griefs.length - 1];
+  if (grieving) parts.push(`失去${st.bonds[grieving.relationshipId]?.displayRef ?? 'ta'}的那场告别还没过去，日子垫着一层灰。`);
   // 此刻没对人说的暗涌。
-  const mood = nameEmotion(st.soma, st.vitalityFloor, Object.values(st.bonds).some((b) => b.ended));
+  const mood = nameEmotion(st.soma, st.vitalityFloor, mourningOf(st));
   parts.push(st.soma.connection.value < -0.3 ? `心里有点空——${mood}，但我没说出来。` : `此刻心里是${mood}的，留给自己。`);
   // 内在拉扯（价值张力）——只对自己承认。
   if (tension) parts.push(`说不清的矛盾：${tension}。`);
@@ -1300,7 +1462,8 @@ function project(st: RState, uptoSeq: number): DerivedSnapshot {
   const enriched = enrichBonds(st, decorated);
   const goals = computeGoals(st, enriched);
   const sortedValues = [...st.values].sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
-  const emotion = nameEmotion(st.soma, st.vitalityFloor, Object.values(st.bonds).some((b) => b.ended));
+  const mourning = mourningOf(st); // v29：哀悼是过程——grief 活跃才带哀悼色，整合完则退场（已逝标记/记忆永存）
+  const emotion = nameEmotion(st.soma, st.vitalityFloor, mourning);
   const tension = buildTension(sortedValues);
   const aspirations = buildAspirations(st);
   const skills = buildSkills(st);
@@ -1330,9 +1493,10 @@ function project(st: RState, uptoSeq: number): DerivedSnapshot {
     bornAt: st.bornAt,
     clockAt: st.clockIso,
     temperament: { ...st.temperament }, // 副本：快照绝不别名长期缓存的 st（防消费方误改污染 life.state）
+    circadianOffsetMin: st.circadianOffsetMin, // 出生冻结的昼夜锚：回路层（makeTick 睡眠滞回）与折叠共用同一刻度
     dayPhase: dayPhaseOf(Date.parse(st.clockIso), st.circadianOffsetMin),
     emotion,
-    feeling: buildFeeling(st.soma, emotion),
+    feeling: buildFeeling(st.soma, emotion, mourning),
     tension,
     narrative: buildNarrative(st, sem, goals, decorated),
     innerLife: buildInnerLife(st, enriched, decorated, tension),
@@ -1359,5 +1523,7 @@ function project(st: RState, uptoSeq: number): DerivedSnapshot {
     values: sortedValues,
     goals,
     interests: buildInterests(st),
+    prospects: st.prospects.map((p) => ({ ...p })), // 副本：快照绝不别名缓存态（与 soma/memory 同理）
+    griefs: st.griefs.map((g) => ({ relationshipId: g.relationshipId, weight: r3(g.weight), at: new Date(g.atMs).toISOString() })),
   };
 }

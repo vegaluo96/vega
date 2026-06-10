@@ -19,6 +19,29 @@ const DEFAULT_RSS = [
   'https://www.reddit.com/r/todayilearned/.rss',        // 冷知识（很好的情感素材；偶发被 Reddit 限频则自动跳过）
   'https://feeds.bbci.co.uk/news/world/rss.xml',        // 世界新闻
   'https://36kr.com/feed',                              // 中文科技（对国内用户更相关）
+  // —— 文娱（介绍与点评，不是原文）：覆盖站内兴趣的更多类别，让不同气质的命长出不同方向的兴趣 ——
+  'https://www.theguardian.com/books/rss',              // 书评/作家访谈（卫报书评，免注册）
+  'https://www.theguardian.com/film/rss',               // 影评/电影报道
+  'https://www.rogerebert.com/feed',                    // 影评（RogerEbert，经典影评站）
+  'https://lithub.com/feed/',                           // 文学/阅读文化（Literary Hub）
+  'https://pitchfork.com/feed/feed-news/rss',           // 音乐（Pitchfork）
+  'https://www.thisiscolossal.com/feed/',               // 视觉艺术/手作（Colossal）
+  'https://aeon.co/feed.rss',                           // 人文思想长文（Aeon）
+  // —— 全方位补齐（覆盖站内全部兴趣类别；每轮每命只注入 2 条，源多=素材池广、不会灌水）——
+  'https://feeds.bbci.co.uk/news/business/rss.xml',     // 经济市场
+  'https://www.theguardian.com/environment/rss',        // 环境气候
+  'https://www.sciencedaily.com/rss/mind_brain.xml',    // 心理/脑科学
+  'https://www.psypost.org/feed',                       // 心理学研究（PsyPost）
+  'https://www.smithsonianmag.com/rss/latest_articles/',// 人文历史（史密森尼）
+  'https://daily.jstor.org/feed/',                      // 人文学术普及（JSTOR Daily）
+  'https://feeds.bbci.co.uk/sport/rss.xml',             // 体育
+  'https://www.polygon.com/rss/index.xml',              // 游戏
+  'https://www.dezeen.com/feed/',                       // 设计/建筑（Dezeen）
+  'https://www.theguardian.com/food/rss',               // 美食
+  'https://www.atlasobscura.com/feeds/latest',          // 旅行/奇妙地方（Atlas Obscura）
+  'https://nautil.us/feed/',                            // 科学×人文交叉（Nautilus）
+  'https://www.solidot.org/index.rss',                  // 中文科技/极客（Solidot）
+  'https://sspai.com/feed',                             // 中文数字生活（少数派）
 ];
 const DEFAULT_SOURCES = [...DEFAULT_RSS, 'polymarket', 'onthisday']; // 出厂默认：新闻 + 预测市场 + 历史上的今天
 const ENV_SOURCES = [...WORLD_RSS, ...(WORLD_POLYMARKET ? ['polymarket'] : []), ...(WORLD_ONTHISDAY ? ['onthisday'] : [])];

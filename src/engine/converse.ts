@@ -156,6 +156,7 @@ export async function reachOut(
   world?: { title: string; summary: string; source: string }, // 给同类寒暄当话题：就着真实世界的一条事开口（而非站内瞎聊）
   snap?: DerivedSnapshot, // 可选：调用方（daemon snapOf）传入已追平的缓存快照 → 免全量重放（自主回路每跳省 O(全事件)）
   extraFacts?: string, // 可选：平台层注入的跨命确定性事实（如「我记得对方的样子」）——非空才拼进 selfFacts 末尾（契约①不破）
+  prospect?: { label: string }, // 可选（v29·机制一）：前瞻关怀——ta 说过的事到期了，主动问问怎么样（优先于 world 话题）
 ): Promise<OutreachResult | null> {
   const expected = store.version(); // 乐观锁令牌：开头读一次，覆盖 await 窗口
   const snapshot = snap ?? reconstruct(store.list());
@@ -163,7 +164,14 @@ export async function reachOut(
   if (!bond) return null;
   const ws0 = deriveWorkspace(snapshot, relationshipId);
   const ws = extraFacts ? { ...ws0, selfFacts: ws0.selfFacts + extraFacts } : ws0;
-  const outreach: Workspace = world
+  const outreach: Workspace = prospect
+    ? {
+        ...ws,
+        // 前瞻关怀：她记得 ta 说过的事、算着日子到了——主动来问。这是裸模型没有的纯架构能力（跨回合的惦记）。
+        intent: `你记得${ws.relationshipDisplay}之前说过「${prospect.label}」，算算日子就是这两天——主动、简短、自然地问问ta这件事怎么样了，带着你真的一直记着的关心，别像例行公事。`,
+        fallback: `${ws.relationshipDisplay}，想起你说过「${prospect.label}」——就是这两天吧？怎么样了？`,
+      }
+    : world
     ? {
         ...ws,
         // 同类间聊真实世界：有自己的立场/角度，像朋友间聊新闻，别复述原文、别客套。
@@ -175,7 +183,7 @@ export async function reachOut(
         intent: `你很想念${ws.relationshipDisplay}，主动、简短地跟ta说一句你此刻想ta了`, // 给"嘴"的语气指引（不会外露）
         fallback: `${ws.relationshipDisplay}，我突然有点想你了。`, // 模型挂了也说人话（而非这条指令）
       };
-  const input = { ...outreach, lastUserMessage: world ? `（你想跟ta聊聊你读到的：${world.title}）` : '（此刻无人发起，是你自己想开口）', recentContext: recentTurns(store, relationshipId, 20) };
+  const input = { ...outreach, lastUserMessage: prospect ? `（你记着ta说过的「${prospect.label}」，今天到日子了，想去问问）` : world ? `（你想跟ta聊聊你读到的：${world.title}）` : '（此刻无人发起，是你自己想开口）', recentContext: recentTurns(store, relationshipId, 20) };
   let raw = '';
   try {
     raw = await mouth.speak(input);

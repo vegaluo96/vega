@@ -81,5 +81,5 @@ export function genesisPayloadFor(
   circadianOffsetMin = 480,
   archetypeName?: string,
 ): GenesisPayload {
-  return { innateSeed: innateSeedFor(id, circadianOffsetMin, archetypeName), reconstructVersionAtBirth: 28, creator }; // 与 RECONSTRUCT_VERSION 同步
+  return { innateSeed: innateSeedFor(id, circadianOffsetMin, archetypeName), reconstructVersionAtBirth: 29, creator }; // 与 RECONSTRUCT_VERSION 同步
 }

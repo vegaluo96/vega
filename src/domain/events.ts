@@ -80,6 +80,10 @@ export interface Perception {
   urgency?: number; // 0..1 紧迫/求助/需要立刻回应（demand character）
   playful?: number; // 0..1 玩笑/调侃成分（高 → 别把逗当攻击）
   topics?: string[]; // 这句话在聊的主题（0~3 个，如「音乐」「工作」）——喂兴趣/世界观："你常聊什么，她就对什么上心"（因你而变）
+  // 前瞻记忆（v29·机制一）：这句话提到的【将来某天的事】（"周五有面试"）。模型只产【相对时间特征】——
+  // 它不知道今天几号；绝对到期时刻由折叠内纯函数 resolveDueMs(占她的出生时区) 确定性推算 → 重放一致。
+  // optional：旧事件/未配感知时缺失 → 折叠回退确定性词表（时间词+事件词同现才算，防误报）。
+  futureRef?: { inDays?: number; weekday?: number; dayOfMonth?: number; label: string };
   modelId: string; // 哪个模型感知的（审计）
 }
 export interface MessageReceivedPayload {
@@ -116,7 +120,10 @@ export interface MessageSentPayload {
   affectsDerivedState: false; // 不变量：永远 false（契约①）
   unprompted?: boolean; // 她主动留言（无人发起），而非回应
 }
-export type IntentKind = 'reach_out' | 'reflect' | 'rest' | 'set_willing_to_wake';
+// prospect_care（v29·机制一）：到期的前瞻记忆 → "ta 说过的事到了，主动问问"。两段式守契约①：
+// makeTick 形成 surface 意图；reachOut 真的开了口后，loops 追加 ack tick（params {prospectId, ack:true}，
+// internal_only），折叠把它折成 asked——"已问过"由她自己的 tick 落账，绝不靠 MESSAGE_SENT 改状态。
+export type IntentKind = 'reach_out' | 'reflect' | 'rest' | 'set_willing_to_wake' | 'prospect_care';
 export interface FormedIntent {
   kind: IntentKind;
   relationshipId?: RelationshipId;

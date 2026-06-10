@@ -31,7 +31,7 @@ User Message → LifeEvent → EngineSnapshot → HBDA → SoulWorkspace → Mod
 
 ## 工作方式
 - 先读文档、先读代码、再动手；不靠文件名猜逻辑。
-- 改引擎要守确定性：reconstruct 内无 RNG/无 `now()`/不调模型；折叠改动会动 `RECONSTRUCT_VERSION`（当前 28，须与 seeds 出生版本 + `test/lock-arcs.test.ts` 同步）。
+- 改引擎要守确定性：reconstruct 内无 RNG/无 `now()`/不调模型；折叠改动会动 `RECONSTRUCT_VERSION`（当前 29，须与 seeds 出生版本 + `test/lock-arcs.test.ts` 同步）。
 - 事件 schema、三契约是焊死的不变量——动它们之前先确认 `test/contracts.test.ts`。
 - 验证：`npm test` · `npm run check` · `npm run typecheck`；双前端 `npm run build` + web `npm run lint:ui`。
 

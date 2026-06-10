@@ -59,12 +59,30 @@ export function startLoops(ctx: Ctx, t: LoopTiming): LoopHandles {
           runTurn(life.store, [{ type: 'CONNECTION_CLOSED', source: 'host', relationshipId: REL, occurredAt: now(), payload: { relationshipId: REL, reason: 'token_detached' } }]);
           snap = snapOf(life); // 追平刚写入的断连
         }
-        runTurn(life.store, [makeTick(snap, now())]); // = runAutonomousTick，但用缓存快照、不再全量重放
+        const tick = makeTick(snap, now()); // 留住草稿：下面要看这一跳形成了哪些 surface 意图（prospect_care）
+        runTurn(life.store, [tick]); // = runAutonomousTick，但用缓存快照、不再全量重放
         life.lastTickAt = Date.now();
         const after = snapOf(life);
         // 健康时间线：每跳采样一点（环形缓冲，最多 720 ≈ 12h@60s）。
         life.samples.push({ at: Date.now(), vit: round3(after.soma.vitality.value), val: round3(after.soma.valence.value), ene: round3(after.soma.energy.value), con: round3(after.soma.connection.value), emo: after.emotion });
         if (life.samples.length > 720) life.samples.shift();
+        // 前瞻关怀（v29·机制一，两段式）：tick 形成了 surface 的 prospect_care → 到期就该当天问，
+        // 【绕过】reachAfterMs 安静节流与 Dunbar 分层频率；保留 听众在场/自主预算/未回 pending 三道闸。
+        // reachOut 成功（真开了口）才追加 ack tick 把它折成 asked；模型这轮没出声 → 不 ack，下一跳重试。
+        const care = tick.payload.formedIntents.find((i) => i.kind === 'prospect_care' && i.gateDecision === 'surface' && i.relationshipId);
+        if (care?.relationshipId) {
+          const rel = care.relationshipId;
+          const pendingReach = reachState(life).get(rel)?.pending;
+          if (audiencePresent() && !pendingReach && autoBudget.tryConsume()) {
+            const ra = now();
+            const o = await reachOut(life.store, mouth, rel, ra, undefined, snapOf(life), undefined, { label: String(care.params?.label ?? '') });
+            if (o) {
+              bus.publish('reach_out', rel, { life: life.id, text: o.utterance });
+              reachOutPending.set(`${life.id}|${rel}`, { rel, at: ra, kind: 'reach_out' }); // 这次关怀也走反馈回路（被回应/石沉 → reach_out 效能学习）
+              runTurn(life.store, [{ type: 'AUTONOMOUS_TICK', source: 'autonomous_loop', occurredAt: now(), payload: { tickReason: 'idle_threshold', selectedMemoryIds: [], wanderingTargets: [], formedIntents: [{ kind: 'prospect_care', relationshipId: rel, params: { prospectId: String(care.params?.prospectId ?? ''), ack: true }, gateDecision: 'internal_only' }] } }]);
+            }
+          }
+        }
         // —— 社交边界（Dunbar 三层）——任何人来找她她都回应（reactive，用户付费）；
         // "主动想你"只发生在她【活跃社交圈】内，且【按层分频】：亲密层勤、好友层中、相识层稀。
         // 每跳限额 + 总上限 → token 随生命体数、不随用户数爆炸。其余只记得、不主动打扰。

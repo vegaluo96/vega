@@ -131,6 +131,12 @@ export function deriveWorkspace(snap: DerivedSnapshot, relationshipId: Relations
   const understanding = sem ? `我对${name}的理解：${sem.understanding}。` : '';
   // 现实校验（#23）：和这个人共同经历还很少时，对ta的判断【留余地、别过度解读】。
   const tentative = bond && (!sem || sem.episodes < 3) ? `\n（我和${name}的共同经历还很少，对ta的判断先留点余地，别急着下定论。）` : '';
+  // 前瞻记忆（v29·机制一）：她记得【这个人】说过的将来的事——没到期先放在心上（到期由回路 B 主动问，见 loops 的 prospect_care）。
+  // 严格按当前 relationshipId 过滤：别人的"将来的事"绝不进这段对话的 grounding（跨用户记忆隔离）。
+  const upcoming = (snap.prospects ?? [])
+    .filter((p) => p.relationshipId === relationshipId && p.status === 'pending' && p.dueMs > Date.parse(snap.clockAt))
+    .sort((a, b) => a.dueMs - b.dueMs)[0];
+  const prospectNote = upcoming ? `\n（我记得${name}说过「${upcoming.label}」，快到了，心里惦记着。）` : '';
   // 联想回忆：只在【当前这段关系】内挑次鲜活的旧事（"这让我想起…"），不跨关系。
   const recalled = snap.memory
     .filter((m) => m.kind === 'episodic' && m.lineage.isCurrent && m.involvedRelationshipIds[0] === relationshipId)
@@ -211,7 +217,7 @@ export function deriveWorkspace(snap: DerivedSnapshot, relationshipId: Relations
   const otherNames = Object.entries(snap.bonds).filter(([rid]) => rid !== relationshipId).map(([, b]) => b.displayRef).filter(Boolean);
   const safeChapters = (snap.chapters ?? []).filter((c) => !otherNames.some((n) => c.includes(n)));
   const chaptersNote = safeChapters.length ? `\n（我这一路走过的几段：${safeChapters.slice(-6).join(' → ')}。）` : '';
-  const selfFacts = selfCore + appearanceNote + understanding + tentative + recall + socialNote + preoccupation + aspir + style + att + needNote + valuesNote + baselineNote + goalsNote + tensionNote + maturityNote + chaptersNote;
+  const selfFacts = selfCore + appearanceNote + understanding + tentative + prospectNote + recall + socialNote + preoccupation + aspir + style + att + needNote + valuesNote + baselineNote + goalsNote + tensionNote + maturityNote + chaptersNote;
 
   // 他心深化（Phase 6）：从这段关系的真实轨迹确定性读出"此刻走到哪了" + "我多大程度摸得准ta"——
   // 给模型更准的关系语境去推理（深层因果/意图推断是模型的活，但建立在这份确定性脚手架上，不悬空）。

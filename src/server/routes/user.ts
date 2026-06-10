@@ -16,7 +16,7 @@ export async function handleUserApi(ctx: Ctx, req: IncomingMessage, res: ServerR
     lives, snapOf, lifeById, allPeerExchanges, feedPosts, allFeedPosts, accounts,
     effBilling, publicAccount, CLAWBOT_SECRET, cleanBindToken, wechatReply, respondAsUser,
     sessionAccount, bearer, livesMetBy, buildThread, bus, ilink, WECHAT_LIFE, runChannel, channelGen,
-    VAPID, feed, announce, effSocial, layerOf, clientIp, loginGuard,
+    VAPID, feed, announce, clientIp, loginGuard,
   } = ctx;
 
   // 公开：社会广场（发现）
@@ -233,17 +233,16 @@ export async function handleUserApi(ctx: Ctx, req: IncomingMessage, res: ServerR
     for (const r of feed.lifeRepliesTo(me.id, me.handle, 15)) {
       notes.push({ type: 'reply', life: r.lifeId, postId: r.postId, at: r.at, title: `${r.lifeId} 回复了你的留言`, text: r.text });
     }
-    // 6) 关系里程碑：你和她到了「好友/亲密」这一层（站立态——确切"升级瞬间"需另存标记，留待重构）。
-    const scN = effSocial();
+    // 6) 关系里程碑：你和她成为「好友/亲密」的【确切瞬间】——取 bond.crossings 冻结的越线 seq（v29 折叠记录），
+    //    at = 该 seq 事件的 occurredAt（seq=per-life 数组下标，单调无间隙）。不再用"站立态"近似（原 TODO 消账）。
     const metIds = livesMetBy(me).map((x) => x.id);
     for (const id of metIds) {
       const l = lifeById(id); if (!l) continue;
       const s = snapOf(l); const b = s.bonds[rel]; if (!b || b.ended) continue;
-      const layer = layerOf(b.closeness, scN);
-      if (layer.name !== 'friend' && layer.name !== 'intimate') continue;
-      const th = buildThread(l, rel, 1);
-      const lastAt = th.length ? th[th.length - 1].at : s.bornAt;
-      notes.push({ type: 'milestone', life: id, at: lastAt, title: `你和 ${id} 已是${layer.label}`, text: layer.name === 'intimate' ? '一路聊下来，她把你放进了最近的位置。' : '你们熟络起来了——她会更常想起你。' });
+      const cr = b.crossings; if (!cr) continue;
+      const es = l.store.list();
+      if (cr.intimateAtSeq != null) notes.push({ type: 'milestone', life: id, at: es[cr.intimateAtSeq]?.occurredAt ?? s.bornAt, title: `你和 ${id} 已是亲密`, text: '一路聊下来，她把你放进了最近的位置。' });
+      if (cr.friendAtSeq != null) notes.push({ type: 'milestone', life: id, at: es[cr.friendAtSeq]?.occurredAt ?? s.bornAt, title: `你和 ${id} 已是好友`, text: '你们熟络起来了——她会更常想起你。' });
     }
     // 7) 她的人生动态——【纯订阅制：只来自你关注的命】（只取公开脱敏的：交了同类新朋友 / 送别同类 / 新公开心声）。
     // 遇见过 ≠ 订阅：聊过但没关注就不推她的广场动态（不打扰；想看就去关注）。直接互动(她回复你/里程碑)不受此限。

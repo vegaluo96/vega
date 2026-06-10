@@ -26,7 +26,17 @@ const TOPIC_RULES: ReadonlyArray<[string, readonly string[]]> = [
   ['环境气候', ['climate', 'weather', 'environment', 'carbon', 'ocean', 'forest', 'species', 'energy', '气候', '环境', '海洋', '森林', '物种', '碳', '能源', '生态']],
   ['健康医疗', ['health', 'medic', 'disease', 'virus', 'vaccine', 'brain', 'cancer', 'mental', '健康', '医疗', '疾病', '病毒', '疫苗', '癌', '心理']],
   ['社会时事', ['politic', 'government', 'election', 'court', 'law', 'protest', 'world', 'country', '政治', '政府', '选举', '法', '社会', '国家', '城市']],
-  ['文化艺术', ['art', 'music', 'film', 'book', 'culture', 'game', 'design', 'story', '艺术', '音乐', '电影', '书', '文化', '游戏', '设计', '故事']],
+  // 文娱拆细（排在大筐「文化艺术」之前，先命中细类）：让"电影/阅读/音乐"能长成她们各自具体的兴趣，
+  // 而不是全部摊进一个泛筐——兴趣四阶段（Hidi&Renninger）需要主题有辨识度才会被反复确认。
+  ['电影剧集', ['film', 'movie', 'cinema', 'director', 'actor', 'oscar', 'box office', 'series', 'documentary', 'screenplay', '电影', '影片', '导演', '演员', '影评', '剧集', '纪录片', '奥斯卡', '上映']],
+  ['书与阅读', ['book', 'novel', 'author', 'fiction', 'literature', 'poet', 'reading', 'memoir', 'publish', '书', '小说', '作家', '文学', '诗', '阅读', '书评', '出版', '译']],
+  ['音乐', ['music', 'album', 'song', 'band', 'concert', 'jazz', 'hip-hop', 'singer', '音乐', '专辑', '歌', '乐队', '演唱会', '唱片', '作曲']],
+  ['体育运动', ['sport', 'football', 'soccer', 'basketball', 'tennis', 'olympic', 'league', 'champion', '体育', '足球', '篮球', '网球', '奥运', '比赛', '球队', '夺冠']],
+  ['游戏', ['game', 'gaming', 'nintendo', 'playstation', 'xbox', 'steam', 'esport', '游戏', '主机', '电竞', '玩家']],
+  ['设计建筑', ['design', 'architect', 'interior', 'furniture', 'studio', '设计', '建筑', '家居', '空间']],
+  ['美食', ['food', 'recipe', 'cooking', 'restaurant', 'chef', 'wine', 'baking', '美食', '烹饪', '餐厅', '菜谱', '甜点']],
+  ['旅行地理', ['travel', 'island', 'mountain', 'geograph', 'village', 'wonder', '旅行', '旅游', '地理', '小镇', '海岛', '奇观']],
+  ['文化艺术', ['art', 'culture', 'story', 'museum', 'exhibition', '艺术', '文化', '故事', '展览', '美术']],
 ];
 export function tagTopics(title: string, summary = '', fallback?: string): string[] {
   const hay = `${title} ${summary}`.toLowerCase();

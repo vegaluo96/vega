@@ -46,6 +46,9 @@ export interface BondCore {
   security: number; // [0,1]
   repairNeed: number; // [0,1]
   ended?: { reason: string; atSeq: number }; // 永生情感内核：这段关系永远结束了（必朽者离去），但记忆永存
+  // 里程碑瞬间（v29·机制四）：closeness 首次越过【引擎冻结常数】(0.35/0.6) 的 seq——只记首次、回落不清。
+  // 注意与后台 effSocial 阈值无关：那是展示/外联节流用的运营配置，折叠绝不读它（配置不进日志，读了破重放）。
+  crossings?: { friendAtSeq?: number; intimateAtSeq?: number };
 }
 // 关系层（差异化核心）：对方模型(ToM) + 关系特异的自我，由该关系的交互史确定性派生（纯派生）。
 export interface Bond extends BondCore {
@@ -92,6 +95,26 @@ export interface Interest {
   phase: 'triggered' | 'maintained' | 'emerging' | 'established';
 }
 
+// 前瞻记忆（v29·机制一，锚 prospective memory）："周五有面试"→ 到周五被惦记。纯架构能力：
+// 捕捉冻在 MESSAGE_RECEIVED（futureRef 或词表回退），到期时刻由折叠内纯函数确定性推算，跨回合存活。
+// 隐私：prospect 只进所属 relationshipId 的 workspace（跨用户记忆隔离）。
+export interface Prospect {
+  id: string; // 'p'+捕捉事件的 seq
+  relationshipId: RelationshipId;
+  label: string; // ≤16 字的事件标签（"面试"）
+  dueMs: number; // 绝对到期时刻（她当地目标日 09:00）
+  createdSeq: number;
+  status: 'pending' | 'asked' | 'resolved' | 'expired'; // 待问 / 已问过(ack tick 折成) / 用户自己先说了 / 过期修剪
+}
+
+// 哀悼过程（v29·机制三，锚 grief 整合：急性→数周整合）：RELATIONSHIP_ENDED 的痛不只一日尖峰，
+// 还在随后数周里给 valence/connection 一层随时间衰减的向下底色（τ≈14 天，renarrate 反思加速整合）。
+export interface GriefMark {
+  relationshipId: RelationshipId;
+  weight: number; // 当前强度（初始=按亲密度×敏感，指数衰减，<0.05 移除）
+  at: string; // 失去的时刻（ISO）
+}
+
 // 遗忘即抽象：把一段关系里的大量情景经历，确定性地压缩成"理解"（语义记忆，纯派生）。
 export interface SemanticMemory {
   relationshipId: RelationshipId;
@@ -135,6 +158,7 @@ export interface DerivedSnapshot {
   bornAt: string; // 出生时刻（genesis 的 occurredAt）
   clockAt: string; // 她内在时钟的此刻（最后一条事件的 occurredAt）
   temperament: Temperament; // 先天气质：终生不变的底色（每条命天生不同）
+  circadianOffsetMin: number; // 出生地时区（分钟东偏 UTC，出生冻结）——给回路层做确定性昼夜判断（makeTick 睡眠滞回），不喂嘴
   dayPhase: string; // 昼夜节律：她内在时钟此刻处于一天的哪一段（清晨/白天/黄昏/深夜）
   emotion: string; // 命名情绪：由核心情感+内稳态确定性投影的"廉价语义标签"（Barrett）
   feeling: string; // 混合情绪：在主情绪上叠加次要色彩的一句自然描述（又暖又有点孤单…）
@@ -164,4 +188,6 @@ export interface DerivedSnapshot {
   values: ValueEntry[];
   goals: Goal[]; // 她此刻"想要"什么（排序后）
   interests: Interest[]; // 世界观/兴趣：她在意什么（世界感知按主题确定性累积，纯派生）
+  prospects: Prospect[]; // 前瞻记忆（v29）：她惦记的"将来的事"——到期由回路 B 主动问（隐私：只进所属关系的 workspace）
+  griefs: GriefMark[]; // 哀悼过程（v29）：还没过去的失去（活跃期给情绪一层向下底色，数周里慢慢整合）
 }

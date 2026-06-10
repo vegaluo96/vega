@@ -16,10 +16,13 @@ export {
   resumeFromCheckpoint,
   advanceState,
   projectState,
+  resolveDueMs, // 前瞻记忆（v29）：相对时间特征 → 她当地目标日 09:00 的纯函数（测试/校验用同一实现）
+  hourOfDay, // 她的"一天里第几小时"（出生时区刻度）——回路层睡眠滞回与折叠共用
   CHECKPOINT_KIND,
   type Checkpoint,
   type ResumeState,
   type RState,
+  type FutureRefLike,
 } from './kernel/reconstruct.ts';
 export { writeCheckpoint, readCheckpoint } from './persistence/checkpoint-store.ts';
 export {

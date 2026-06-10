@@ -497,6 +497,10 @@ export async function handleAdmin(ctx: Ctx, req: IncomingMessage, res: ServerRes
       innerLife: owner ? s.innerLife : '〔含用户痕迹·steward 受限〕',
       chapters: owner ? s.chapters : [],
       memories: owner ? s.memory.filter((m) => m.lineage.isCurrent).slice(-30).map((m) => ({ affect: round3(m.affect), vivid: m.vivid === true, content: m.content })) : [],
+      // v29 深观：她惦记的"将来的事"（label 来自私聊 → 仅 owner）+ 还没过去的哀悼（关系可指向用户 → 仅 owner）。
+      // bonds 的里程碑瞬间（crossings）已随 social.world 的关系数据在快照里，无需另列。
+      prospects: owner ? s.prospects.map((p) => ({ rel: p.relationshipId, name: relName(p.relationshipId), label: p.label, dueAt: new Date(p.dueMs).toISOString(), status: p.status })) : [],
+      griefs: owner ? s.griefs.map((g) => ({ rel: g.relationshipId, name: relName(g.relationshipId), weight: g.weight, at: g.at })) : [],
     });
   }
   if (req.method === 'POST' && path === '/admin/users/block') {

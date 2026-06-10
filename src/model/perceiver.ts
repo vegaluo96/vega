@@ -30,6 +30,7 @@ export function createApiyiPerceiver(cfg: PerceiverConfig): Perceiver {
     'certainty=表达清晰度(明确高,模棱/含糊/费解低)；blame=归因方向(把责任推给 vega→正,说话者自己承担/道歉→负,不涉及→0)；' +
     'urgency=紧迫/求助/需要立刻回应；playful=玩笑/调侃成分(开玩笑高,严肃低)；' +
     'topics=这句话在聊的 0~3 个主题词(简短名词,如「音乐」「工作」「感情」「游戏」；没明显主题就给空数组 [])。' +
+    'futureRef=【仅当】这句话提到将来某天要发生的具体事(面试/考试/生日/手术…)才给：{"label":"事件标签(≤8字)",再给一个时间特征："inDays":N(明天=1,后天=2,N天后=N) 或 "weekday":1~7(说"周五"给5,周一=1…周日=7) 或 "dayOfMonth":N(说"15号"给15)}——你不知道今天几号,只给【相对时间特征】；没提将来的事就不要这个字段。' +
     '缺乏依据的维度给中性值(0 或 0.5)。只输出 JSON。';
   return {
     id: cfg.model,
@@ -61,11 +62,29 @@ export function createApiyiPerceiver(cfg: PerceiverConfig): Perceiver {
         // 新维度可选：模型没给/给的不是数 → undefined（折叠按中性默认、不影响向后兼容）。
         const opt = (x: unknown, lo: number, hi: number): number | undefined =>
           typeof x === 'number' && Number.isFinite(x) ? clamp(x, lo, hi) : undefined;
+        // 前瞻记忆（v29）：防御解析模型给的 futureRef——label 必须有、至少一个相对时间特征才算数；
+        // 绝对到期时刻不在这里算（耳朵不知道今天几号），由折叠内 resolveDueMs 用事件时刻确定性推。
+        let futureRef: Perception['futureRef'];
+        const fr = o.futureRef as Record<string, unknown> | undefined;
+        if (fr && typeof fr === 'object' && typeof fr.label === 'string' && fr.label.trim() !== '') {
+          const inDays = opt(fr.inDays, 1, 366);
+          const weekday = opt(fr.weekday, 1, 7);
+          const dayOfMonth = opt(fr.dayOfMonth, 1, 31);
+          if (inDays !== undefined || weekday !== undefined || dayOfMonth !== undefined) {
+            futureRef = {
+              label: fr.label.trim().slice(0, 16),
+              ...(inDays !== undefined ? { inDays: Math.round(inDays) } : {}),
+              ...(weekday !== undefined ? { weekday: Math.round(weekday) } : {}),
+              ...(dayOfMonth !== undefined ? { dayOfMonth: Math.round(dayOfMonth) } : {}),
+            };
+          }
+        }
         return {
           sentiment: num(o.sentiment, -1, 1), warmth: num(o.warmth, 0, 1), threat: num(o.threat, 0, 1),
           intensity: opt(o.intensity, 0, 1), novelty: opt(o.novelty, 0, 1), certainty: opt(o.certainty, 0, 1),
           blame: opt(o.blame, -1, 1), urgency: opt(o.urgency, 0, 1), playful: opt(o.playful, 0, 1),
           topics: Array.isArray(o.topics) ? o.topics.filter((x): x is string => typeof x === 'string' && x.trim() !== '').slice(0, 3).map((x) => x.trim().slice(0, 16)) : undefined,
+          ...(futureRef ? { futureRef } : {}),
           modelId: cfg.model,
         };
       } catch {
