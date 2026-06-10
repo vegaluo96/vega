@@ -10,6 +10,7 @@ import {
   type MessageSentPayload, type PerceiverConfig, type RState,
 } from '../index.ts';
 import type { LoginGuard } from './ratelimit.ts';
+import type { SourceStat } from './world.ts'; // 仅类型（world.ts 反向只 import type Ctx，无运行时环）
 
 // 一个生命体的运行时句柄：日志 + 缓存活态 + 各回路的"上次发生"墙钟 + 健康采样环。
 export interface Life {
@@ -114,6 +115,7 @@ export interface Ctx {
   channelGen: Map<string, number>;
   creditHintAt: Map<string, number>;
   scheduleWorld(delayMs?: number): void;
+  sourceStats(): SourceStat[]; // 每源真实抓取统计（world.ts 抓取回路维护）——后台「世界源」健康点/今日条数读它
 
   // —— 推送 ——
   VAPID: { publicKey: string; privateKey: string } | null;

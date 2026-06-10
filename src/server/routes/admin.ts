@@ -11,7 +11,7 @@ const now = (): string => new Date().toISOString();
 export async function handleAdmin(ctx: Ctx, req: IncomingMessage, res: ServerResponse, url: string): Promise<void> {
   const {
     sessionAccount, modelStatus, settings, effMouthConfig, mouth, lifeById, lives,
-    perceiver, effBilling, birthLife, effSocial, scheduleWorld, worldStatus, effWorld,
+    perceiver, effBilling, birthLife, effSocial, scheduleWorld, sourceStats, worldStatus, effWorld,
     worldEnabled, adminActivity, accounts, livesMetBy, buildThread, snapOf, reachState,
     layerOf, audiencePresent, autoBudget, idleMs, announce, serializer, REL, IDLE_GATE_MS,
   } = ctx;
@@ -156,7 +156,8 @@ export async function handleAdmin(ctx: Ctx, req: IncomingMessage, res: ServerRes
   // 抓取在引擎外，内容冻进 WORLD_PERCEIVED 事件；配置不进神圣日志、不参与重放（换源不改她记得什么）。
   if (path === '/admin/world-config' || path === '/admin/world-config/test') {
     if (!owner) return send(res, 403, { error: '仅 owner 可查看/修改世界源' });
-    if (req.method === 'GET' && path === '/admin/world-config') return send(res, 200, worldStatus());
+    // 附加 stats：每源真实抓取统计（world.ts 抓取回路维护，按配置条目对齐）——additive，不改既有字段。
+    if (req.method === 'GET' && path === '/admin/world-config') return send(res, 200, { ...worldStatus(), stats: sourceStats() });
     if (req.method === 'POST' && path === '/admin/world-config') {
       const b = await readJson(req);
       const patch: Record<string, unknown> = {};

@@ -150,7 +150,7 @@ const ctx: Ctx = {
   allFeedPosts, feedPosts, allPeerExchanges,
   reachState, pickRecentWorld, pickInsightPair, lastUserMsgMs, adminActivity,
   bearer, sessionAccount, publicAccount, clientIp: ipOf, loginGuard, audiencePresent: presence.audiencePresent, idleMs: presence.idleMs,
-  reachOutPending, channelGen, creditHintAt, scheduleWorld: world.scheduleWorld,
+  reachOutPending, channelGen, creditHintAt, scheduleWorld: world.scheduleWorld, sourceStats: world.sourceStats,
   VAPID, VAPID_SUBJECT, WEB_DIST, ADMIN_DIST, CLAWBOT_SECRET, IDLE_GATE_MS, WECHAT_LIFE, REL, peerId,
 };
 

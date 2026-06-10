@@ -1,5 +1,6 @@
 <script>
-  // 世界源：她们读世界长兴趣的源头。源列表（健康点/上次读到/今日条数/对它长出兴趣的命/启停）
+  // 世界源：她们读世界长兴趣的源头。源列表（健康点/上次抓取/今日条数/启停——读 /admin/world-config
+  // 附带的 stats：抓取回路按配置条目维护的真实统计，不再从 world-feed 倒推）
   // + 「今天她们读到的」（/admin/world-feed 真实 WORLD_PERCEIVED）。
   // 后端配置是一份扁平清单（/admin/world-config sources[]）：启停 = 是否写入清单；
   // 本地保留停用项的灰显（保存时不写入）——停用源不删她们已长出的兴趣。
@@ -12,10 +13,10 @@
   import Creature from '../components/Creature.svelte';
 
   let rows = [];        // [{ url, on }]
+  let stats = [];       // 每源真实抓取统计 [{key, lastFetchAt, lastOk, lastError?, lastCount, todayCount, totalCount}]
   let everyMin = 30;
   let from = 'default';
   let feed = [];
-  let report = [];      // 试抓诊断 [{source, ok, status, items}]
   let draft = '';
   let saveMsg = '';
   let testMsg = '';
@@ -24,17 +25,12 @@
   let denied = '';
 
   const hostOf = (u) => { try { return new URL(u).hostname; } catch { return u; } };
-  // 把 feed 的 source（主机名/'polymarket'/'维基·历史上的今天'）容错匹配回配置项。
-  function statsFor(url) {
-    const h = hostOf(url);
-    const mine = feed.filter((e) => e.source === h || e.source === url || h.includes(e.source) || (url === 'onthisday' && e.source.includes('历史上的今天')));
-    const today = mine.filter((e) => new Date(e.at).toDateString() === new Date().toDateString());
-    return { lastAt: mine[0]?.at || null, todayN: today.length, fans: [...new Set(mine.map((e) => e.life))].slice(0, 4) };
-  }
+  // stats.key 就是配置条目本身（URL / polymarket / onthisday）→ 精确对齐，无需容错匹配。
+  const statOf = (url) => stats.find((s) => s.key === url) || null;
+  // 健康点：抓过且成功=绿；抓过但失败=黄；没抓过（新源）=灰（待首抓）。
   function healthOf(url) {
-    const rep = report.find((r) => r.source === hostOf(url) || r.source === url);
-    if (rep) return rep.ok ? 'ok' : 'stale';
-    return statsFor(url).lastAt ? 'ok' : 'unknown';
+    const st = statOf(url);
+    return st ? (st.lastOk ? 'ok' : 'stale') : 'unknown';
   }
 
   async function load() {
@@ -42,11 +38,14 @@
     try {
       const w = await api.worldConfig();
       rows = (w.sources || []).map((url) => ({ url, on: true }));
+      stats = w.stats || [];
       everyMin = Math.max(1, Math.round((w.everyMs || 1800000) / 60000));
       from = w.from;
     } catch (e) { if (e.status === 403) denied = '世界源配置仅 owner。'; else error = e.message; authGuard(e); }
     try { feed = (await api.worldFeed(120)).rows || []; } catch { feed = []; }
   }
+  // 只刷统计（不动 rows——本地停用项的灰显不丢）：保存后服务端 3 秒自动试读一遍，稍后拉新统计。
+  async function refreshStats() { try { stats = (await api.worldConfig()).stats || []; } catch { /* 静默：下次进页面再拉 */ } }
   function toggle(i) { rows = rows.map((r, j) => (j === i ? { ...r, on: !r.on } : r)); }
   function add() {
     const u = draft.trim(); if (!u) return;
@@ -60,13 +59,14 @@
       const w = await api.saveWorldConfig({ sources: rows.filter((r) => r.on).map((r) => r.url), everyMs: Math.max(1, Number(everyMin)) * 60000 });
       from = w.from; saveMsg = '已保存 · 几秒后自动试读一遍（无需重启）';
       addAudit(`保存世界源（${rows.filter((r) => r.on).length} 个源 · 每 ${everyMin} 分钟）`);
+      setTimeout(refreshStats, 12000); // 自动试读（3 秒后开抓）跑完后拉一次真实统计 → 健康点/今日条数跟上
     } catch (e) { saveMsg = '✗ ' + e.message; authGuard(e); } finally { saving = false; }
   }
   async function test() {
-    testing = true; testMsg = '抓取中…'; report = [];
+    testing = true; testMsg = '抓取中…';
     try {
       const r = await api.testWorld();
-      report = r.report || [];
+      const report = r.report || [];
       const breakdown = report.map((x) => `${x.source} ${x.items}${x.ok ? '' : `✗${x.status}`}`).join(' · ');
       testMsg = r.ok ? `✓ 抓到 ${r.count} 条${breakdown ? `（${breakdown}）` : ''}` : `✗ ${r.error || '0 条'}${breakdown ? `（${breakdown}）` : ''}`;
     } catch (e) { testMsg = '✗ ' + e.message; } finally { testing = false; }
@@ -92,15 +92,12 @@
 <div class="cols-2">
   <div class="card-quiet list">
     {#each rows as s, i (s.url)}
-      {@const st = statsFor(s.url)}
+      {@const st = statOf(s.url)}
       <div class="srow" class:off={!s.on}>
         <span class="dot" style:background={healthOf(s.url) === 'ok' ? 'var(--success)' : healthOf(s.url) === 'stale' ? 'var(--warning)' : 'var(--faint)'}></span>
         <span class="smain">
           <b class="sname">{hostOf(s.url)}</b>
-          <span class="meta ssub">{s.url === hostOf(s.url) ? '内建源' : 'RSS'}{st.lastAt ? ` · 上次 ${relTime(st.lastAt)}` : ' · 还没读到'} · 今日 {st.todayN} 条</span>
-        </span>
-        <span class="fans" title={'有兴趣的命：' + st.fans.join('/')}>
-          {#each st.fans as id (id)}<Creature life={rosterVisual(id)} size={20} animate={false} face={false} />{/each}
+          <span class="meta ssub">{s.url === hostOf(s.url) ? '内建源' : 'RSS'} · {st ? `上次 ${relTime(st.lastFetchAt)}（${st.lastCount} 条）· 今日 ${st.todayCount} 条${st.lastOk ? '' : ` · ✗ ${st.lastError || '抓取失败'}`}` : '待首抓'}</span>
         </span>
         <button class="toggle" class:on={s.on} role="switch" aria-checked={s.on} aria-label="启停 {hostOf(s.url)}" on:click={() => toggle(i)}><i></i></button>
       </div>
@@ -148,7 +145,6 @@
   .smain { flex: 1; min-width: 0; }
   .sname { font-weight: 700; font-size: var(--fs-sm); }
   .ssub { display: block; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .fans { flex: none; display: inline-flex; gap: 2px; }
   .addrow { display: flex; gap: 8px; padding: 10px; }
   .freq { display: flex; align-items: flex-end; gap: 12px; padding: 0 10px 6px; }
   .freqlab { flex: none; width: 200px; }
