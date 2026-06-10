@@ -79,7 +79,9 @@ export function serveStatic(res: ServerResponse, file: string): boolean {
     }
     const base = {
       'Content-Type': CT[ext] ?? 'application/octet-stream',
-      'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=31536000, immutable',
+      // .html 与 PWA 入口件（sw.js / manifest）必须每次重验：service worker 脚本被长缓存会把全站钉死在旧版。
+      // 其余都是带内容哈希的产物 → 长缓存 + immutable。
+      'Cache-Control': ext === '.html' || file.endsWith('sw.js') || ext === '.webmanifest' ? 'no-cache' : 'public, max-age=31536000, immutable',
       ...(c.gz ? { Vary: 'Accept-Encoding' } : {}),
       ...securityHeaders(),
     };
