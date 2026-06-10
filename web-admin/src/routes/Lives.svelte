@@ -1,6 +1,7 @@
 <script>
-  // 生命体：左列表（活体 + 情绪·时段 + 醒睡点）/ 右详情（星台 Hero + 4 KPI + 成熟度三面 +
-  // 兴趣 + 心声 + 与用户的关系 + 轻干预 + 福祉时间线 + 同类往来 + 生命事件流）。
+  // 生命体：二级页面。一级 = 全宽名册卡片网格（活体 + 名字 + 醒睡点 + 情绪·时段 + 关键徽标）；
+  // 二级 = 点卡片进入的全宽详情（星台 Hero + 4 KPI + 成熟度三面 + 兴趣 + 心声 +
+  // 与用户的关系 + 轻干预 + 福祉时间线 + 同类往来 + 生命事件流）。
   // 观察为主、干预克制——她们是居民，不是配置项。
   import { onMount } from 'svelte';
   import { api } from '../lib/api.js';
@@ -17,7 +18,7 @@
 
   export let param = null;
 
-  let sel = param;
+  let sel = param;       // null = 一级列表 / id = 二级详情
   let detail = null;     // /admin/lives/:id 深观快照
   let well = [];         // /admin/lives/:id/wellbeing → 健康采样时间线
   let events = null;     // /admin/lives/:id/events
@@ -41,14 +42,32 @@
   }
   const hm = (at) => new Date(at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
 
+  // 名册卡片上的关键徽标——有才显示（字段缺省时不出现，不造数）。
+  function badges(l) {
+    const out = [];
+    if ((l.sleepPressure || 0) > 0.7) out.push(['困意', 'var(--warning)']);
+    if (l.tension) out.push(['拉扯', 'var(--life-tension)']);
+    if (l.willingToWake === false) out.push(['不愿醒', 'var(--life-asleep)']);
+    return out.slice(0, 2);
+  }
+
+  function toTop() { const m = document.querySelector('main'); if (m) m.scrollTop = 0; }
+
   async function select(id) {
     sel = id; peerOpen = ''; thread = []; interveneMsg = ''; error = '';
     detail = null; well = []; events = null; relations = null;
+    toTop();
     try {
       const [d, w, ev] = await Promise.all([api.life(id), api.wellbeing(id).catch(() => []), api.lifeEvents(id, 100).catch(() => null)]);
       detail = d; well = Array.isArray(w) ? w : []; events = ev;
       try { relations = (await api.relations(id)).relations || []; } catch { relations = null; } // steward 无权
     } catch (e) { error = e.message; authGuard(e); }
+  }
+
+  function back() {
+    sel = null; detail = null; well = []; events = null; relations = null;
+    peerOpen = ''; thread = []; interveneMsg = ''; error = '';
+    toTop();
   }
 
   async function openPeer(r) {
@@ -68,33 +87,48 @@
   function onBorn(e) { creating = false; reload().then(() => select(e.detail.id)); }
 
   onMount(async () => {
-    let list = $roster;
-    if (!list.length) { try { list = (await api.overview()).lives || []; roster.set(list); } catch (e) { error = e.message; authGuard(e); } }
+    if (!$roster.length) { try { roster.set((await api.overview()).lives || []); } catch (e) { error = e.message; authGuard(e); } }
     if (param) select(param);
-    else if (list.length) select(list[0].id);
   });
 </script>
 
-<PageHead title="生命体" sub="观察她们的健康与状态——干预要克制，她们的人生属于她们自己">
-  <button slot="right" class="btn btn-sm" on:click={() => { creating = true; }}>新的生命</button>
-</PageHead>
-{#if error}<p class="msg bad">{error}</p>{/if}
 {#if creating}<CreateLife on:close={() => { creating = false; }} on:born={onBorn} />{/if}
 
-<div class="cols">
-  <div class="card-quiet list">
-    {#each lives as l (l.id)}
-      <button class="item" class:on={sel === l.id} on:click={() => select(l.id)}>
-        <Creature life={lifeVisual(l)} size={38} />
-        <span class="imain">
-          <b class="iname">{l.id}</b>
-          <span class="isub">{l.awake ? `${l.emotion} · ${l.dayPhase}` : '休眠'} · 活力 {Math.round((l.vitality || 0) * 100)}%</span>
-        </span>
-        <span class="idot" style:background={l.awake ? 'var(--life-awake)' : 'var(--life-asleep)'}></span>
-      </button>
-    {/each}
-    {#if !lives.length}<p class="caption pad">还没有生命体。点右上「新的生命」。</p>{/if}
+{#if sel === null}
+  <!-- 一级：生命体名册（全宽卡片网格） -->
+  <PageHead title="生命体" sub="观察她们的健康与状态——干预要克制，她们的人生属于她们自己">
+    <button slot="right" class="btn btn-sm" on:click={() => { creating = true; }}>新的生命</button>
+  </PageHead>
+  {#if error}<p class="msg bad">{error}</p>{/if}
+
+  {#if lives.length}
+    <div class="lgrid">
+      {#each lives as l (l.id)}
+        <button class="card-interactive lcard" on:click={() => select(l.id)}>
+          <Creature life={lifeVisual(l)} size={60} />
+          <span class="lname">
+            <b>{l.id}</b>
+            <span class="idot" style:background={l.awake ? 'var(--life-awake)' : 'var(--life-asleep)'}></span>
+          </span>
+          <span class="lsub">{l.awake ? `${l.emotion} · ${l.dayPhase}` : '休眠'}</span>
+          {#if badges(l).length}
+            <span class="lpills">
+              {#each badges(l) as [tag, tone]}<span class="pill" style:color={tone}>{tag}</span>{/each}
+            </span>
+          {/if}
+        </button>
+      {/each}
+    </div>
+  {:else}
+    <div class="card-quiet placeholder"><span class="caption">还没有生命体。点右上「新的生命」。</span></div>
+  {/if}
+{:else}
+  <!-- 二级：生命体详情（全宽） -->
+  <div class="backbar">
+    <button class="btn btn-ghost btn-sm" on:click={back}>← 返回列表</button>
+    <h1 class="page-title">{sel}</h1>
   </div>
+  {#if error}<p class="msg bad">{error}</p>{/if}
 
   {#if detail}
     <div class="detail">
@@ -243,20 +277,24 @@
         </div>
       </div>
     </div>
-  {:else}
-    <div class="card-quiet placeholder"><span class="caption">{lives.length ? '选择一条命查看她的状态。' : '还没有生命体。'}</span></div>
+  {:else if !error}
+    <div class="card-quiet placeholder"><span class="caption">正在读取她的状态…</span></div>
   {/if}
-</div>
+{/if}
 
 <style>
-  .list { padding: 8px; }
-  .pad { padding: 10px 12px; }
-  .item { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 10px 12px; border-radius: var(--r-sm); }
-  .item.on { background: var(--surface-2); }
-  .imain { flex: 1; min-width: 0; }
-  .iname { font-weight: 700; font-size: var(--fs-md); }
-  .isub { display: block; font-size: var(--fs-2xs); color: var(--faint); }
+  /* —— 一级：名册卡片网格 —— */
+  .lgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+  .lcard { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 22px 16px 18px; text-align: center; }
+  .lname { display: inline-flex; align-items: center; gap: 7px; font-size: var(--fs-md); }
+  .lname b { font-weight: 700; }
+  .lsub { font-size: var(--fs-2xs); color: var(--faint); }
+  .lpills { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
   .idot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  .placeholder { display: grid; place-items: center; min-height: 320px; }
+
+  /* —— 二级：返回行 + 详情 —— */
+  .backbar { display: flex; align-items: center; gap: 14px; padding: 28px 0 20px; }
   .detail { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
   .hero { display: flex; gap: 18px; align-items: center; padding: 18px; }
   .stage { flex: none; width: 110px; height: 110px; border-radius: var(--r-md); display: grid; place-items: center; }
@@ -306,5 +344,4 @@
   .evt { flex: none; width: 40px; color: var(--faint); white-space: nowrap; }
   .evk { flex: none; width: 88px; color: var(--muted); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .evc { flex: 1; min-width: 0; line-height: 1.5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .placeholder { display: grid; place-items: center; min-height: 320px; }
 </style>
