@@ -15,7 +15,7 @@ export interface FeedStore {
   addComment(postId: string, userId: string, handle: string, text: string, replyTo?: string | null): FeedComment;
   addLifeComment(postId: string, lifeId: string, text: string, replyTo?: string | null): FeedComment; // 生命流评论（同类/真人互评）
   commentsFor(postId: string, limit: number): FeedComment[];
-  lifeRepliesTo(handle: string, limit: number): Array<{ postId: string; lifeId: string; text: string; at: string }>; // 生命体回复了某个真人留言（通知中心用）
+  lifeRepliesTo(userId: string, handle: string, limit: number): Array<{ postId: string; lifeId: string; text: string; at: string }>; // 生命体回复了【我本人】的留言（通知中心用；userId 精确到人，昵称不唯一不串）
   commentCounts(postIds: string[]): Map<string, number>;
   latestCommentsFor(postIds: string[], perPost: number): Map<string, FeedComment[]>; // 每帖最近 N 条（首页内联预览）
   setSource(postId: string, src: PostSource): void;
@@ -70,14 +70,14 @@ export function createFeedStore(path: string): FeedStore {
       const rows = db.prepare('SELECT id,user_id,handle,text,at,kind,reply_to FROM post_comments WHERE post_id=? ORDER BY id DESC LIMIT ?').all(postId, limit) as Array<{ id: number; user_id: string; handle: string; text: string; at: string; kind: string; reply_to: string | null }>;
       return rows.map((r) => ({ id: Number(r.id), userId: r.user_id, handle: r.handle, text: r.text, at: r.at, kind: kindOf(r.kind), replyTo: r.reply_to ?? null })).reverse();
     },
-    lifeRepliesTo(handle, limit) {
-      // 同名防错投：只算"回的是同帖里【真实用户】的那条留言"（EXISTS kind='user'）——
-      // 即使昵称与某条生命体撞名（历史数据），生命体之间的互评也绝不会误投成"她回复了你"。
+    lifeRepliesTo(userId, handle, limit) {
+      // 同名防错投（双重）：reply_to 只是昵称字符串，而昵称既可能与生命体撞名（历史数据）、也可能多个用户重名——
+      // 故只算"回的是同帖里【我本人(user_id)】以该昵称留下的那条用户留言"。同类互评/别人的同名留言绝不误投给我。
       const rows = db.prepare(
         "SELECT post_id,handle,text,at FROM post_comments p WHERE kind='life' AND reply_to=? " +
-        "AND EXISTS(SELECT 1 FROM post_comments u WHERE u.post_id=p.post_id AND u.kind='user' AND u.handle=p.reply_to) " +
+        "AND EXISTS(SELECT 1 FROM post_comments u WHERE u.post_id=p.post_id AND u.kind='user' AND u.handle=p.reply_to AND u.user_id=?) " +
         'ORDER BY id DESC LIMIT ?',
-      ).all(handle, limit) as Array<{ post_id: string; handle: string; text: string; at: string }>;
+      ).all(handle, userId, limit) as Array<{ post_id: string; handle: string; text: string; at: string }>;
       return rows.map((r) => ({ postId: r.post_id, lifeId: r.handle, text: r.text, at: r.at }));
     },
     commentCounts(postIds) {

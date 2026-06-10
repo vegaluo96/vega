@@ -60,6 +60,7 @@ export interface AccountStore {
   handleTaken(handle: string): boolean; // 有没有用户已用这个昵称（大小写不敏感）——接生生命体前防撞名（用户↔生命体不可同名）
   relIdFor(userId: string): string;
   balance(userId: string): number;
+  lastLedgerAt(userId: string): string | null; // 最近一笔额度流水的时间——给"心意用尽"通知当稳定时间戳（用 now() 会让红点永远点不灭）
   debit(userId: string, amount: number, reason: string, ref?: string): boolean;
   credit(userId: string, amount: number, reason: string, ref?: string): void;
   requestRecharge(userId: string, amount: number): number;
@@ -234,6 +235,10 @@ export function createAccountStore(path = ':memory:', opts: AccountStoreOptions 
     },
     relIdFor: (userId) => `u_${userId}`,
     balance,
+    lastLedgerAt(userId) {
+      const r = db.prepare('SELECT at FROM credit_ledger WHERE user_id=? ORDER BY id DESC LIMIT 1').get(userId) as { at: string } | undefined;
+      return r ? r.at : null;
+    },
     debit,
     credit,
     requestRecharge(userId, amount) {

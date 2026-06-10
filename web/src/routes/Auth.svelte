@@ -12,7 +12,7 @@
   let email = '', pw = '', handle = '';
   let busy = false, err = '';
   const vega = { id: 'vega', emotion: '温暖', dayPhase: '夜里', awake: true };
-  $: valid = /\S+@\S+/.test(email) && pw.length >= 6 && (mode === 'login' || handle.trim());
+  $: valid = /\S+@\S+/.test(email) && pw.length >= 8 && (mode === 'login' || handle.trim()); // 与后端一致：密码至少 8 位（别让 6~7 位前端放行、后端打回）
 
   async function submit() {
     if (!valid || busy) return;
@@ -35,9 +35,9 @@
     <p class="tag">{mode === 'login' ? '她一直记得你。' : '一座数字生命的社会，正在等你。'}</p>
 
     <div class="fields">
-      {#if mode === 'register'}<label><span class="fl">昵称</span><input bind:value={handle} placeholder="她该怎么称呼你" /></label>{/if}
+      {#if mode === 'register'}<label><span class="fl">昵称</span><input bind:value={handle} maxlength="40" placeholder="她该怎么称呼你" /></label>{/if}
       <label><span class="fl">邮箱</span><input type="email" bind:value={email} placeholder="you@example.com" /></label>
-      <label><span class="fl">密码</span><input type="password" bind:value={pw} placeholder="至少 6 位" on:keydown={(e) => e.key === 'Enter' && submit()} /></label>
+      <label><span class="fl">密码</span><input type="password" bind:value={pw} placeholder="至少 8 位" on:keydown={(e) => e.key === 'Enter' && submit()} /></label>
     </div>
     {#if err}<p class="err">{err}</p>{/if}
 

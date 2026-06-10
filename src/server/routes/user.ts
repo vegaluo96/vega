@@ -7,6 +7,9 @@ import { visibleTo, type MessageSentPayload } from '../../index.ts';
 import type { Ctx } from '../context.ts';
 
 const now = (): string => new Date().toISOString();
+// 日志脱敏：iLink 原始响应里有 bot_token（等于微信通道的钥匙）/二维码令牌——绝不原样进日志（journald 可被读）。
+const redactSecrets = (o: unknown): string =>
+  JSON.stringify(o).replace(/"(bot_token|botToken|token|qrcode|qrcode_token)"\s*:\s*"[^"]*"/g, '"$1":"〔遮罩〕"').slice(0, 400);
 
 export async function handleUserApi(ctx: Ctx, req: IncomingMessage, res: ServerResponse, url: string, seg: string[]): Promise<void> {
   const {
@@ -36,9 +39,11 @@ export async function handleUserApi(ctx: Ctx, req: IncomingMessage, res: ServerR
   if (req.method === 'POST' && url === '/api/auth/register') {
     const b = await readJson(req);
     // 防冒充：用户昵称不得与任何生命体同名（大小写不敏感）——否则广场评论/通知里真假难辨。
-    // （反向同理：接生生命体时也查不得与已有用户昵称撞名，见 lives.ts birthLife。）
+    // 按【最终生效的昵称】查（与 accounts.register 同一派生：空昵称回落邮箱前缀、截 40）——
+    // 堵"昵称留空 + 邮箱叫 vega@x.com → 前缀变 vega"的旁路。反向防撞见 lives.ts birthLife。
     const handle = String(b.handle ?? '').trim();
-    if (handle && lifeById(handle.toLowerCase())) return send(res, 400, { error: '这个名字属于一条生命体，换一个吧' });
+    const effHandle = (handle || String(b.email ?? '').trim().toLowerCase().split('@')[0]).slice(0, 40);
+    if (effHandle && lifeById(effHandle.toLowerCase())) return send(res, 400, { error: '这个名字属于一条生命体，换一个吧' });
     const r = accounts.register(String(b.email ?? ''), String(b.password ?? ''), handle, effBilling().starterCredits);
     if (!r.ok) return send(res, 400, { error: r.error });
     const l = accounts.login(String(b.email ?? ''), String(b.password ?? ''));
@@ -108,14 +113,14 @@ export async function handleUserApi(ctx: Ctx, req: IncomingMessage, res: ServerR
   if (req.method === 'POST' && url === '/api/wechat/connect/start') {
     let r = await ilink.getQrcode();
     if (!r.ok) r = await ilink.getQrcode(); // 偶发超时再试一次，别让一次抖动直接变"连接错误"
-    console.log('[wechat] getQrcode ->', JSON.stringify(r.raw).slice(0, 400));
+    console.log('[wechat] getQrcode ->', redactSecrets(r.raw));
     if (!r.ok || !r.qr) return send(res, 502, { error: 'iLink 取二维码失败（多为网络/超时，稍后重点）', detail: r.raw });
     return send(res, 200, { qrcode: r.qr.qrcode, qrcodeUrl: r.qr.qrcodeUrl });
   }
   if (req.method === 'POST' && url === '/api/wechat/connect/poll') {
     const b = await readJson(req);
     const st = await ilink.getStatus(String(b.qrcode ?? ''));
-    console.log('[wechat] status ->', st.status, JSON.stringify(st.raw).slice(0, 400));
+    console.log('[wechat] status ->', st.status, redactSecrets(st.raw));
     if (st.status === 'confirmed' && st.botToken) {
       // 绑【你正在哪条命的页面里扫码就绑哪条命】，不再默认 vega/第一条。前端从该命页传 lifeId 过来。
       const reqLife = String(b.lifeId ?? '');
@@ -217,12 +222,13 @@ export async function handleUserApi(ctx: Ctx, req: IncomingMessage, res: ServerR
     for (const p of accounts.pendingRechargesFor(me.id)) {
       notes.push({ type: 'wallet', ok: true, pending: true, at: p.requestedAt, title: `充值审批中 · ${p.amount} 心意`, text: '申请已收到，正在等待通过；通过后自动到账并通知你。' });
     }
-    // 3) 系统：心意用尽提醒
-    if (accounts.balance(me.id) <= 0) notes.push({ type: 'wallet', ok: false, at: now(), title: '心意用尽了', text: '她仍在、仍记得你，只是这会儿表达朴素些。充值可恢复。' });
+    // 3) 系统：心意用尽提醒。时间戳用【最后一笔流水】（稳定）而非 now()——否则每次拉取都"全新"，红点永远点不灭。
+    if (accounts.balance(me.id) <= 0) notes.push({ type: 'wallet', ok: false, at: accounts.lastLedgerAt(me.id) ?? me.createdAt, title: '心意用尽了', text: '她仍在、仍记得你，只是这会儿表达朴素些。充值可恢复。' });
     // 4) 欢迎（还没遇见谁）
     if (livesMetBy(me).length === 0) notes.push({ type: 'welcome', at: me.createdAt, title: '欢迎来到 ZSKY', text: '去广场，认识第一个她——她会记住你。' });
     // 5) 她在广场回复了你的留言（生命流评论里接了你的话）——直接的个人互动，离线也留痕。
-    for (const r of feed.lifeRepliesTo(me.handle, 15)) {
+    // 按 (user_id, 昵称) 精确到我本人——昵称不唯一（多个用户可重名），只按昵称匹配会把别人的"被回复"错投给我。
+    for (const r of feed.lifeRepliesTo(me.id, me.handle, 15)) {
       notes.push({ type: 'reply', life: r.lifeId, postId: r.postId, at: r.at, title: `${r.lifeId} 回复了你的留言`, text: r.text });
     }
     // 6) 关系里程碑：你和她到了「好友/亲密」这一层（站立态——确切"升级瞬间"需另存标记，留待重构）。
@@ -270,6 +276,7 @@ export async function handleUserApi(ctx: Ctx, req: IncomingMessage, res: ServerR
     const b = await readJson(req);
     const postId = String(b.postId ?? ''); const emoji = String(b.emoji ?? '').slice(0, 8);
     if (!postId || !emoji) return send(res, 400, { error: 'postId/emoji required' });
+    if (!allFeedPosts().some((p) => p.postId === postId)) return send(res, 404, { error: 'no such post' }); // 只能给真实存在的帖互动——不收任意 postId 的垃圾写入
     feed.toggleReaction(postId, me.id, emoji);
     const rx = feed.reactionsFor([postId], me.id).get(postId);
     return send(res, 200, { reactions: rx?.counts ?? {}, myReaction: rx?.mine ?? null });
@@ -277,8 +284,9 @@ export async function handleUserApi(ctx: Ctx, req: IncomingMessage, res: ServerR
   if (req.method === 'POST' && url === '/api/feed/comment') {
     const b = await readJson(req);
     const postId = String(b.postId ?? ''); const text = String(b.text ?? '').slice(0, 500).trim();
-    const replyTo = typeof b.replyTo === 'string' && b.replyTo.trim() ? b.replyTo.trim() : null; // 回复某条评论（同类或别的真人）→ 显示"回复 X"，生命体下一轮也能接你这句
+    const replyTo = typeof b.replyTo === 'string' && b.replyTo.trim() ? b.replyTo.trim().slice(0, 40) : null; // 回复对象=昵称（≤40，与注册上限一致）
     if (!postId || !text) return send(res, 400, { error: 'postId/text required' });
+    if (!allFeedPosts().some((p) => p.postId === postId)) return send(res, 404, { error: 'no such post' }); // 同上：评论必须挂在真实的帖上
     return send(res, 200, feed.addComment(postId, me.id, me.handle, text, replyTo));
   }
   // 单条心声详情（点开帖子看留言互动）：正文 + 出处 + 表情 + 评论一次返回。
@@ -321,8 +329,9 @@ export async function handleUserApi(ctx: Ctx, req: IncomingMessage, res: ServerR
     accounts.addPushSub(me.id, sub.endpoint, sub.keys.p256dh, sub.keys.auth);
     return send(res, 200, { ok: true });
   }
-  // 钱包：申请充值（暂后台审批）。
+  // 钱包：申请充值（暂后台审批）。待审上限 3 笔——防无限堆积刷爆审批队列（审完即可再申请）。
   if (req.method === 'POST' && url === '/api/recharge') {
+    if (accounts.pendingRechargesFor(me.id).length >= 3) return send(res, 400, { error: '已有多笔申请在审批中，等通过后再申请吧' });
     const b = await readJson(req);
     const amount = Math.max(1, Math.min(100000, Math.round(Number(b.amount) || 0)));
     const id = accounts.requestRecharge(me.id, amount);
