@@ -71,6 +71,7 @@ export async function converse(
   perceiver?: Perceiver,
   channel = 'chat',
   cached?: CachedState, // 可选：daemon 传入已追平的缓存态 → 增量折叠，省掉全量重放（热路径提速）
+  extraFacts?: string, // 可选：平台层注入的跨命确定性事实（如「我记得X的样子」）——只追加进 grounding，模型仍只产措辞（契约①）
 ): Promise<ConverseResult> {
   // 乐观锁令牌：开头读一次，覆盖整个 await 窗口（不再在 append 瞬间才读——那样 CAS 永不冲突）。
   const expected = store.version();
@@ -106,8 +107,9 @@ export async function converse(
     ? (() => { const st = structuredClone(cached.st); advanceState(st, [previewReceived]); return projectState(st, previewReceived.seq); })()
     : reconstruct([...events, previewReceived]);
 
-  // ③ SoulWorkspace：确定性装配"状态摘要 + 语气倾向"。
-  const workspace = deriveWorkspace(snapshot, relationshipId);
+  // ③ SoulWorkspace：确定性装配"状态摘要 + 语气倾向"。extraFacts 非空才拼到 selfFacts 末尾（跨命信息属平台层）。
+  const ws0 = deriveWorkspace(snapshot, relationshipId);
+  const workspace = extraFacts ? { ...ws0, selfFacts: ws0.selfFacts + extraFacts } : ws0;
 
   // ④ 模型只当嘴。挂了/超时也不影响她——兜底到确定性的"嘴"（顺着对方语气、带状态，而非单句套话）。
   const input = { ...workspace, lastUserMessage: content, recentContext };
@@ -153,12 +155,14 @@ export async function reachOut(
   occurredAt: string,
   world?: { title: string; summary: string; source: string }, // 给同类寒暄当话题：就着真实世界的一条事开口（而非站内瞎聊）
   snap?: DerivedSnapshot, // 可选：调用方（daemon snapOf）传入已追平的缓存快照 → 免全量重放（自主回路每跳省 O(全事件)）
+  extraFacts?: string, // 可选：平台层注入的跨命确定性事实（如「我记得对方的样子」）——非空才拼进 selfFacts 末尾（契约①不破）
 ): Promise<OutreachResult | null> {
   const expected = store.version(); // 乐观锁令牌：开头读一次，覆盖 await 窗口
   const snapshot = snap ?? reconstruct(store.list());
   const bond = snapshot.bonds[relationshipId];
   if (!bond) return null;
-  const ws = deriveWorkspace(snapshot, relationshipId);
+  const ws0 = deriveWorkspace(snapshot, relationshipId);
+  const ws = extraFacts ? { ...ws0, selfFacts: ws0.selfFacts + extraFacts } : ws0;
   const outreach: Workspace = world
     ? {
         ...ws,
