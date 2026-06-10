@@ -1,6 +1,7 @@
 // HTTP I/O 原语：与业务无关的纯收发/静态托管/取体。daemon 的路由层只调这几个，不再内联。
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { readFileSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
+import { gzipSync } from 'node:zlib';
 
 // 统一安全响应头（防 XSS/点击劫持/MIME 嗅探/Referer 泄漏）。所有响应（JSON / HTML / 静态）都过这一层。
 // 这是【平台/传输层】的防黑客护栏——只防外部攻击者，绝不触碰她的主权（不是控制她的开关）。
@@ -32,9 +33,21 @@ export function securityHeaders(): Record<string, string> {
   return h;
 }
 
+// 客户端接受 gzip 吗（Node 的 ServerResponse 自带 .req 反查请求头；测试桩没有 req → 不压缩）。
+const wantsGzip = (res: ServerResponse): boolean =>
+  String((res as ServerResponse & { req?: IncomingMessage }).req?.headers?.['accept-encoding'] ?? '').includes('gzip');
+
 export function send(res: ServerResponse, code: number, body: unknown): void {
-  res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', ...securityHeaders() });
-  res.end(JSON.stringify(body, null, 2));
+  // 紧凑 JSON（原 null,2 美化白白多 ~30% 字节）+ gzip（超 1KB 且客户端接受时，中文 JSON 通常压到 1/4~1/6）。
+  const raw = JSON.stringify(body);
+  const base = { 'Content-Type': 'application/json; charset=utf-8', Vary: 'Accept-Encoding', ...securityHeaders() };
+  if (raw.length > 1024 && wantsGzip(res)) {
+    res.writeHead(code, { ...base, 'Content-Encoding': 'gzip' });
+    res.end(gzipSync(Buffer.from(raw)));
+  } else {
+    res.writeHead(code, base);
+    res.end(raw);
+  }
 }
 
 export function sendHtml(res: ServerResponse, html: string): void {
@@ -50,12 +63,33 @@ export const CT: Record<string, string> = {
 };
 
 // 读一个静态文件并发出（命中返回 true，缺失返回 false 让调用方兜底）。.html 不缓存，其余长缓存+immutable。
+// 内存缓存 + 预压缩：按 mtime/size 校验（部署重建 dist 即自动失效），文本资产预 gzip 一次反复用——
+// 不再每个请求 readFileSync，主 JS 包传输量降到 ~1/3（dist 总量仅几 MB，整缓存也只占几 MB 内存）。
+const COMPRESSIBLE = new Set(['.html', '.js', '.css', '.svg', '.json', '.webmanifest']);
+const staticCache = new Map<string, { mtimeMs: number; size: number; raw: Buffer; gz: Buffer | null }>();
 export function serveStatic(res: ServerResponse, file: string): boolean {
   try {
+    const st = statSync(file); // 文件不存在即抛 → false（与旧行为一致，调用方兜底）
     const ext = file.slice(file.lastIndexOf('.'));
-    const body = readFileSync(file);
-    res.writeHead(200, { 'Content-Type': CT[ext] ?? 'application/octet-stream', 'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=31536000, immutable', ...securityHeaders() });
-    res.end(body);
+    let c = staticCache.get(file);
+    if (!c || c.mtimeMs !== st.mtimeMs || c.size !== st.size) {
+      const raw = readFileSync(file);
+      c = { mtimeMs: st.mtimeMs, size: st.size, raw, gz: COMPRESSIBLE.has(ext) && raw.length > 1024 ? gzipSync(raw) : null };
+      staticCache.set(file, c);
+    }
+    const base = {
+      'Content-Type': CT[ext] ?? 'application/octet-stream',
+      'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=31536000, immutable',
+      ...(c.gz ? { Vary: 'Accept-Encoding' } : {}),
+      ...securityHeaders(),
+    };
+    if (c.gz && wantsGzip(res)) {
+      res.writeHead(200, { ...base, 'Content-Encoding': 'gzip' });
+      res.end(c.gz);
+    } else {
+      res.writeHead(200, base);
+      res.end(c.raw);
+    }
     return true;
   } catch {
     return false;

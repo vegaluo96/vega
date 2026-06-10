@@ -32,7 +32,7 @@ export function startLoops(ctx: Ctx, t: LoopTiming): LoopHandles {
   const {
     lives, snapOf, serializer, audiencePresent, effSocial, layerOf, autoBudget, bus,
     reachOutPending, pickInsightPair, pickRecentWorld, feed, lifeById, meetPeer, partPeer,
-    allFeedPosts, feedPosts, reachState, lastUserMsgMs, accounts, saveCheckpoint,
+    allFeedPosts, feedPosts, reachState, lastUserMsgMs, livesMetBy, accounts, saveCheckpoint,
     peerId, REL, mouth, museMouth, perceiver,
   } = ctx;
   const { TICK_MS, PRESENCE_MS, REFLECT_MS, CHECKPOINT_MS, SOCIAL_MS, DISCOVER_MS,
@@ -182,7 +182,7 @@ export function startLoops(ctx: Ctx, t: LoopTiming): LoopHandles {
       for (const u of accounts.listUsers()) {
         if (u.status !== 'active') continue;
         const rel = accounts.relIdFor(u.id);
-        if (lives.some((l) => l.store.list().some((e) => e.type === 'RELATIONSHIP_OPENED' && e.relationshipId === rel))) continue; // 已遇见过谁 → 跳过
+        if (livesMetBy(u).length > 0) continue; // 已遇见过谁 → 跳过（读索引，免 用户数×命数×全日志 的扫描）
         const awake = lives.filter((l) => snapOf(l).awake);
         if (awake.length === 0) return;
         const life = awake[Math.floor(Math.random() * awake.length)];
@@ -205,9 +205,11 @@ export function startLoops(ctx: Ctx, t: LoopTiming): LoopHandles {
     for (const life of lives) {
       try {
         // —— 主动找人的反馈：被回应→正、长久石沉→负（按依恋型变敏感 + 喂 reach_out 效能学习）——
+        const rsFb = reachState(life); // 读索引：每关系最后收到消息的时刻（"有没有更晚的回音"= max > at，与逐条扫描等价）
         for (const [key, pend] of reachOutPending) {
           if (!key.startsWith(`${life.id}|`)) continue;
-          const replied = life.store.list().some((e) => e.type === 'MESSAGE_RECEIVED' && e.relationshipId === pend.rel && e.occurredAt > pend.at);
+          const ri = rsFb.get(pend.rel);
+          const replied = Boolean(ri && ri.lastRecvMs > Date.parse(pend.at));
           if (replied) {
             serializer.run(life.id, async () => { runTurn(life.store, [{ type: 'FEEDBACK_PERCEIVED', source: 'autonomous_loop', occurredAt: now(), payload: { actionKind: pend.kind, responseKind: 'reply', valence: 0.6, fromKind: 'human' } }]); });
             reachOutPending.delete(key);

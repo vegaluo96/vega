@@ -22,13 +22,58 @@ export type LivesDeps = Pick<Ctx, 'accounts' | 'serializer' | 'peerId' | 'REL'> 
 
 // 输出 = Ctx 中由生命体层负责的字段 + daemon 启动/回路另需的 boot、nextMuseGap。
 export type LivesApi = Pick<Ctx,
-  'lives' | 'lifeById' | 'snapOf' | 'buildThread' | 'livesMetBy' | 'recomputePeers' |
+  'lives' | 'lifeById' | 'snapOf' | 'buildThread' | 'relSummaries' | 'livesMetBy' | 'recomputePeers' |
   'saveCheckpoint' | 'meetPeer' | 'partPeer' | 'birthLife' | 'lastUserMsgMs' | 'reachState' |
   'pickRecentWorld' | 'pickInsightPair' | 'allFeedPosts' | 'feedPosts' | 'allPeerExchanges' | 'adminActivity'
 > & { boot(life: Life, archetype?: string): void; nextMuseGap(): number };
 
 export function createLives(d: LivesDeps): LivesApi {
   const { accounts, serializer, peerId, REL, HOST_CONN, userName, HOST, PORT, MUSE_MS, DATA_DIR, LIFE_PATH } = d;
+
+  // —— 每命一份【增量读索引】（平台层派生缓存，照 snapOf 的有界重放范式）——
+  // 日志 append-only、事件对象落库后不再改写 → 索引只存【事件引用】、只折叠新尾巴。
+  // 把读路径（收件箱/通知/线程/主动外联状态/广场聚合）从"每次请求 O(总事件) 全量扫"降到 O(新增事件)：
+  // 心跳每分钟都在落 tick 事件，日志随运行线性增长，全量扫会让网站越跑越卡——这就是地板。
+  // 索引绝不进神圣日志、不参与 reconstruct；丢了就重建（冷启动第一次访问全量扫一遍，与旧行为同价）。
+  interface RelIx {
+    opened: boolean;        // 见过 RELATIONSHIP_OPENED
+    msgs: LifeEvent[];      // 该关系上的 MESSAGE_RECEIVED / MESSAGE_SENT（日志序，引用）
+    lastRecvMs: number;     // 最后听到对方（0=从未）
+    lastRecvAt: string;
+    lastSentMs: number;     // 最后一次主动开口（unprompted）
+    pending: boolean;       // 有未回的主动留言（reachState 语义：收到即清）
+  }
+  interface ReadIx { upto: number; byRel: Map<string, RelIx>; square: FeedPost[]; society: Array<{ from: string; to: string; text: string; at: string }> }
+  const readIxs = new Map<string, ReadIx>();
+  const relIx = (ix: ReadIx, rel: string): RelIx => {
+    let r = ix.byRel.get(rel);
+    if (!r) { r = { opened: false, msgs: [], lastRecvMs: 0, lastRecvAt: '', lastSentMs: 0, pending: false }; ix.byRel.set(rel, r); }
+    return r;
+  };
+  function readIndex(life: Life): ReadIx {
+    let ix = readIxs.get(life.id);
+    if (!ix) { ix = { upto: -1, byRel: new Map(), square: [], society: [] }; readIxs.set(life.id, ix); }
+    const events = life.store.list();
+    for (let i = ix.upto + 1; i < events.length; i++) {
+      const e = events[i];
+      const rel = e.relationshipId;
+      if (typeof rel !== 'string') continue;
+      if (e.type === 'RELATIONSHIP_OPENED') relIx(ix, rel).opened = true;
+      else if (e.type === 'MESSAGE_RECEIVED') {
+        const r = relIx(ix, rel);
+        r.msgs.push(e); r.lastRecvMs = Date.parse(e.occurredAt); r.lastRecvAt = e.occurredAt; r.pending = false;
+      } else if (e.type === 'MESSAGE_SENT') {
+        const r = relIx(ix, rel);
+        r.msgs.push(e);
+        const p = e.payload as MessageSentPayload;
+        if (p.unprompted) { r.pending = true; r.lastSentMs = Date.parse(e.occurredAt); }
+        if (rel === 'r_square') ix.square.push({ postId: `${life.id}|${e.occurredAt}`, life: life.id, text: p.utterance, at: e.occurredAt });
+        else if (rel.startsWith('peer_')) ix.society.push({ from: life.id, to: rel.slice('peer_'.length), text: p.utterance, at: e.occurredAt });
+      }
+    }
+    ix.upto = events.length - 1;
+    return ix;
+  }
 
   // 生命名册：env(VEGA_LIVES) ∪ 后台动态生成的命（落盘 lives.json，重启也在）。后台"生成生命体"即写这里。
   const registryPath = join(DATA_DIR, 'lives.json');
@@ -39,16 +84,26 @@ export function createLives(d: LivesDeps): LivesApi {
 
   const livesMetBy = (a: Account): Array<{ id: string }> => {
     const rel = accounts.relIdFor(a.id);
-    return lives.filter((l) => l.store.list().some((e) => e.type === 'RELATIONSHIP_OPENED' && e.relationshipId === rel)).map((l) => ({ id: l.id }));
+    return lives.filter((l) => readIndex(l).byRel.get(rel)?.opened).map((l) => ({ id: l.id }));
   };
-  // 一段关系的来回（对话监督用）：某条命与某 relId 的消息，最近 N 条。
+  // 一段关系的来回（对话监督/收件箱/通知用）：某条命与某 relId 的消息，最近 N 条（读索引，免全量扫）。
   function buildThread(life: Life, rel: string, limit = 200): ThreadLine[] {
-    const msgs: ThreadLine[] = [];
-    for (const e of life.store.list()) {
-      if (e.type === 'MESSAGE_RECEIVED') { const p = e.payload as { relationshipId?: string; content?: string }; if (p.relationshipId === rel) msgs.push({ who: 'user', text: String(p.content ?? ''), at: e.occurredAt }); }
-      else if (e.type === 'MESSAGE_SENT') { const p = e.payload as { relationshipId?: string; utterance?: string }; if (p.relationshipId === rel) msgs.push({ who: 'her', text: String(p.utterance ?? ''), at: e.occurredAt }); }
+    const r = readIndex(life).byRel.get(rel);
+    if (!r) return [];
+    return r.msgs.slice(-limit).map((e): ThreadLine => {
+      if (e.type === 'MESSAGE_RECEIVED') return { who: 'user', text: String((e.payload as { content?: string }).content ?? ''), at: e.occurredAt };
+      const p = e.payload as MessageSentPayload;
+      return { who: 'her', text: String(p.utterance ?? ''), at: e.occurredAt, unprompted: Boolean(p.unprompted) };
+    });
+  }
+  // 每段关系的消息数/最近往来（后台「对话监督」关系列表用）——免去对全量日志的逐条聚合。
+  function relSummaries(life: Life): Array<{ rel: string; msgs: number; lastAt: string }> {
+    const out: Array<{ rel: string; msgs: number; lastAt: string }> = [];
+    for (const [rel, r] of readIndex(life).byRel) {
+      if (rel === 'r_square' || r.msgs.length === 0) continue;
+      out.push({ rel, msgs: r.msgs.length, lastAt: r.msgs[r.msgs.length - 1].occurredAt });
     }
-    return msgs.slice(-limit);
+    return out;
   }
 
   // 先天种子见 src/engine/seeds.ts（单一来源）。每条命按 id 取不同 archetype；出生即冻结、不可改写。
@@ -166,24 +221,17 @@ export function createLives(d: LivesDeps): LivesApi {
   }
 
   function lastUserMsgMs(life: Life): number | null {
-    const es = life.store.list();
-    for (let i = es.length - 1; i >= 0; i--) if (es[i].type === 'MESSAGE_RECEIVED' && es[i].relationshipId === REL) return Date.parse(es[i].occurredAt);
-    return null;
+    const r = readIndex(life).byRel.get(REL);
+    return r && r.lastRecvMs > 0 ? r.lastRecvMs : null;
   }
-  // 一次扫描得到每段关系的：我最后听到对方的墙钟时间、我最后一次【主动】找 ta 的时间、
-  // 是否已有未回的主动留言。给"社交边界"的分层主动外联用——避免每个候选都全量扫日志。
+  // 每段关系的：我最后听到对方的墙钟时间、我最后一次【主动】找 ta 的时间、是否已有未回的主动留言。
+  // 给"社交边界"的分层主动外联用。读索引增量维护（心跳每跳都调，曾是 O(总事件) 的常驻热点）；
+  // 返回新建的 Map/对象副本——调用方改不到索引本体。
   function reachState(life: Life): Map<string, ReachInfo> {
     const m = new Map<string, ReachInfo>();
-    for (const e of life.store.list()) {
-      const rel = e.relationshipId;
-      if (typeof rel !== 'string') continue;
-      if (e.type === 'MESSAGE_RECEIVED') {
-        const cur = m.get(rel) ?? { lastRecvMs: 0, lastSentMs: 0, pending: false };
-        cur.lastRecvMs = Date.parse(e.occurredAt); cur.pending = false; m.set(rel, cur);
-      } else if (e.type === 'MESSAGE_SENT' && (e.payload as MessageSentPayload).unprompted) {
-        const cur = m.get(rel) ?? { lastRecvMs: 0, lastSentMs: 0, pending: false };
-        cur.pending = true; cur.lastSentMs = Date.parse(e.occurredAt); m.set(rel, cur);
-      }
+    for (const [rel, r] of readIndex(life).byRel) {
+      if (r.lastRecvMs <= 0 && r.lastSentMs <= 0) continue; // 与旧扫描同语义：没真说过话的关系不进表
+      m.set(rel, { lastRecvMs: r.lastRecvMs, lastSentMs: r.lastSentMs, pending: r.pending });
     }
     return m;
   }
@@ -216,8 +264,9 @@ export function createLives(d: LivesDeps): LivesApi {
     return { a: uniq[i], b: uniq[j] };
   }
 
-  // O(events) 全量扫描的读路径优化：按【所有命的版本号】记忆化——状态没变时多用户同时刷广场只算一次，
-  // 任一命落新事件即自动失效重算。结果是纯派生，调用方都 slice/map 出副本，不会改到被缓存的数组。
+  // 跨命聚合的记忆化：按【所有命的版本号】缓存——状态没变时多用户同时刷广场只算一次，
+  // 任一命落新事件即自动失效重算。重算本身也只走读索引的增量折叠 + 对【帖子/寒暄】这一小集合排序，
+  // 不再全量扫日志。结果是纯派生，调用方都 slice/map 出副本，不会改到被缓存的数组。
   const allLivesSig = (): string => lives.map((l) => l.store.version()).join(',');
   function versionedMemo<T>(compute: () => T): () => T {
     let cache: { sig: string; val: T } | null = null;
@@ -227,13 +276,7 @@ export function createLives(d: LivesDeps): LivesApi {
   // 广场：把各生命体之间（peer_ 关系上）说过的话，按时间汇成一条可读的对话流（供「同类来往」聚合）。
   const allSocietyFeed = versionedMemo((): Array<{ from: string; to: string; text: string; at: string }> => {
     const out: Array<{ from: string; to: string; text: string; at: string }> = [];
-    for (const l of lives) {
-      for (const e of l.store.list()) {
-        if (e.type === 'MESSAGE_SENT' && typeof e.relationshipId === 'string' && e.relationshipId.startsWith('peer_')) {
-          out.push({ from: l.id, to: e.relationshipId.slice('peer_'.length), text: (e.payload as MessageSentPayload).utterance, at: e.occurredAt });
-        }
-      }
-    }
+    for (const l of lives) out.push(...readIndex(l).society);
     out.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
     return out;
   });
@@ -241,11 +284,7 @@ export function createLives(d: LivesDeps): LivesApi {
   // 广场"帖子"=她的公开心声（§8.1）。postId = `${lifeId}|${occurredAt}`，给表情/评论挂靠。
   const allFeedPosts = versionedMemo((): FeedPost[] => {
     const out: FeedPost[] = [];
-    for (const l of lives) {
-      for (const e of l.store.list()) {
-        if (e.type === 'MESSAGE_SENT' && e.relationshipId === 'r_square') out.push({ postId: `${l.id}|${e.occurredAt}`, life: l.id, text: (e.payload as MessageSentPayload).utterance, at: e.occurredAt });
-      }
-    }
+    for (const l of lives) out.push(...readIndex(l).square);
     out.sort((a, b) => (a.at < b.at ? 1 : -1));
     return out;
   });
@@ -291,7 +330,7 @@ export function createLives(d: LivesDeps): LivesApi {
   }
 
   return {
-    lives, lifeById, snapOf, buildThread, livesMetBy, recomputePeers, saveCheckpoint, meetPeer, partPeer,
+    lives, lifeById, snapOf, buildThread, relSummaries, livesMetBy, recomputePeers, saveCheckpoint, meetPeer, partPeer,
     boot, birthLife, lastUserMsgMs, reachState, pickRecentWorld, pickInsightPair,
     allFeedPosts, feedPosts, allPeerExchanges, adminActivity, nextMuseGap,
   };

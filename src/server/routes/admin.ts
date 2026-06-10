@@ -12,7 +12,7 @@ export async function handleAdmin(ctx: Ctx, req: IncomingMessage, res: ServerRes
   const {
     sessionAccount, modelStatus, settings, effMouthConfig, mouth, lifeById, lives,
     perceiver, effBilling, effSafety, birthLife, effSocial, scheduleWorld, sourceStats, worldStatus, effWorld,
-    worldEnabled, adminActivity, accounts, livesMetBy, buildThread, snapOf, reachState,
+    worldEnabled, adminActivity, accounts, livesMetBy, buildThread, relSummaries, snapOf, reachState,
     layerOf, audiencePresent, autoBudget, idleMs, announce, serializer, REL, IDLE_GATE_MS,
   } = ctx;
 
@@ -345,9 +345,8 @@ export async function handleAdmin(ctx: Ctx, req: IncomingMessage, res: ServerRes
     const ac = accounts.getAccount(uid);
     if (!ac) return send(res, 404, { error: 'no such user' });
     const rel = accounts.relIdFor(uid);
-    const met = lives
-      .filter((l) => l.store.list().some((e) => e.type === 'RELATIONSHIP_OPENED' && e.relationshipId === rel))
-      .map((l) => { const b = snapOf(l).bonds[rel]; return { life: l.id, closeness: round3(b?.closeness ?? 0), trust: round3(b?.trust ?? 0), attachment: b?.relationalSelf.attachment ?? '—', ended: Boolean(b?.ended) }; })
+    const met = livesMetBy(ac) // 读索引，免全量扫日志
+      .map(({ id }) => { const l = lifeById(id)!; const b = snapOf(l).bonds[rel]; return { life: id, closeness: round3(b?.closeness ?? 0), trust: round3(b?.trust ?? 0), attachment: b?.relationalSelf.attachment ?? '—', ended: Boolean(b?.ended) }; })
       .sort((a, b) => b.closeness - a.closeness);
     const wc = accounts.channelFor(uid);
     return send(res, 200, {
@@ -404,22 +403,17 @@ export async function handleAdmin(ctx: Ctx, req: IncomingMessage, res: ServerRes
     const l = lifeById(path.slice('/admin/lives/'.length, -'/relations'.length));
     if (!l) return send(res, 404, { error: 'no such life' });
     const s = snapOf(l);
-    const agg = new Map<string, { rel: string; name: string; kind: string; msgs: number; lastAt: string }>();
-    for (const e of l.store.list()) {
-      if (e.type !== 'MESSAGE_RECEIVED' && e.type !== 'MESSAGE_SENT') continue;
-      const rel = (e.payload as { relationshipId?: string }).relationshipId;
-      if (!rel || rel === 'r_square') continue;
+    const flags = new Map(accounts.convoFlagsFor(l.id).map((f) => [f.rel, f])); // 对话标记（关注/已拦截）附在关系行上
+    // 关系列表来自读索引（每段关系的消息数/最近往来），不再对全量日志逐条聚合。
+    const rels = relSummaries(l).map(({ rel, msgs, lastAt }) => {
       const b = s.bonds[rel];
       const name = rel === REL ? '创造者' : rel.startsWith('u_') ? (accounts.getAccount(rel.slice(2))?.handle ?? rel) : (b?.displayRef ?? rel);
-      const cur = agg.get(rel) ?? { rel, name, kind: b?.kind === 'peer' ? '同类' : '人类', msgs: 0, lastAt: e.occurredAt };
-      cur.msgs += 1; cur.lastAt = e.occurredAt;
-      agg.set(rel, cur);
-    }
-    const flags = new Map(accounts.convoFlagsFor(l.id).map((f) => [f.rel, f])); // 对话标记（关注/已拦截）附在关系行上
-    const rels = [...agg.values()].map((r) => ({
-      ...r, closeness: round3(s.bonds[r.rel]?.closeness ?? 0), trust: round3(s.bonds[r.rel]?.trust ?? 0), ended: Boolean(s.bonds[r.rel]?.ended),
-      flag: flags.get(r.rel)?.flag ?? null, flagReason: flags.get(r.rel)?.reason ?? '',
-    })).sort((a, b) => b.lastAt.localeCompare(a.lastAt));
+      return {
+        rel, name, kind: b?.kind === 'peer' ? '同类' : '人类', msgs, lastAt,
+        closeness: round3(b?.closeness ?? 0), trust: round3(b?.trust ?? 0), ended: Boolean(b?.ended),
+        flag: flags.get(rel)?.flag ?? null, flagReason: flags.get(rel)?.reason ?? '',
+      };
+    }).sort((a, b) => b.lastAt.localeCompare(a.lastAt));
     return send(res, 200, { lifeId: l.id, relations: rels });
   }
   // —— 对话监督·读线程（仅 owner）——某条命与某个关系的来回（含模型听出的感知）。

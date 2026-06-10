@@ -40,7 +40,7 @@ export interface EffSocial {
 export interface PeerExchange { kind: 'peer'; id: string; a: string; b: string; lines: Array<{ from: string; text: string; at: string }>; at: string }
 
 export type ReachPending = { rel: string; at: string; kind: 'reach_out' | 'greet' };
-export type ThreadLine = { who: 'user' | 'her'; text: string; at: string };
+export type ThreadLine = { who: 'user' | 'her'; text: string; at: string; unprompted?: boolean };
 export type FeedPost = { postId: string; life: string; text: string; at: string };
 export type LayerInfo = { name: string; label: string; everyMs: number };
 export type ReachInfo = { lastRecvMs: number; lastSentMs: number; pending: boolean };
@@ -70,6 +70,7 @@ export interface Ctx {
   lifeById(id: string): Life | undefined;
   snapOf(life: Life): DerivedSnapshot;
   buildThread(life: Life, rel: string, limit?: number): ThreadLine[];
+  relSummaries(life: Life): Array<{ rel: string; msgs: number; lastAt: string }>; // 每段关系的消息数/最近往来（读索引，免全量扫）
   livesMetBy(a: Account): Array<{ id: string }>;
   recomputePeers(): void;
   saveCheckpoint(life: Life): void;

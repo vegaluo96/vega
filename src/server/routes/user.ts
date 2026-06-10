@@ -15,7 +15,7 @@ export async function handleUserApi(ctx: Ctx, req: IncomingMessage, res: ServerR
   const {
     lives, snapOf, lifeById, allPeerExchanges, feedPosts, allFeedPosts, accounts,
     effBilling, publicAccount, CLAWBOT_SECRET, cleanBindToken, wechatReply, respondAsUser,
-    sessionAccount, bearer, livesMetBy, bus, ilink, WECHAT_LIFE, runChannel, channelGen,
+    sessionAccount, bearer, livesMetBy, buildThread, bus, ilink, WECHAT_LIFE, runChannel, channelGen,
     VAPID, feed, announce, effSocial, layerOf, clientIp, loginGuard,
   } = ctx;
 
@@ -152,8 +152,8 @@ export async function handleUserApi(ctx: Ctx, req: IncomingMessage, res: ServerR
     if (!lp) return send(res, 404, { error: 'no such life' });
     const s = snapOf(lp);
     const ageDays = Math.floor((Date.parse(s.clockAt) - Date.parse(s.bornAt)) / 86_400_000);
-    const musings: Array<Record<string, unknown>> = [];
-    for (const e of lp.store.list()) if (e.type === 'MESSAGE_SENT' && e.relationshipId === 'r_square') musings.push({ text: (e.payload as MessageSentPayload).utterance, at: e.occurredAt });
+    // 心声取自广场聚合（读索引 + 记忆化，已按时间倒序）——不再每次请求全量扫她的日志。
+    const musings = allFeedPosts().filter((p) => p.life === lp.id).slice(0, 20).map((p) => ({ text: p.text, at: p.at }));
     return send(res, 200, {
       id: lp.id, awake: s.awake, willingToWake: s.willingToWake, emotion: s.emotion, feeling: s.feeling, dayPhase: s.dayPhase,
       temperament: tempLabel(s.temperament), tension: s.tension, ageDays, vitality: round3(s.soma.vitality.value),
@@ -167,7 +167,7 @@ export async function handleUserApi(ctx: Ctx, req: IncomingMessage, res: ServerR
       skills: s.skills.map((sk) => ({ kind: sk.kind === 'muse' ? '公开表达' : sk.kind === 'reach_out' ? '主动找人' : sk.kind, efficacy: sk.efficacy, n: sk.n })), // 自我优化：她学到的策略效能
       mbti: mbtiOf(s.temperament), // MBTI 风格展示标签（由连续维度投影，仅作熟悉把手）
       following: accounts.isFollowing(me.id, lp.id), followers: accounts.followerCount(lp.id), // 关注（平台层·脱敏）：我有没有关注她 + 共多少人关注；纯展示，绝不回喂她的引擎
-      musings: musings.slice(-20).reverse(),
+      musings,
     });
   }
   // 我与她：我自己和这条命的历史 + 她此刻的状态（严格限 u_<me.id> 那段关系，不串别人）。
@@ -177,14 +177,13 @@ export async function handleUserApi(ctx: Ctx, req: IncomingMessage, res: ServerR
     const rel = accounts.relIdFor(me.id);
     const snap = snapOf(life3);
     const bond = snap.bonds[rel];
+    // 读索引取这段关系最近 50 条消息（拆分只会让行数变多 → 最近 50 条消息足以铺满最近 50 行，尾部与全量扫一致）。
     const history: Array<Record<string, unknown>> = [];
-    for (const e of life3.store.list()) {
-      if (e.relationshipId !== rel) continue;
-      if (e.type === 'MESSAGE_RECEIVED') history.push({ role: 'me', text: (e.payload as { content?: string }).content ?? '', at: e.occurredAt });
-      else if (e.type === 'MESSAGE_SENT') {
+    for (const m of buildThread(life3, rel, 50)) {
+      if (m.who === 'user') history.push({ role: 'me', text: m.text, at: m.at });
+      else {
         // 历史也按同一确定性拆分器分段——重进对话后气泡分段与当时"一句一句递出"逐位一致（日志仍存完整一条；后台监督线程不拆）。
-        const sp = e.payload as MessageSentPayload;
-        for (const part of splitUtterance(sp.utterance)) history.push({ role: 'her', text: part, at: e.occurredAt, unprompted: Boolean(sp.unprompted) });
+        for (const part of splitUtterance(m.text)) history.push({ role: 'her', text: part, at: m.at, unprompted: Boolean(m.unprompted) });
       }
     }
     const sem = snap.semanticMemory.find((x) => x.relationshipId === rel);
@@ -204,14 +203,13 @@ export async function handleUserApi(ctx: Ctx, req: IncomingMessage, res: ServerR
     //    最近的在上；还没回的标 unanswered（高亮"想你了"），已回的作为历史留痕。总量封顶 30，避免无限堆积。
     const reaches: Array<{ type: string; life: string; text: string; at: string; unanswered: boolean }> = [];
     for (const l of lives) {
-      const es = l.store.list();
-      let lastRecv = -1;
-      for (let i = es.length - 1; i >= 0; i--) if (es[i].relationshipId === rel && es[i].type === 'MESSAGE_RECEIVED') { lastRecv = i; break; }
-      for (let i = es.length - 1; i >= 0; i--) {
-        const e = es[i];
-        if (e.type === 'MESSAGE_SENT' && e.relationshipId === rel && (e.payload as MessageSentPayload).unprompted) {
-          reaches.push({ type: 'reach', life: l.id, text: (e.payload as MessageSentPayload).utterance, at: e.occurredAt, unanswered: i > lastRecv });
-        }
+      // 读索引取这段关系的全部消息（量=你自己和她的对话长度），不再全量扫她的日志。
+      const th = buildThread(l, rel, Number.MAX_SAFE_INTEGER);
+      let lastUser = -1;
+      for (let i = th.length - 1; i >= 0; i--) if (th[i].who === 'user') { lastUser = i; break; }
+      for (let i = th.length - 1; i >= 0; i--) {
+        const m = th[i];
+        if (m.who === 'her' && m.unprompted) reaches.push({ type: 'reach', life: l.id, text: m.text, at: m.at, unanswered: i > lastUser });
       }
     }
     reaches.sort((a, b) => (a.at < b.at ? 1 : -1));
@@ -243,8 +241,8 @@ export async function handleUserApi(ctx: Ctx, req: IncomingMessage, res: ServerR
       const s = snapOf(l); const b = s.bonds[rel]; if (!b || b.ended) continue;
       const layer = layerOf(b.closeness, scN);
       if (layer.name !== 'friend' && layer.name !== 'intimate') continue;
-      const es = l.store.list(); let lastAt = s.bornAt;
-      for (let i = es.length - 1; i >= 0; i--) { const e = es[i]; if (e.relationshipId === rel && (e.type === 'MESSAGE_RECEIVED' || e.type === 'MESSAGE_SENT')) { lastAt = e.occurredAt; break; } }
+      const th = buildThread(l, rel, 1);
+      const lastAt = th.length ? th[th.length - 1].at : s.bornAt;
       notes.push({ type: 'milestone', life: id, at: lastAt, title: `你和 ${id} 已是${layer.label}`, text: layer.name === 'intimate' ? '一路聊下来，她把你放进了最近的位置。' : '你们熟络起来了——她会更常想起你。' });
     }
     // 7) 她的人生动态——【纯订阅制：只来自你关注的命】（只取公开脱敏的：交了同类新朋友 / 送别同类 / 新公开心声）。
@@ -305,25 +303,21 @@ export async function handleUserApi(ctx: Ctx, req: IncomingMessage, res: ServerR
     const rx = feed.reactionsFor([postId], me.id).get(postId);
     return send(res, 200, { ...post, reactions: rx?.counts ?? {}, myReaction: rx?.mine ?? null, source: feed.sourcesFor([postId]).get(postId) ?? null, comments: feed.commentsFor(postId, 100) });
   }
-  // 对话收件箱：我遇见的每条命 + 最近一句 + 她是否有未回的主动留言（按最近活跃排序）。
+  // 对话收件箱：我遇见的每条命 + 最近一句 + 她是否有未回的主动留言（按最近活跃排序）。读索引，免全量扫。
   if (req.method === 'GET' && url === '/api/chats') {
     const rel = accounts.relIdFor(me.id);
     const out: Array<Record<string, unknown>> = [];
-    for (const l of lives) {
-      const es = l.store.list();
-      if (!es.some((e) => e.type === 'RELATIONSHIP_OPENED' && e.relationshipId === rel)) continue;
-      let lastText = '';
-      let lastAt = '';
-      let lastFromHer = false;
-      let pending = false;
-      for (let i = es.length - 1; i >= 0; i--) {
-        const e = es[i];
-        if (e.relationshipId !== rel) continue;
-        if (e.type === 'MESSAGE_RECEIVED') { lastText = String((e.payload as { content?: string }).content ?? ''); lastAt = e.occurredAt; lastFromHer = false; break; }
-        if (e.type === 'MESSAGE_SENT') { const p = e.payload as MessageSentPayload; lastText = p.utterance; lastAt = e.occurredAt; lastFromHer = true; pending = Boolean(p.unprompted); break; }
-      }
+    for (const { id } of livesMetBy(me)) {
+      const l = lifeById(id);
+      if (!l) continue;
+      const th = buildThread(l, rel, 1);
+      const last = th[th.length - 1];
       const s = snapOf(l);
-      out.push({ life: l.id, awake: s.awake, emotion: s.emotion, lastText, lastAt, lastFromHer, pending });
+      out.push({
+        life: l.id, awake: s.awake, emotion: s.emotion,
+        lastText: last?.text ?? '', lastAt: last?.at ?? '',
+        lastFromHer: last?.who === 'her', pending: Boolean(last && last.who === 'her' && last.unprompted),
+      });
     }
     out.sort((a, b) => (String(a.lastAt) < String(b.lastAt) ? 1 : -1));
     return send(res, 200, out);

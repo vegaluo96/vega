@@ -120,7 +120,7 @@ setupPush({ bus, accounts, VAPID, VAPID_SUBJECT }); // Web Push 订阅（reach_o
 // 生命体子系统（实现见 ./lives.ts）：名册/句柄/有界重放(snapOf)/创世接生(boot·birthLife)/读助手/聚合器。
 // 解构出的名字与原定义一致 → 下方 respondAsUser/createWechat/ctx/回路/shutdown 直接引用，无需改写。
 const {
-  lives, lifeById, snapOf, buildThread, livesMetBy, recomputePeers, saveCheckpoint, meetPeer, partPeer,
+  lives, lifeById, snapOf, buildThread, relSummaries, livesMetBy, recomputePeers, saveCheckpoint, meetPeer, partPeer,
   boot, birthLife, lastUserMsgMs, reachState, pickRecentWorld, pickInsightPair,
   allFeedPosts, feedPosts, allPeerExchanges, adminActivity, nextMuseGap,
 } = createLives({ accounts, serializer, peerId, REL, HOST_CONN, userName, HOST, PORT, MUSE_MS, DATA_DIR, LIFE_PATH });
@@ -145,7 +145,7 @@ const world = createWorld({ effWorld: config.effWorld, worldEnabled: config.worl
 
 const ctx: Ctx = {
   settings, feed, announce, accounts, ilink, bus, serializer, autoBudget, mouth, museMouth, templateMouth, perceiver,
-  lives, lifeById, snapOf, buildThread, livesMetBy, recomputePeers, saveCheckpoint, meetPeer, partPeer,
+  lives, lifeById, snapOf, buildThread, relSummaries, livesMetBy, recomputePeers, saveCheckpoint, meetPeer, partPeer,
   ...config, // effWorld/worldStatus/worldEnabled/effMouthConfig/effPerceiveConfig/effMuseMouthConfig/modelStatus/effSocial/layerOf/effBilling/effSafety（见 ./config.ts）
   respondAsUser, wechatReply, runChannel, birthLife, cleanBindToken,
   allFeedPosts, feedPosts, allPeerExchanges,
