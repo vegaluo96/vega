@@ -38,6 +38,8 @@ export function startLoops(ctx: Ctx, t: LoopTiming): LoopHandles {
   const { TICK_MS, PRESENCE_MS, REFLECT_MS, CHECKPOINT_MS, SOCIAL_MS, DISCOVER_MS,
     COMMENT_MS, COMMENT_CAP, FEEDBACK_MS, REACT_MS, SILENCE_MS, nextMuseGap } = t;
 
+  // 前瞻关怀的失败退避表：careKey → 上次尝试墙钟（只在内存，重启即清——重试本就该重新开始）。
+  const prospectTriedAt = new Map<string, number>();
   // 回路 B 心跳：每个生命体各自重放/想念/演化/反思/主动留言。
   const heartbeat = setInterval(async () => {
     for (const life of lives) {
@@ -73,7 +75,12 @@ export function startLoops(ctx: Ctx, t: LoopTiming): LoopHandles {
         if (care?.relationshipId) {
           const rel = care.relationshipId;
           const pendingReach = reachState(life).get(rel)?.pending;
-          if (audiencePresent() && !pendingReach && autoBudget.tryConsume()) {
+          // 失败退避：模型没出声（gate/挂了）不 ack、prospect 仍 pending，会每跳重试——10 分钟一次，
+          // 否则一个到期 prospect 在模型故障时每 60s 烧一次自主预算，把别的自主行动饿死。
+          const careKey = `${life.id}|${String(care.params?.prospectId ?? rel)}`;
+          const recentlyTried = Date.now() - (prospectTriedAt.get(careKey) ?? 0) < 600_000;
+          if (!recentlyTried && audiencePresent() && !pendingReach && autoBudget.tryConsume()) {
+            prospectTriedAt.set(careKey, Date.now());
             const ra = now();
             const o = await reachOut(life.store, mouth, rel, ra, undefined, snapOf(life), undefined, { label: String(care.params?.label ?? '') });
             if (o) {
@@ -239,7 +246,8 @@ export function startLoops(ctx: Ctx, t: LoopTiming): LoopHandles {
             reachOutPending.delete(key); // 石沉只记一次，不反复扎心
           }
         }
-        if (!snapOf(life).awake) continue; // 只在醒着时感到反馈（与休眠冻结一致）
+        const snapFb = snapOf(life);
+        if (!snapFb.awake) continue; // 只在醒着时感到反馈（与休眠冻结一致）
         const posts = allFeedPosts().filter((p) => p.life === life.id).slice(0, 20);
         if (posts.length === 0) continue;
         const ids = posts.map((p) => p.postId);
@@ -251,8 +259,11 @@ export function startLoops(ctx: Ctx, t: LoopTiming): LoopHandles {
         for (const h of hits) {
           // 被回应=正反馈（被看见），评论比共鸣稍重（留了话）、按本跳互动数温和增长、小幅有上限。
           const valence = Math.min(0.6, (h.responseKind === 'comment' ? 0.35 : 0.25) + 0.05 * (h.count - 1));
+          // 归因只投给【已存在的关系】：陌生人（没聊过、没 RELATIONSHIP_OPENED）点赞照样让她"被看见"，
+          // 但不带 relationshipId——神圣日志里不落指向不存在 bond 的死指针（折叠端的 if(b) 防护是兜底，不是常态）。
+          const attributed = snapFb.bonds[h.rel] ? { relationshipId: h.rel } : {};
           serializer.run(life.id, async () => {
-            runTurn(life.store, [{ type: 'FEEDBACK_PERCEIVED', source: 'autonomous_loop', occurredAt: now(), payload: { actionKind: 'muse', responseKind: h.responseKind, valence, fromKind: h.fromKind, count: h.count, relationshipId: h.rel } }]);
+            runTurn(life.store, [{ type: 'FEEDBACK_PERCEIVED', source: 'autonomous_loop', occurredAt: now(), payload: { actionKind: 'muse', responseKind: h.responseKind, valence, fromKind: h.fromKind, count: h.count, ...attributed } }]);
           });
         }
       } catch (e) { console.warn('[feedback] 反馈感知出错:', (e as Error).message); }

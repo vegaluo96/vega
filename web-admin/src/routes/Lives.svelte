@@ -174,6 +174,27 @@
             {/each}
             {#if !(detail.interests || []).length}<span class="caption">兴趣还没长出来。</span>{/if}
           </div>
+          <!-- v29 深观：她惦记着的（前瞻记忆，owner 可见）+ 哀悼中（grief 过程）。 -->
+          {#if (detail.prospects || []).length}
+            <div class="section-title st gap">她惦记着的</div>
+            {#each detail.prospects as p}
+              <div class="prow2">
+                <span class="pill" style:color={p.status === 'pending' ? 'var(--warning)' : 'var(--faint)'}>{p.status === 'pending' ? '待到期' : p.status === 'asked' ? '已问过' : p.status === 'resolved' ? '对方先说了' : '已过期'}</span>
+                <span class="pmain">{p.name}：「{p.label}」</span>
+                <span class="meta pwhen">{relTime(p.dueAt)}</span>
+              </div>
+            {/each}
+          {/if}
+          {#if (detail.griefs || []).length}
+            <div class="section-title st gap">哀悼中</div>
+            {#each detail.griefs as g}
+              <div class="prow2">
+                <span class="pmain">{g.name}</span>
+                <span class="meter grow"><i style:width="{Math.round((g.weight || 0) * 100)}%" style:background="var(--muted)"></i></span>
+                <span class="meta pwhen">{relTime(g.at)}</span>
+              </div>
+            {/each}
+          {/if}
         </div>
 
         <div class="card-quiet pane">
@@ -309,6 +330,9 @@
   .st { margin-bottom: 10px; }
   .st.gap { margin: 14px 0 8px; }
   .mrow { display: flex; align-items: center; gap: 10px; padding: 5px 0; }
+  .prow2 { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: var(--fs-sm); }
+  .pmain { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pwhen { flex: none; white-space: nowrap; }
   .mlab { flex: none; width: 64px; font-size: var(--fs-sm); color: var(--muted); }
   .grow { flex: 1; }
   .mval { flex: none; width: 34px; text-align: right; }

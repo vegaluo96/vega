@@ -240,7 +240,12 @@ export function createAccountStore(path = ':memory:', opts: AccountStoreOptions 
       let u = userById(s.user_id);
       if (!u || u.status === 'blocked') return null;
       u = syncRole(u);
-      db.prepare('UPDATE users SET last_active_at=? WHERE id=?').run(now(), u.id);
+      // last_active_at 节流（≥60s 才落一笔）：鉴权在每个 API 请求上跑，前端轮询会把它放大成
+      // 每秒多次的 sqlite 写——活跃时间是分钟级展示数据，不值得每请求一写。
+      const lastMs = Date.parse(u.last_active_at);
+      if (!Number.isFinite(lastMs) || Date.now() - lastMs > 60_000) {
+        db.prepare('UPDATE users SET last_active_at=? WHERE id=?').run(now(), u.id);
+      }
       return toAccount(u);
     },
     logout(token) {
